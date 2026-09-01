@@ -2,6 +2,7 @@ name: claims-ops-v1
 version: 1
 resolution: 1280x720
 template: default
+resources: {cpu: 2, mem_mb: 4096, disk_gb: 10}   # OpenEMR + MariaDB + PHP need more than the 4 GB base disk
 golden_snapshot_env: FORKLOOP_GOLDEN_SNAPSHOT_CLAIMS_OPS_V1
 module: worlds.claims_ops_v1.world:ClaimsOpsWorld
 seed_module: worlds.claims_ops_v1.seed_world

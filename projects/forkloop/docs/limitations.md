@@ -4,12 +4,29 @@ This file is deliberately blunt. Every claim in the README that is not backed
 by a number in `docs/spikes.md`, `bench/reset_summary.json`, or a run
 directory should be read as *design intent*, not result.
 
-## Not yet measured (needs a Solari key)
+## Measured on 2026-09-01 (Free-plan key, headless sandboxes)
 
-- **No spike has run.** `docs/spikes.md` holds the six questions, the exact
-  commands, and empty result tables. Revert latency, fork independence,
-  memory survival across `revert()`, `record=True` with `from_snapshot`,
-  and MariaDB consistency after a live snapshot are all *unverified* here.
+- **Desktops are plan-gated**: `create_desktop` → 402. Every number below is
+  from headless `base` sandboxes (same snapshot API, no screen). The agent
+  channel (screenshots, mouse, keyboard) remains unexercised.
+- **`revert()` is not available on this account**: 409 `Not revertable` on a
+  running sandbox *and* on a paused one, for the newest snapshot and an older
+  one. A failed revert on a *running* sandbox left it `Not found` — treat
+  `revert()` as destructive until Solari confirms the semantics. The pool's
+  `fork` mode (`kill` + `create(from_snapshot=golden)`) is the working reset
+  on this plan: ≈ 18 s to first command. `snapshot()` takes 14–20 s and stores
+  a full ≈ 6 GB disk image. Fresh create from template: 0.6 s.
+- The `base` sandbox is Debian 12 (not Ubuntu), root, systemd as PID 1, with
+  a 3.9 GB disk; the world build requests `disk_gb: 10` and installs PHP 8.3
+  from packages.sury.org.
+
+## Not yet measured (needs a paid plan or more time)
+
+- **Spikes 1–6 have not run** (they need a desktop). `docs/spikes.md` holds
+  the questions, commands, and empty tables. Revert latency on a desktop,
+  parallel fork independence (needs 2 concurrent machines), memory/window
+  survival, `record=True` with `from_snapshot`, and MariaDB consistency after
+  a live snapshot are still *unverified*.
   The reviewer's claim that recording is rejected with snapshot-restored
   machines is likewise untested; forkloop never depends on native recording.
 - **The golden snapshot has never been built on a real desktop.**

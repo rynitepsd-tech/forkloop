@@ -54,8 +54,12 @@ class ClaimsOpsWorld(World):
         args = ["--build-dir", build_dir]
         if not with_openemr:
             args.append("--skip-openemr")
-        log("running build.sh (this takes minutes: apt, OpenEMR, portal)")
-        r = await machine.exec("sudo", ["bash", f"{build_dir}/build.sh", *args], timeout_ms=45 * 60_000)
+        if "gui" not in machine.capabilities:
+            args.append("--headless")
+        who = await machine.exec("id", ["-u"])
+        runner = ["bash"] if who.stdout.strip() == "0" else ["sudo", "bash"]
+        log(f"running build.sh as {'root' if runner == ['bash'] else 'sudo'} (this takes minutes: apt, OpenEMR, portal)")
+        r = await machine.exec(runner[0], [*runner[1:], f"{build_dir}/build.sh", *args], timeout_ms=45 * 60_000)
         log(r.stdout[-4000:])
         if r.exit_code != 0:
             raise RuntimeError(f"build.sh failed ({r.exit_code}): {r.stderr[-2000:]}")

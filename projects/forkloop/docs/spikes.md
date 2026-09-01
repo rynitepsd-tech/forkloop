@@ -14,6 +14,32 @@ crashed run: `python spikes/_common.py --reap` (kills everything tagged
 
 ---
 
+## Measured on 2026-09-01 — Free plan, headless sandboxes (spike 0)
+
+The key available for testing is on the **Free** plan: `create_desktop` returns
+`402 FeatureRequiresPlan`, so spikes 1–6 as written (they need a desktop)
+could not run. A headless probe (`spikes/spike_00_sandbox_probe.py`, same
+snapshot API) measured the following on `base` sandboxes, 2 vCPU / 4 GB:
+
+| Measurement | Result |
+| --- | --- |
+| create from template → first command | 0.60 s |
+| `snapshot()` (full ~6.0 GB disk image) | 14.2 / 16.3 / 19.1 / 19.6 s (4 samples) |
+| `revert()` on a *running* sandbox | **409 `Not revertable`**, and the machine was `Not found` afterwards (destroyed) |
+| `revert()` on a *paused* sandbox | **409 `Not revertable`**; machine survived, `resume()` worked |
+| `pause()` | 14.5 s |
+| `resume()` → reattach → first command | 0.40 s |
+| `create(from_snapshot)` → first command | 17.9 s; file state restored |
+| Guest | Debian 12, root, systemd 252 as PID 1, Python 3.11, curl, apt; no sqlite3/ps/mysql/sudo; 3.9 GB disk (2.2 GB free); egress to github.com OK |
+
+**Decision:** on this plan `reset()` must be fork-mode (`kill` + `create(from_snapshot=golden)`,
+≈18 s) — the pool's `mode="fork"`. Whether `revert()` is gated by plan or by
+machine kind is unknown; the docs describe it as available on both. Ask Solari
+(Discord) with the exact 409 body. **Do not call `revert()` on a running
+machine you care about until that is answered: on this account it destroyed the
+machine.** The revert-latency row for Chart 2 stays empty until a plan where
+`revert()` is allowed.
+
 ## Spike 1 — revert latency and state fidelity
 
 **Question.** How long is `revert()` wall-clock (API call → guest `health().ready`

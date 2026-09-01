@@ -11,8 +11,8 @@ Held-out success:          not yet measured
 Verified trajectories:     0 (collection not started)
 LLM-graded rewards:        0 — by construction, see forkloop/oracle.py
 Unrelated records edited:  checked on every episode (COLLATERAL_EDIT reason code)
-Median reset (revert):     not yet measured — spikes/spike_01_revert_latency.py
-Solari compute:            $0.00 so far — docs/cost.md
+Median reset (revert):     revert() unavailable on the test account (409); fork-mode reset ≈ 18 s (sandbox)
+Solari compute:            < $1 so far (Free-plan sandbox probes) — docs/cost.md
 ```
 
 Charts 1 and 2 do not exist yet. `train/examples/` holds *synthetic placeholders* so the plotting pipeline can be checked; their titles say so. Everything that needs a Solari key, a GPU, or a teacher-model budget is built and tested offline but has not been run for real. `docs/limitations.md` is the honest list.
@@ -27,7 +27,7 @@ Charts 1 and 2 do not exist yet. `train/examples/` holds *synthetic placeholders
 | Teacher policy (Anthropic computer-use toolset) and student policy (vLLM, Fara/Qwen/UI-TARS output formats) | built; not run against live endpoints |
 | Training ladder (`train/`): SFT export, LoRA, held-out eval with Wilson CIs, plots, bake-off | built; no GPU run yet |
 | Reset benchmark + local docker-compose baseline + cost model | built; no measurements yet |
-| Day-1 spikes | six scripts ready; **not run** (no `SOLARI_API_KEY` on the build machine) |
+| Day-1 spikes | spike 0 (headless probe) **run on a Free-plan key**: desktops 402, `revert()` 409, fork ≈ 18 s, snapshot 14–20 s — `docs/spikes.md`; spikes 1–6 need a paid plan |
 
 ## Run it
 

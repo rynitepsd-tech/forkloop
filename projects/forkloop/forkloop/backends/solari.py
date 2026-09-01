@@ -36,16 +36,18 @@ def _wrap_error(e: Exception) -> Exception:
 
 class SolariMachine:
     backend_name = "solari"
-    capabilities = frozenset({"shell", "gui", "http"})
 
     def __init__(self, desktop: Any, backend: "SolariBackend", size: tuple[int, int],
-                 metadata: dict[str, str]) -> None:
+                 metadata: dict[str, str], kind: str = "desktop") -> None:
         self._d = desktop
         self.backend = backend
         self.id: str = desktop.id
         self.stream_url: Optional[str] = getattr(desktop, "streamUrl", None) or None
         self.size = size
         self.metadata = metadata
+        self.kind = kind
+        # headless sandboxes have no agent channel: the controller loop still works (seed, health, oracle, revert)
+        self.capabilities = frozenset({"shell", "gui", "http"}) if kind == "desktop" else frozenset({"shell", "http"})
         self.alive = True
 
     # ---------------------------------------------------------- lifecycle
@@ -58,10 +60,17 @@ class SolariMachine:
         last = None
         while time.monotonic() - t0 < timeout_s:
             try:
-                h = await self._d.health()
-                if getattr(h, "ready", False):
-                    return
-                last = h
+                if self.kind != "desktop":
+                    # sandboxes have no health(); a successful command is "ready"
+                    r = await self._d.commands.run("true", timeout_ms=10_000)
+                    if r.exitCode == 0:
+                        return
+                    last = r
+                else:
+                    h = await self._d.health()
+                    if getattr(h, "ready", False):
+                        return
+                    last = h
             except Exception as e:  # noqa: BLE001 - transient right after restore
                 last = e
                 try:
@@ -73,6 +82,8 @@ class SolariMachine:
 
     async def healthy(self) -> bool:
         try:
+            if self.kind != "desktop":
+                return (await self._d.commands.run("true", timeout_ms=10_000)).exitCode == 0
             h = await self._d.health()
             return bool(getattr(h, "ready", False))
         except Exception:  # noqa: BLE001
@@ -90,12 +101,22 @@ class SolariMachine:
         except Exception as e:  # noqa: BLE001
             raise _wrap_error(e)
         # Right after a restore the guest accepts only one control connection for a
-        # brief window (see solari_core/transport.py); reconnect and wait for health.
-        try:
-            await self._d.reconnect()
-        except Exception:  # noqa: BLE001
-            pass
-        await self.wait_ready(self.backend.ready_timeout_s)
+        # brief window (see solari_core/transport.py). The old channel is dead, so
+        # close it and dial again until a command succeeds.
+        t0 = time.monotonic()
+        while True:
+            try:
+                await self._d.close()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                await self._d.connect()
+                await self.wait_ready(5.0)
+                return
+            except Exception as e:  # noqa: BLE001
+                if time.monotonic() - t0 > self.backend.ready_timeout_s:
+                    raise BackendError(f"machine {self.id} not reachable after revert: {e}") from e
+                await asyncio.sleep(0.3)
 
     async def kill(self) -> None:
         if not self.alive:
@@ -123,7 +144,12 @@ class SolariMachine:
         await self._d.files.write(path, data, mode)
 
     # ---------------------------------------------------------- agent side
+    def _gui(self) -> None:
+        if self.kind != "desktop":
+            raise BackendError("this machine is a headless sandbox: no agent channel (screenshot/mouse/keyboard)")
+
     async def screenshot(self) -> bytes:
+        self._gui()
         return await self._d.screenshot(format="png")
 
     async def display_size(self) -> tuple[int, int]:
@@ -134,6 +160,7 @@ class SolariMachine:
             return self.size
 
     async def click(self, x: int, y: int, *, button: str = "left") -> None:
+        self._gui()
         await self._d.mouse.click(int(x), int(y), button=button)
 
     async def double_click(self, x: int, y: int) -> None:
@@ -161,9 +188,11 @@ class SolariMachine:
         await self._d.mouse.drag({"x": int(x1), "y": int(y1)}, {"x": int(x2), "y": int(y2)})
 
     async def type_text(self, text: str) -> None:
+        self._gui()
         await self._d.keyboard.type(text)
 
     async def press(self, keys: list[str]) -> None:
+        self._gui()
         await self._d.keyboard.press(list(keys))
 
 
@@ -172,7 +201,12 @@ class SolariBackend:
 
     def __init__(self, *, api_key: Optional[str] = None, base_url: Optional[str] = None,
                  plan: Optional[str] = None, concurrency_cap: Optional[int] = None,
-                 ready_timeout_s: float = 90.0, call_timeout_ms: Optional[int] = None) -> None:
+                 ready_timeout_s: float = 90.0, call_timeout_ms: Optional[int] = None,
+                 kind: Optional[str] = None) -> None:
+        #: "desktop" (GUI, paid plans) or "sandbox" (headless; Free plan). Env FORKLOOP_SOLARI_KIND.
+        self.kind = (kind or os.environ.get("FORKLOOP_SOLARI_KIND", "desktop")).lower()
+        if self.kind not in ("desktop", "sandbox"):
+            raise BackendError("kind must be 'desktop' or 'sandbox'")
         self.api_key = api_key or os.environ.get("SOLARI_API_KEY", "")
         if not self.api_key:
             raise BackendError("SOLARI_API_KEY is not set")
@@ -188,17 +222,38 @@ class SolariBackend:
     async def create(self, *, template: Optional[str] = None, from_snapshot: Optional[str] = None,
                      resolution: str = "1280x720", cpu: int = 2, mem_mb: int = 4096,
                      record: Optional[bool] = None, metadata: Optional[dict[str, str]] = None,
-                     timeout_ms: int = 30 * 60_000) -> SolariMachine:
+                     timeout_ms: int = 30 * 60_000, disk_gb: Optional[int] = None) -> SolariMachine:
         meta = {"forkloop": "1", **(metadata or {})}
         try:
-            d = await self._client.create_desktop(
-                template=None if from_snapshot else (template or "default"),
-                from_snapshot=from_snapshot, resolution=resolution, cpu=cpu, mem_mb=mem_mb,
-                record=record, metadata=meta, timeout_ms=timeout_ms, lifecycle={"onTimeout": "kill"})
+            if self.kind == "sandbox":
+                d = await self._client.create(
+                    template=None if from_snapshot else (template if template and template != "default" else "base"),
+                    from_snapshot=from_snapshot, cpu=cpu, mem_mb=mem_mb, disk_gb=None if from_snapshot else disk_gb,
+                    metadata=meta, timeout_ms=timeout_ms, lifecycle={"onTimeout": "kill"})
+            else:
+                d = await self._client.create_desktop(
+                    template=None if from_snapshot else (template or "default"),
+                    from_snapshot=from_snapshot, resolution=resolution, cpu=cpu, mem_mb=mem_mb,
+                    disk_gb=None if from_snapshot else disk_gb, record=record, metadata=meta, timeout_ms=timeout_ms,
+                    lifecycle={"onTimeout": "kill"})
         except Exception as e:  # noqa: BLE001
             raise _wrap_error(e)
         self.counters["create"] += 1
-        m = SolariMachine(d, self, parse_resolution(resolution), meta)
+        m = SolariMachine(d, self, parse_resolution(resolution), meta, kind=self.kind)
+        await m.connect(wait_ready_s=self.ready_timeout_s)
+        return m
+
+    async def attach(self, machine_id: str, *, resolution: str = "1280x720") -> SolariMachine:
+        """Re-attach to a running machine by id (e.g. resume a failed world build)."""
+        try:
+            if self.kind == "sandbox":
+                d = await self._client.connect(machine_id)
+            else:
+                d = await self._client.connect_desktop(machine_id)  # type: ignore[attr-defined]
+        except Exception as e:  # noqa: BLE001
+            raise _wrap_error(e)
+        view = await self._client.get(machine_id)
+        m = SolariMachine(d, self, parse_resolution(resolution), dict(view.metadata or {}), kind=self.kind)
         await m.connect(wait_ready_s=self.ready_timeout_s)
         return m
 
@@ -212,7 +267,7 @@ class SolariBackend:
 
     async def list_machines(self, *, metadata: Optional[dict[str, str]] = None) -> list[MachineInfo]:
         out: list[MachineInfo] = []
-        async for v in self._client.list_all(metadata=metadata, kind="desktop"):
+        async for v in self._client.list_all(metadata=metadata, kind=self.kind):
             out.append(MachineInfo(id=v.sandboxId, state=v.state, metadata=dict(v.metadata or {}), created_at=""))
         return out
 

@@ -224,7 +224,7 @@ class FakeBackend:
     async def create(self, *, template: Optional[str] = None, from_snapshot: Optional[str] = None,
                      resolution: str = "1280x720", cpu: int = 2, mem_mb: int = 4096,
                      record: Optional[bool] = None, metadata: Optional[dict[str, str]] = None,
-                     timeout_ms: int = 30 * 60_000) -> FakeMachine:
+                     timeout_ms: int = 30 * 60_000, disk_gb: Optional[int] = None) -> FakeMachine:
         live = [m for m in self.machines.values() if m.alive]
         if len(live) >= self.concurrency_cap:
             raise ConcurrencyError(f"fake concurrency cap {self.concurrency_cap} reached")

@@ -101,6 +101,7 @@ step "Detecting OS"
 . /etc/os-release
 case "${ID:-}:${VERSION_ID:-}" in
   ubuntu:22.04|ubuntu:24.04) log "Ubuntu ${VERSION_ID} detected" ;;
+  debian:12) log "Debian 12 detected (Solari 'base' sandbox); PHP ${PHP_VERSION} comes from packages.sury.org" ;;
   *) log "WARNING: untested OS ${ID:-?} ${VERSION_ID:-?}; continuing" ;;
 esac
 
@@ -112,8 +113,16 @@ apt-get update -q
 apt-get install -y -q ca-certificates curl gnupg tar software-properties-common lsb-release
 
 if ! apt-cache show "php${PHP_VERSION}-fpm" >/dev/null 2>&1; then
-  log "php${PHP_VERSION} not in the distro archive; adding ppa:ondrej/php"
-  add-apt-repository -y ppa:ondrej/php
+  if [[ "${ID:-}" == "debian" ]]; then
+    # Debian ships PHP 8.2; OpenEMR 8.3 needs 8.3+. Ondřej Surý's repo is the standard source.
+    log "php${PHP_VERSION} not in the distro archive; adding packages.sury.org/php (${VERSION_CODENAME:-bookworm})"
+    curl -fsSL https://packages.sury.org/php/apt.gpg -o /usr/share/keyrings/deb.sury.org-php.gpg
+    echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ ${VERSION_CODENAME:-bookworm} main" \
+      > /etc/apt/sources.list.d/php-sury.list
+  else
+    log "php${PHP_VERSION} not in the distro archive; adding ppa:ondrej/php"
+    add-apt-repository -y ppa:ondrej/php
+  fi
   apt-get update -q
 fi
 
@@ -186,7 +195,8 @@ elif [[ -s "$DB_PW_FILE" ]]; then
 else
   # alphanumeric only: InstallerAuto.php splits argv on '=' and the value is
   # interpolated into SQL/PHP by the installer.
-  DB_PASS="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)"
+  # (no tr|head pipeline: head closing the pipe makes tr exit 141 under pipefail)
+  DB_PASS="$(python3 -c 'import secrets,string; print("".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(28)))')"
 fi
 umask 077
 printf '%s\n' "$DB_PASS" > "$DB_PW_FILE"
@@ -253,7 +263,7 @@ if [[ -f "${WEB_ROOT}/interface/login/login.php" && -f "${WEB_ROOT}/version.php"
 else
   tmp="$(mktemp -d)"
   tar -xzf "$TARBALL_PATH" -C "$tmp"
-  top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)"   # openemr-8.3.0/
+  top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -print -quit)"   # openemr-8.3.0/
   [[ -n "$top" && -f "$top/interface/login/login.php" ]] || die "unexpected tarball layout under $tmp"
   mkdir -p "$(dirname "$WEB_ROOT")"
   rm -rf "$WEB_ROOT"
@@ -315,10 +325,13 @@ if [[ $installed -eq 0 ]]; then
     INSTALLER_ARGS+=("root=root" "rootpass=${DB_ROOT_PASS}")
   fi
   log "  php -f contrib/util/installScripts/InstallerAuto.php $(printf '%s ' "${INSTALLER_ARGS[@]}" | sed -E 's/(pass|rootpass|iuserpass)=[^ ]*/\1=***/g')"
-  set +e
-  installer_out="$(cd "$WEB_ROOT" && OPENEMR_ENABLE_INSTALLER_AUTO=1 php -f contrib/util/installScripts/InstallerAuto.php "${INSTALLER_ARGS[@]}" 2>&1)"
-  rc=$?
-  set -e
+  # OpenEMR 8.3's RootCliGuard refuses to run CLI scripts as root (files would be
+  # unreadable by the web server), so hand the tree to www-data and run as that user.
+  # An `if` keeps the ERR trap from firing before the output is printed.
+  chown -R www-data:www-data "$WEB_ROOT"
+  installer_cmd="cd $(printf '%q' "$WEB_ROOT") && OPENEMR_ENABLE_INSTALLER_AUTO=1 php -f contrib/util/installScripts/InstallerAuto.php $(printf '%q ' "${INSTALLER_ARGS[@]}")"
+  rc=0
+  if installer_out="$(su -s /bin/sh www-data -c "$installer_cmd" 2>&1)"; then rc=0; else rc=$?; fi
   printf '%s\n' "$installer_out" | sed 's/^/  installer: /'
   [[ $rc -eq 0 ]] || die "InstallerAuto.php exited $rc"
   printf '%s\n' "$installer_out" | grep -q '^ERROR:' && die "InstallerAuto.php reported an error"

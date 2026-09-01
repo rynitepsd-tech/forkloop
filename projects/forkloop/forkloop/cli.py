@@ -83,7 +83,13 @@ async def _build(args: argparse.Namespace) -> int:
 
     w = load_world(args.world)
     backend = _backend(args.backend, w)
-    m = await backend.create(template=w.config.template, resolution=w.config.resolution, cpu=args.cpu, mem_mb=args.mem_mb,
+    res = w.config.extra.get("resources", {})
+    if args.attach:
+        m = await backend.attach(args.attach, resolution=w.config.resolution)
+        print("attached to", m.id[:24])
+    else:
+      m = await backend.create(template=w.config.template, resolution=w.config.resolution, cpu=args.cpu or int(res.get("cpu", 2)),
+                             mem_mb=args.mem_mb or int(res.get("mem_mb", 4096)), disk_gb=args.disk_gb or res.get("disk_gb"),
                              metadata={"forkloop": "1", "run_id": "build"})
     try:
         sid = await w.build(m, log=print)
@@ -242,7 +248,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--family", required=True); p.add_argument("--seed", type=int, required=True)
     p.add_argument("--split", default="train"); p.add_argument("--full", action="store_true"); p.set_defaults(fn=cmd_task)
     p = sub.add_parser("build-world", help="build the golden snapshot"); common(p)
-    p.add_argument("--cpu", type=int, default=2); p.add_argument("--mem-mb", type=int, default=4096)
+    p.add_argument("--cpu", type=int, default=None); p.add_argument("--mem-mb", type=int, default=None)
+    p.add_argument("--disk-gb", type=int, default=None)
+    p.add_argument("--attach", default=None, help="resume the build on an existing machine id instead of creating one")
     p.add_argument("--keep", action="store_true", help="leave the build machine running")
     p.set_defaults(fn=lambda a: asyncio.run(_build(a)))
     p = sub.add_parser("run", help="run one episode"); common(p, policy=True)

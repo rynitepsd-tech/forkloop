@@ -76,8 +76,8 @@ class Worker:
 class WorkerPool:
     def __init__(self, backend: Backend, world: World, *, size: Optional[int] = None, mode: str = "revert",
                  golden_snapshot: Optional[str] = None, run_id: Optional[str] = None,
-                 cpu: int = 2, mem_mb: int = 4096, record: Optional[bool] = None,
-                 timeout_ms: int = 30 * 60_000, max_retries: int = 6) -> None:
+                 cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
+                 timeout_ms: int = 30 * 60_000, max_retries: int = 6, disk_gb: Optional[int] = None) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
         self.backend = backend
@@ -86,7 +86,11 @@ class WorkerPool:
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
         self.golden = golden_snapshot or world.golden_snapshot_id()
         self.run_id = run_id or ("run-" + uuid.uuid4().hex[:8])
-        self.cpu, self.mem_mb, self.record, self.timeout_ms = cpu, mem_mb, record, timeout_ms
+        res = world.config.extra.get("resources", {}) if hasattr(world.config, "extra") else {}
+        self.cpu = cpu or int(res.get("cpu", 2))
+        self.mem_mb = mem_mb or int(res.get("mem_mb", 4096))
+        self.disk_gb = disk_gb or (int(res["disk_gb"]) if res.get("disk_gb") else None)
+        self.record, self.timeout_ms = record, timeout_ms
         self.max_retries = max_retries
         self.workers: list[Worker] = [Worker(self, i) for i in range(self.size)]
         self._free: asyncio.Queue[Worker] = asyncio.Queue()
@@ -143,7 +147,7 @@ class WorkerPool:
                     template=self.world.config.template, from_snapshot=from_snapshot,
                     resolution=self.world.config.resolution, cpu=self.cpu, mem_mb=self.mem_mb,
                     record=self.record, metadata={"forkloop": "1", "run_id": self.run_id, "world": self.world.name},
-                    timeout_ms=self.timeout_ms)
+                    timeout_ms=self.timeout_ms, disk_gb=self.disk_gb)
             except (ConcurrencyError, CapacityError) as e:
                 self.events.append({"t": time.time(), "event": "create_retry", "attempt": attempt, "error": str(e)})
                 if attempt == self.max_retries:

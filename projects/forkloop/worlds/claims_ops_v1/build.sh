@@ -10,6 +10,7 @@ set -euo pipefail
 
 BUILD_DIR=/opt/forkloop
 SKIP_OPENEMR=0
+HEADLESS=0
 PORTAL_DB=/var/lib/forkloop/portal/portal.db
 PORTAL_UPLOADS=/var/lib/forkloop/portal/uploads
 DESKTOP_USER="${DESKTOP_USER:-user}"
@@ -18,6 +19,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     --skip-openemr) SKIP_OPENEMR=1; shift ;;
+    --headless) HEADLESS=1; shift ;;
     -h|--help) sed -n 2,9p "$0"; exit 0 ;;
     *) echo "unknown arg $1" >&2; exit 2 ;;
   esac
@@ -28,7 +30,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 log "apt packages"
 apt-get update -qq
-apt-get install -y -qq python3 python3-venv python3-pip sqlite3 curl xdotool wmctrl >/dev/null
+apt-get install -y -qq python3 python3-venv python3-pip sqlite3 curl procps ca-certificates >/dev/null
+if [[ "$HEADLESS" == "0" ]]; then apt-get install -y -qq xdotool wmctrl >/dev/null; fi
 
 log "portal venv + deps"
 mkdir -p "$BUILD_DIR" /var/lib/forkloop/portal "$PORTAL_UPLOADS" /etc/forkloop
@@ -65,9 +68,17 @@ if [[ "$SKIP_OPENEMR" == "0" ]]; then
   chmod -R 775 /var/www/openemr/sites/default/documents
 fi
 
-log "browser profile: log into both apps and pin the window layout"
-# Runs as the desktop user so the Chrome profile lives in their home. The controller's
-# initial-screen step later only needs ctrl+l + URL because both sessions are already valid.
-sudo -u "$DESKTOP_USER" bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
+if [[ "$HEADLESS" == "1" ]]; then
+  log "headless build: skipping browser profile setup"
+else
+  log "browser profile: log into both apps and pin the window layout"
+  # Runs as the desktop user so the Chrome profile lives in their home. The controller's
+  # initial-screen step later only needs ctrl+l + URL because both sessions are already valid.
+  if command -v sudo >/dev/null && id "$DESKTOP_USER" >/dev/null 2>&1; then
+    sudo -u "$DESKTOP_USER" bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
+  else
+    bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
+  fi
+fi
 
 log "done"
