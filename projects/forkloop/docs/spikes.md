@@ -14,6 +14,34 @@ crashed run: `python spikes/_common.py --reap` (kills everything tagged
 
 ---
 
+## Measured on 2026-09-01 — golden world + fork-mode reset benchmark (Free plan, sandboxes)
+
+The `claims-ops-v1` world was built for real on a headless sandbox
+(`forkloop build-world --backend solari` with `FORKLOOP_SOLARI_KIND=sandbox`):
+OpenEMR 8.3.0 on Apache/PHP 8.3 (sury.org)/MariaDB 10.11, the portal on
+:8080 under systemd, both base populations loaded, both health checks green.
+Golden snapshot: `snap_dl4cngznmvr7` (≈ 6 GB image). Build wall-clock ≈ 9 min
+of sandbox time across three resumed attempts.
+
+`scripts/headless_check.py` then ran the full controller loop three times —
+fork from golden, seed a `resolve_denial` episode, health, baseline hashes on
+the real MariaDB + SQLite, a UI-path appeal submitted by `curl` inside the VM,
+oracle — and the verdicts were exactly right: decoy authorization number →
+`WRONG_VALUE` (milestones 0.4, audit tripwire and page-view checks passed);
+correct number → reward 1.0 twice.
+
+`forkloop reset-bench --backend solari --methods fork --trials 10` (Chart 2,
+fork bar; `bench/reset_results.jsonl`, `bench/chart2_solari_fork.png`):
+
+| method | n | fail | p50 s | p95 s | p99 s | restore p50 s | $/1k resets (Free) | state restored |
+|---|---|---|---|---|---|---|---|---|
+| create(from_snapshot) fork | 10 | 0/10 | 19.09 | 21.84 | 22.06 | 17.40 | 1.01 | disk + DBs (new machine id; RAM/process survival unverified) |
+
+Per-stage (median): restore 17.4 s · seed 0.26 s · health 0.60 s · baseline
+checksums (portal SQLite + OpenEMR MariaDB, 14 tables) 0.74 s. The
+`revert()` bar is empty because `revert()` is refused on this account (above);
+the local docker-compose bar and the cold-build bar have not been run.
+
 ## Measured on 2026-09-01 — Free plan, headless sandboxes (spike 0)
 
 The key available for testing is on the **Free** plan: `create_desktop` returns

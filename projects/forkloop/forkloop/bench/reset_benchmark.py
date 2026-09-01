@@ -68,7 +68,7 @@ async def run_method(backend: Backend, world: World, *, method: str, trials: int
             rec = {"method": method, "trial": i, "backend": backend.name}
             try:
                 outcome = await ctrl.reset(worker, task)  # type: ignore[arg-type]
-                rec.update(ok=True, **outcome.report.to_dict())
+                rec.update(outcome.report.to_dict())
                 rec["total_seconds"] = outcome.report.total_seconds
                 await pool.release(worker)
                 worker = await pool.acquire()
@@ -92,6 +92,9 @@ def _append(out: Path, rec: dict[str, Any]) -> None:
         fh.write(json.dumps(rec) + "\n")
 
 
+_COST_METHOD = {"revert": "revert", "fork": "from_snapshot", "cold": "rebuild", "local": "local"}
+
+
 def summarize(rows: list[dict[str, Any]], *, plan: str = "starter", vm_size: str = "2x4") -> dict[str, Any]:
     by: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
@@ -108,9 +111,9 @@ def summarize(rows: list[dict[str, Any]], *, plan: str = "starter", vm_size: str
             "p50": p50, "p95": percentile(ok, 0.95) if ok else None, "p99": percentile(ok, 0.99) if ok else None,
             "restore_p50": percentile(restore, 0.5) if restore else None,
             "mean": statistics.fmean(ok) if ok else None,
-            "state_restored": {"revert": "RAM + disk + windows", "fork": "RAM + disk + windows (new machine id)",
+            "state_restored": {"revert": "RAM + disk + windows", "fork": "disk + DBs (new machine id; RAM/process survival unverified)",
                                "local": "disk + DB (no RAM, no window layout)", "cold": "rebuilt from scratch"}.get(method, "?"),
-            "cost_per_1k_resets_usd": (round(cost_per_1k_resets(method if method in ("revert", "fork", "cold") else "revert", plan, p50, vm_size=(vcpu, mem)), 3)
+            "cost_per_1k_resets_usd": (round(cost_per_1k_resets(_COST_METHOD.get(method, "revert"), plan, p50, vm_size=(vcpu, mem)), 3)
                                        if p50 else None),
             "backend": rs[0].get("backend") if rs else None,
         }
@@ -154,7 +157,24 @@ async def amain(args: argparse.Namespace) -> int:
     summary = summarize(load_rows([out]), plan=args.plan, vm_size=args.vm_size)
     print(format_summary(summary))
     Path(args.summary).write_text(json.dumps(summary, indent=2))
+    chart = to_chart2_json(summary, backend=backend.name, title=args.title)
+    Path(args.summary).with_name(Path(args.summary).stem + "_chart2.json").write_text(json.dumps(chart, indent=2))
     return 0
+
+
+_LABELS = {"revert": "revert() to golden snapshot", "fork": "create(from_snapshot) fork", "cold": "fresh VM + full world build",
+           "local": "local docker-compose full-state restore"}
+
+
+def to_chart2_json(summary: dict[str, Any], *, backend: str = "solari", title: Optional[str] = None) -> dict[str, Any]:
+    """The input format of ``train/plot.py chart2``."""
+    methods = []
+    for m, s in summary.items():
+        methods.append({"name": _LABELS.get(m, m), "n": s["n"], "p50_s": s["p50"], "p95_s": s["p95"], "p99_s": s["p99"],
+                        "failure_rate": s["failure_rate"], "cost_per_1k_usd": s["cost_per_1k_resets_usd"],
+                        "state_restored": s["state_restored"]})
+    return {"title": title or f"Reset latency by method ({backend})", "synthetic": backend == "fake", "methods": methods,
+            "note": "fake backend numbers are simulator numbers" if backend == "fake" else ""}
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -170,6 +190,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--plan", default="starter")
     ap.add_argument("--vm-size", default="2x4", help="vcpu x memGB, e.g. 2x4")
     ap.add_argument("--fake-latency", type=float, default=0.0)
+    ap.add_argument("--title", default=None)
     args = ap.parse_args(argv)
     return asyncio.run(amain(args))
 

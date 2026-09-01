@@ -17,8 +17,13 @@ directory should be read as *design intent*, not result.
   on this plan: ≈ 18 s to first command. `snapshot()` takes 14–20 s and stores
   a full ≈ 6 GB disk image. Fresh create from template: 0.6 s.
 - The `base` sandbox is Debian 12 (not Ubuntu), root, systemd as PID 1, with
-  a 3.9 GB disk; the world build requests `disk_gb: 10` and installs PHP 8.3
-  from packages.sury.org.
+  a 4 GB disk. The world build requests `disk_gb: 10` but the block device
+  stayed 4 GB (the request is ignored on this plan or needs a larger
+  template); after the OpenEMR install the golden image is ~89% full.
+  PHP 8.3 comes from packages.sury.org.
+- **Golden world built and verified headless** (`docs/spikes.md`): the
+  browser profile / window layout half of the world (`browser_setup.sh`) has
+  still never run — it needs a desktop.
 
 ## Not yet measured (needs a paid plan or more time)
 

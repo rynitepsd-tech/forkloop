@@ -5,6 +5,9 @@ once it exists. Newest first.
 
 | Date | What happened | Number | Post |
 | --- | --- | --- | --- |
+| 2026-09-01 | Fork-mode reset benchmark on Solari sandboxes: 10/10 ok, p50 19.1 s (restore 17.4 s + seed/health/baseline 1.7 s). Chart 2 fork bar rendered. | p50 19.1 s | — |
+| 2026-09-01 | Golden `claims-ops-v1` world built on a real Solari sandbox (OpenEMR 8.3.0 + portal); headless controller loop verified: oracle rewarded 2 correct UI-path appeals, rejected a decoy number (`WRONG_VALUE`). | snap_dl4cngznmvr7 | — |
+| 2026-09-01 | First real measurements (Free plan): desktops 402; `revert()` 409 "Not revertable" and destructive on a running machine; snapshot 14–20 s; from_snapshot ≈ 18 s. | 409 | — |
 | 2026-09-01 | Repo scaffolded end-to-end: core library, `claims-ops-v1` world (portal + OpenEMR layer), `toy-counter` world, oracle, recorder, exporters, teacher/student policies, best-of-N search, reset benchmark, training scripts, six spike scripts, cookbook example, docs. All offline tests green. | see README "Status" | — |
 | 2026-09-01 | Verified from SDK source (solari-sandbox 0.2.0): desktops with `from_snapshot` go through `SandboxClient.create_desktop`; `DesktopClient.create` has no such parameter. Pricing table and plan caps verified on docs.getsolari.com. OpenEMR 8.3.0 (2026-08-18) pinned; installer flags verified against the tagged source. | — | — |
 

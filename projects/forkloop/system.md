@@ -157,7 +157,16 @@ handle (table in contracts §2). Two behaviours worth knowing:
   names left/middle/right.
 
 `PLAN_CAPS` (free 1, starter 2, pro 10) seeds `concurrency_cap`; override
-with `FORKLOOP_CONCURRENCY`.
+with `FORKLOOP_CONCURRENCY`. `kind="sandbox"` (env `FORKLOOP_SOLARI_KIND`)
+creates headless sandboxes through `SandboxClient.create`: the controller
+channel is identical, `capabilities` lacks `gui`, and the env skips the
+screen stages — this is how the world was built and verified on a Free-plan
+key. `attach(id)` re-attaches to a running machine (`build-world --attach`).
+
+Measured behaviour on the test account (Free plan, 2026-09-01): `revert()`
+→ 409 `Not revertable` (and destructive on a running machine), so the pool
+runs in `fork` mode there; `create(from_snapshot)` ≈ 17–20 s; `snapshot()`
+14–20 s; `disk_gb` ignored. See `docs/spikes.md`.
 
 ### 4.4 `dbaccess.py`
 
@@ -531,11 +540,11 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | --- | --- | --- | --- | --- |
 | Core loop, oracle, recorder, search | fake backend | real | — | — |
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
-| OpenEMR | SQLite shim of 10 tables | real 8.3.0 on :80 | — | — |
+| OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
 | Student | mocked transport | drives the desktop | vLLM serves it | — |
 | LoRA training | `--smoke` needs torch | — | yes | — |
-| Reset benchmark | simulator numbers (labelled) | yes | — | — |
+| Reset benchmark | simulator numbers (labelled) | **fork bar measured** (n=10, p50 19.1 s) | — | — |
 
 ## 12. Verified external facts
 

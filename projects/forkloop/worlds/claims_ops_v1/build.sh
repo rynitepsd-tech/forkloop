@@ -61,8 +61,14 @@ if [[ "$SKIP_OPENEMR" == "0" ]]; then
   # the installer writes /etc/forkloop/openemr.pw; make sure the password file is readable by the controller's exec user
   chmod 600 /etc/forkloop/openemr.pw
   log "OpenEMR base population"
-  PYTHONPATH="$BUILD_DIR" "$BUILD_DIR/venv/bin/python" -m worlds.claims_ops_v1.openemr.base_data --sql > /tmp/openemr_base.sql
-  mysql -u openemr --password="$(cat /etc/forkloop/openemr.pw)" openemr < /tmp/openemr_base.sql
+  # install.sh --with-demo-data already loads it; only apply when the base patients are absent
+  N=$(mysql -N -u openemr --password="$(cat /etc/forkloop/openemr.pw)" openemr -e "SELECT COUNT(*) FROM patient_data WHERE pid BETWEEN 100001 AND 100040")
+  if [[ "${N:-0}" -ge 40 ]]; then
+    log "  base population already present ($N patients); skipping"
+  else
+    PYTHONPATH="$BUILD_DIR" "$BUILD_DIR/venv/bin/python" -m worlds.claims_ops_v1.openemr.base_data --sql > /tmp/openemr_base.sql
+    mysql -u openemr --password="$(cat /etc/forkloop/openemr.pw)" openemr < /tmp/openemr_base.sql
+  fi
   mkdir -p /var/www/openemr/sites/default/documents
   chown -R www-data:www-data /var/www/openemr/sites/default/documents
   chmod -R 775 /var/www/openemr/sites/default/documents

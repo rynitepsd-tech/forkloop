@@ -409,11 +409,17 @@ if [[ $WITH_DEMO_DATA -eq 1 ]]; then
     # Seeded rows have no uuid (binary(16) cannot be written portably).  Ask
     # OpenEMR to backfill them the same way sql_upgrade.php does.  Non-fatal.
     step "Backfilling uuids"
-    if (cd "$WEB_ROOT" && php -r '
-        $_GET["site"] = "'"$SITE"'"; $ignoreAuth = true;
-        require_once "interface/globals.php";
-        \OpenEMR\Common\Uuid\UuidRegistry::populateAllMissingUuids();
-        echo "uuid backfill done\n";' 2>&1 | sed 's/^/  /'); then
+    # RootCliGuard: must run as the web user, so hand it a script file www-data can read.
+    uuid_php="$(mktemp /tmp/forkloop-uuid.XXXXXX.php)"
+    cat > "$uuid_php" <<PHPEOF
+<?php
+\$_GET["site"] = "${SITE}"; \$ignoreAuth = true;
+require_once "interface/globals.php";
+\\OpenEMR\\Common\\Uuid\\UuidRegistry::populateAllMissingUuids();
+echo "uuid backfill done\\n";
+PHPEOF
+    chmod 644 "$uuid_php"
+    if (su -s /bin/sh www-data -c "cd $(printf '%q' "$WEB_ROOT") && php -f $(printf '%q' "$uuid_php")" 2>&1 | sed 's/^/  /'); then
       :
     else
       log "  WARNING: uuid backfill failed (non-fatal; run sql_upgrade.php or ignore if the UI works)"
