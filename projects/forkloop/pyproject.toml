@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forkloop"
+version = "0.1.0"
+description = "Snapshot-native training worlds for vision-only GUI agents on Solari desktops: reset = revert(), fork = create(from_snapshot)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ryder Slade" }]
+keywords = ["computer-use", "reinforcement-learning", "solari", "gui-agents", "snapshots"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "solari-sandbox>=0.2.0",
+  "solari-desktop>=0.2.0",
+  "httpx>=0.27",
+  "pyyaml>=6.0",
+  "pillow>=10.0",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+world = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1", "python-multipart>=0.0.9", "itsdangerous>=2.1"]
+teacher = ["anthropic>=0.40"]
+student = ["openai>=1.40"]
+train = ["torch>=2.3", "transformers>=4.45", "peft>=0.12", "accelerate>=0.33", "datasets>=2.20", "matplotlib>=3.8"]
+plots = ["matplotlib>=3.8"]
+gym = ["gymnasium>=0.29"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "fastapi>=0.110", "jinja2>=3.1", "python-multipart>=0.0.9", "itsdangerous>=2.1", "httpx>=0.27", "matplotlib>=3.8", "uvicorn>=0.29"]
+
+[project.scripts]
+forkloop = "forkloop.cli:main"
+
+[project.urls]
+Repository = "https://github.com/rynitepsd-tech/forkloop"
+
+[tool.setuptools]
+packages = { find = { include = ["forkloop", "forkloop.*", "worlds", "worlds.*"] } }
+
+[tool.setuptools.package-data]
+"worlds" = ["**/*.yaml", "**/*.sql", "**/*.json", "**/*.html", "**/*.css", "**/*.sh", "**/*.md"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"

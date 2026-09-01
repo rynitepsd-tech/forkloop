@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Resubmit - {{ claim.claim_number }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/claims">Claims</a> &rsaquo; <a href="/claims/{{ claim.claim_number }}">{{ claim.claim_number }}</a> &rsaquo; Resubmit</p>
+<h1>Resubmit claim {{ claim.claim_number }}</h1>
+<p class="lede">{{ claim.last_name }}, {{ claim.first_name }} &middot; Service date {{ claim.service_date }} &middot; {{ claim.amount_cents | money }}{% if claim.denial_code %} &middot; Denied {{ claim.denial_code }}{% endif %}</p>
+<form class="form" method="post" action="/claims/{{ claim.claim_number }}/resubmit">
+  {% if errors %}<div class="errors"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="field">
+    <label for="member_id">Member ID</label>
+    <input type="text" id="member_id" name="member_id" value="{{ values.member_id }}">
+  </div>
+  <div class="field">
+    <label for="note">Note (optional)</label>
+    <input type="text" id="note" name="note" value="{{ values.note }}">
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn btn-primary">Resubmit claim</button>
+    <a class="btn btn-secondary" href="/claims/{{ claim.claim_number }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

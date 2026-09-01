@@ -32,6 +32,16 @@ past. Copy one into your project and change the parts you care about.
 | Example | Language | What it shows |
 | --- | --- | --- |
 | [desktop-computer-use-py](examples/desktop-computer-use-py) | Python | Screenshot, click, and type on a Linux GUI |
+| [desktop-snapshot-revert-py](examples/desktop-snapshot-revert-py) | Python | Snapshot a desktop, `revert()` it, fork an independent copy with `fromSnapshot` |
+
+## Projects
+
+Larger builds that use the API end-to-end live under `projects/`. They keep
+the upstream examples untouched.
+
+| Project | What it is |
+| --- | --- |
+| [forkloop](projects/forkloop) | Snapshot-native training worlds for vision-only GUI agents: `reset()` is one `revert()`, `fork()` is one `create(fromSnapshot)`. A payer portal + OpenEMR world, a deterministic DB oracle, teacher/student policies, LoRA SFT scripts, and a reset benchmark. |
 
 ## Running an example
 

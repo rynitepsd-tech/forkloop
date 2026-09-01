@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Messages{% endblock %}
+{% block content %}
+<h1>Messages</h1>
+<p class="summary">{{ messages | length }} messages, {{ unread }} unread</p>
+<table class="data">
+  <thead><tr><th>Subject</th><th>Received</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for m in messages %}
+    <tr class="{% if not m.is_read %}unread{% endif %}">
+      <td><a href="/messages/{{ m.id }}">{{ m.subject }}</a></td>
+      <td>{{ m.received_at }}</td>
+      <td>{% if m.is_read %}Read{% else %}<strong>Unread</strong>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

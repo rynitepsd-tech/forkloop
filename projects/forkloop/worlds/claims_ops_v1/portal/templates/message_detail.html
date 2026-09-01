@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ message.subject }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/messages">Messages</a> &rsaquo; Message {{ message.id }}</p>
+<h1>{{ message.subject }}</h1>
+<p class="lede">Received {{ message.received_at }}</p>
+<section class="card">
+  <div class="message-body">{{ message.body }}</div>
+</section>
+<p><a class="btn btn-secondary" href="/messages">Back to inbox</a></p>
+{% endblock %}

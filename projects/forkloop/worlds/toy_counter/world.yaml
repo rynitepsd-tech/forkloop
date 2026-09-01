@@ -1,0 +1,23 @@
+name: toy-counter
+version: 1
+resolution: 640x400
+template: default
+golden_snapshot_env: FORKLOOP_GOLDEN_SNAPSHOT_TOY_COUNTER
+module: worlds.toy_counter.world:ToyCounterWorld
+seed_module: worlds.toy_counter.world
+paths:
+  state_db: /var/lib/toy/state.db
+databases:
+  state: {dialect: sqlite, path: /var/lib/toy/state.db}
+apps: {}
+families: [reach_target, reach_target_no_touch]
+budget: {max_steps: 25, max_seconds: 120}
+forbidden_paths: []
+oracle:
+  checksum_tables: {state: [counters, notes]}
+  watermark_tables: {state: [audit]}
+  primary_keys: {"state.counters": id, "state.notes": id, "state.audit": id}
+  exempt_tables: ["state.audit"]
+  audit:
+    state: {table: audit, entity_col: entity, id_col: entity_id, pk: id}
+  audit_entity_names: {"state.counters": counter, "state.notes": note}

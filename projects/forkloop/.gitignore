@@ -1,0 +1,16 @@
+venv
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+runs/
+bench/*.jsonl
+bench/*.json
+spikes/results.jsonl
+forkloop/bench/local_baseline/state/
+forkloop/bench/local_baseline/results.jsonl
+*.egg-info/
+build/
+dist/
+.env

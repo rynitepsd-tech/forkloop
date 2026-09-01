@@ -1,0 +1,34 @@
+{
+  "title": "SYNTHETIC PLACEHOLDER \u2014 reset latency by method",
+  "synthetic": true,
+  "methods": [
+    {
+      "name": "revert() to golden snapshot",
+      "n": 500,
+      "p50_s": 1.4,
+      "p95_s": 2.3,
+      "p99_s": 3.9,
+      "failure_rate": 0.004,
+      "cost_per_1k_usd": 0.9
+    },
+    {
+      "name": "create(from_snapshot) fork",
+      "n": 500,
+      "p50_s": 4.8,
+      "p95_s": 7.1,
+      "p99_s": 11.0,
+      "failure_rate": 0.01,
+      "cost_per_1k_usd": 2.4
+    },
+    {
+      "name": "fresh VM + reseed",
+      "n": 200,
+      "p50_s": 41.0,
+      "p95_s": 63.0,
+      "p99_s": 95.0,
+      "failure_rate": 0.06,
+      "cost_per_1k_usd": 19.5
+    }
+  ],
+  "note": "Every number in this file is made up to exercise train/plot.py. Replace with forkloop.bench output."
+}

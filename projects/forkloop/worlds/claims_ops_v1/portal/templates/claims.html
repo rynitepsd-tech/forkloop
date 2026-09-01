@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Claims{% endblock %}
+{% block content %}
+<h1>Claims</h1>
+<form class="filters" method="get" action="/claims">
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value=""{% if not status %} selected{% endif %}>All statuses</option>
+      {% for s in statuses %}<option value="{{ s }}"{% if status == s %} selected{% endif %}>{{ status_label(s) }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field field-wide">
+    <label for="q">Search</label>
+    <input type="text" id="q" name="q" value="{{ q }}" placeholder="Claim #, patient name, or member ID">
+  </div>
+  <div class="field field-actions">
+    <button type="submit" class="btn btn-primary">Apply filters</button>
+    <a class="btn btn-secondary" href="/claims">Clear</a>
+  </div>
+</form>
+<p class="summary">{% if total %}Showing {{ first }}&ndash;{{ last }} of {{ total }} claims{% else %}No claims match these filters.{% endif %}</p>
+<table class="data">
+  <thead>
+    <tr>
+      <th>Claim #</th>
+      <th>Patient</th>
+      <th>DOB</th>
+      <th>Member ID</th>
+      <th>Provider</th>
+      <th>Service date</th>
+      <th class="num">Amount</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in claims %}
+    <tr>
+      <td><a href="/claims/{{ c.claim_number }}">{{ c.claim_number }}</a></td>
+      <td><a href="/patients/{{ c.portal_patient_id }}">{{ c.last_name }}, {{ c.first_name }}</a></td>
+      <td>{{ c.dob }}</td>
+      <td>{{ c.submitted_member_id }}</td>
+      <td>{{ c.provider_name }}</td>
+      <td>{{ c.service_date }}</td>
+      <td class="num">{{ c.amount_cents | money }}</td>
+      <td><span class="status status-{{ c.status }}">{{ status_label(c.status) }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="pager">
+  {% if prev_url %}<a class="btn btn-secondary" href="{{ prev_url }}">Previous</a>{% else %}<span class="btn btn-secondary btn-disabled">Previous</span>{% endif %}
+  <span class="pager-pages">
+    {% for n, url in page_urls %}{% if n == page %}<span class="pager-current">{{ n }}</span>{% else %}<a href="{{ url }}">{{ n }}</a>{% endif %}{% endfor %}
+  </span>
+  {% if next_url %}<a class="btn btn-secondary" href="{{ next_url }}">Next</a>{% else %}<span class="btn btn-secondary btn-disabled">Next</span>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

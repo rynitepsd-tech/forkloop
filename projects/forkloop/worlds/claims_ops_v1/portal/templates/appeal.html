@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}File appeal - {{ claim.claim_number }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/claims">Claims</a> &rsaquo; <a href="/claims/{{ claim.claim_number }}">{{ claim.claim_number }}</a> &rsaquo; File appeal</p>
+<h1>File appeal for claim {{ claim.claim_number }}</h1>
+<p class="lede">{{ claim.last_name }}, {{ claim.first_name }} &middot; Service date {{ claim.service_date }} &middot; {{ claim.amount_cents | money }}{% if claim.denial_code %} &middot; Denied {{ claim.denial_code }}{% endif %}</p>
+<form class="form" method="post" action="/claims/{{ claim.claim_number }}/appeal" enctype="multipart/form-data">
+  {% if errors %}<div class="errors"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="field">
+    <label for="reason_code">Reason</label>
+    <select id="reason_code" name="reason_code">
+      <option value=""{% if not values.reason_code %} selected{% endif %}>Select a reason</option>
+      {% for code, text in reasons %}<option value="{{ code }}"{% if values.reason_code == code %} selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="authorization_number">Authorization number (optional)</label>
+    <input type="text" id="authorization_number" name="authorization_number" value="{{ values.authorization_number }}">
+  </div>
+  <div class="field">
+    <label for="narrative">Narrative</label>
+    <textarea id="narrative" name="narrative" rows="5">{{ values.narrative }}</textarea>
+  </div>
+  <div class="field">
+    <label for="attachment">Attachment (optional)</label>
+    <input type="file" id="attachment" name="attachment">
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn btn-primary">Submit appeal</button>
+    <a class="btn btn-secondary" href="/claims/{{ claim.claim_number }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

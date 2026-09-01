@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}Portal{% endblock %} - Meridian Provider Portal</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-inner">
+    <a class="brand" href="/claims">Meridian Provider Portal</a>
+    <nav class="navlinks">
+      <a href="/claims"{% if active == 'claims' %} class="active"{% endif %}>Claims</a>
+      <span class="navsep">&middot;</span>
+      <a href="/patients"{% if active == 'patients' %} class="active"{% endif %}>Patients</a>
+      <span class="navsep">&middot;</span>
+      <a href="/messages"{% if active == 'messages' %} class="active"{% endif %}>Messages</a>
+      <span class="navsep">&middot;</span>
+      <a href="/eligibility"{% if active == 'eligibility' %} class="active"{% endif %}>Eligibility</a>
+    </nav>
+    <div class="navuser">
+      {% if user %}<span class="username">{{ user.username }}</span><a class="navlogout" href="/logout">Log out</a>{% else %}<a class="navlogout" href="/login">Log in</a>{% endif %}
+    </div>
+  </div>
+</header>
+<main class="page">
+  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

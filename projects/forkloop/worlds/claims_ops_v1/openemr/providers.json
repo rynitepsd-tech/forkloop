@@ -1,0 +1,56 @@
+[
+  {
+    "openemr_user_id": 100001,
+    "name": "Aiko Nakamura",
+    "fname": "Aiko",
+    "lname": "Nakamura",
+    "npi": "1234567893",
+    "specialty": "Family Medicine",
+    "username": "anakamura"
+  },
+  {
+    "openemr_user_id": 100002,
+    "name": "Marcus Oyelaran",
+    "fname": "Marcus",
+    "lname": "Oyelaran",
+    "npi": "1745638209",
+    "specialty": "Internal Medicine",
+    "username": "moyelaran"
+  },
+  {
+    "openemr_user_id": 100003,
+    "name": "Priya Venkataraman",
+    "fname": "Priya",
+    "lname": "Venkataraman",
+    "npi": "2859401137",
+    "specialty": "Pediatrics",
+    "username": "pvenkataraman"
+  },
+  {
+    "openemr_user_id": 100004,
+    "name": "Daniel Whitfield",
+    "fname": "Daniel",
+    "lname": "Whitfield",
+    "npi": "3962715041",
+    "specialty": "Orthopedic Surgery",
+    "username": "dwhitfield"
+  },
+  {
+    "openemr_user_id": 100005,
+    "name": "Sofia Castellanos",
+    "fname": "Sofia",
+    "lname": "Castellanos",
+    "npi": "4173859669",
+    "specialty": "Cardiology",
+    "username": "scastellanos"
+  },
+  {
+    "openemr_user_id": 100006,
+    "name": "Elena Marchetti",
+    "fname": "Elena",
+    "lname": "Marchetti",
+    "npi": "5281930771",
+    "specialty": "Dermatology",
+    "username": "emarchetti"
+  }
+]

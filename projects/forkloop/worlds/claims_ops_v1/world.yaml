@@ -1,0 +1,77 @@
+name: claims-ops-v1
+version: 1
+resolution: 1280x720
+template: default
+golden_snapshot_env: FORKLOOP_GOLDEN_SNAPSHOT_CLAIMS_OPS_V1
+module: worlds.claims_ops_v1.world:ClaimsOpsWorld
+seed_module: worlds.claims_ops_v1.seed_world
+paths:
+  portal_db: /var/lib/forkloop/portal/portal.db
+  portal_uploads: /var/lib/forkloop/portal/uploads
+  openemr_root: /var/www/openemr
+  openemr_docs: /var/www/openemr/sites/default/documents
+  openemr_shim_db: /var/lib/forkloop/openemr_shim.db
+  downloads: /home/user/Downloads
+  build_dir: /opt/forkloop
+databases:
+  portal:
+    dialect: sqlite
+    path: /var/lib/forkloop/portal/portal.db
+  openemr:
+    dialect: mysql
+    database: openemr
+    user: openemr
+    password_file: /etc/forkloop/openemr.pw
+    shim_path: /var/lib/forkloop/openemr_shim.db
+apps:
+  portal:
+    url: "http://localhost:8080"
+    health: "/healthz"
+  openemr:
+    url: "http://localhost/openemr"
+    health: "/interface/login/login.php?site=default"
+families: [reschedule_constrained, update_insurance_reconcile, resolve_denial]
+budget: {max_steps: 60, max_seconds: 600}
+forbidden_paths: ["/admin", "/debug", "/api/"]
+oracle:
+  checksum_tables:
+    portal: [patients, claims, appeals, resubmissions, providers, users, messages]
+    openemr: [patient_data, insurance_data, openemr_postcalendar_events, documents, categories_to_documents, users, insurance_companies]
+  watermark_tables:
+    portal: [audit_log, page_views]
+    openemr: [log]
+  primary_keys:
+    portal.patients: id
+    portal.claims: id
+    portal.appeals: id
+    portal.resubmissions: id
+    portal.providers: id
+    portal.users: id
+    portal.messages: id
+    portal.audit_log: id
+    portal.page_views: id
+    openemr.patient_data: id
+    openemr.insurance_data: id
+    openemr.openemr_postcalendar_events: pc_eid
+    openemr.documents: id
+    openemr.categories_to_documents: document_id
+    openemr.users: id
+    openemr.insurance_companies: id
+    openemr.log: id
+  # append-only tables the agent legitimately grows; audit/page_views are the tripwires themselves
+  exempt_tables: [portal.audit_log, portal.page_views, portal.eligibility_checks, openemr.log]
+  audit:
+    portal: {table: audit_log, entity_col: entity, id_col: entity_id, pk: id}
+    openemr: {table: log, entity_col: event, id_col: patient_id, pk: id, loose: true, comments_col: comments}
+  audit_entity_names:
+    portal.claims: claims
+    portal.appeals: claims
+    portal.resubmissions: claims
+    portal.messages: messages
+  # OpenEMR's log keys by patient: look the patient id up on the changed row
+  audit_id_lookup:
+    openemr.patient_data: pid
+    openemr.insurance_data: pid
+    openemr.openemr_postcalendar_events: pc_pid
+    openemr.documents: foreign_id
+  page_views: {db: portal, table: page_views, path_col: path, pk: id}

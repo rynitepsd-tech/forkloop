@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Eligibility{% endblock %}
+{% block content %}
+<h1>Eligibility check</h1>
+<form class="form" method="post" action="/eligibility">
+  {% if errors %}<div class="errors"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="field">
+    <label for="member_id">Member ID</label>
+    <input type="text" id="member_id" name="member_id" value="{{ values.member_id }}">
+  </div>
+  <div class="field">
+    <label for="dob">Date of birth (YYYY-MM-DD)</label>
+    <input type="text" id="dob" name="dob" value="{{ values.dob }}" placeholder="YYYY-MM-DD">
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn btn-primary">Check eligibility</button>
+  </div>
+</form>
+{% if result %}
+<section class="card result result-{{ result.status }}">
+  <h2>Result: {{ result.label }}</h2>
+  <dl class="details">
+    <div><dt>Member ID</dt><dd>{{ result.member_id }}</dd></div>
+    <div><dt>Date of birth</dt><dd>{{ result.dob }}</dd></div>
+    {% if result.status == 'ACTIVE' %}
+    <div><dt>Patient</dt><dd><a href="/patients/{{ result.portal_patient_id }}">{{ result.patient_name }}</a></dd></div>
+    <div><dt>Payer plan</dt><dd>{{ result.payer_plan }}</dd></div>
+    <div><dt>Group number</dt><dd>{{ result.group_number }}</dd></div>
+    {% elif result.status == 'DOB_MISMATCH' %}
+    <div><dt>Detail</dt><dd>A member with this ID exists but the date of birth does not match.</dd></div>
+    {% else %}
+    <div><dt>Detail</dt><dd>No member with this ID is on file.</dd></div>
+    {% endif %}
+  </dl>
+</section>
+{% endif %}
+{% endblock %}

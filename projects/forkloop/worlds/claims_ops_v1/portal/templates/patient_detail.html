@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Patient {{ patient.portal_patient_id }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/patients">Patients</a> &rsaquo; {{ patient.portal_patient_id }}</p>
+<h1>{{ patient.last_name }}, {{ patient.first_name }}</h1>
+<section class="card">
+  <h2>Demographics</h2>
+  <dl class="details">
+    <div><dt>Patient ID</dt><dd>{{ patient.portal_patient_id }}</dd></div>
+    <div><dt>First name</dt><dd>{{ patient.first_name }}</dd></div>
+    <div><dt>Last name</dt><dd>{{ patient.last_name }}</dd></div>
+    <div><dt>Date of birth</dt><dd>{{ patient.dob }}</dd></div>
+    <div><dt>Member ID</dt><dd>{{ patient.member_id }}</dd></div>
+    <div><dt>Payer plan</dt><dd>{{ patient.payer_plan }}</dd></div>
+    <div><dt>Group number</dt><dd>{{ patient.group_number }}</dd></div>
+    <div><dt>Created</dt><dd>{{ patient.created_at }}</dd></div>
+  </dl>
+</section>
+<section class="card">
+  <h2>Claims ({{ claims | length }})</h2>
+  {% if claims %}
+  <table class="data">
+    <thead><tr><th>Claim #</th><th>Service date</th><th>CPT</th><th>Provider</th><th>Submitted member ID</th><th class="num">Amount</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for c in claims %}
+      <tr>
+        <td><a href="/claims/{{ c.claim_number }}">{{ c.claim_number }}</a></td>
+        <td>{{ c.service_date }}</td>
+        <td>{{ c.cpt_code }}</td>
+        <td>{{ c.provider_name }}</td>
+        <td>{{ c.submitted_member_id }}</td>
+        <td class="num">{{ c.amount_cents | money }}</td>
+        <td><span class="status status-{{ c.status }}">{{ status_label(c.status) }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No claims on file for this patient.</p>{% endif %}
+</section>
+{% endblock %}
