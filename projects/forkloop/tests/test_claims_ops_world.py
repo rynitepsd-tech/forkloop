@@ -242,3 +242,27 @@ async def test_concurrent_resets_share_one_golden(world, backend):
     for e in envs:
         await e.close()
     await pool.close()
+
+
+async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
+    """Old goldens started Chrome without --disable-gpu (renderer crashes on OpenEMR); new ones have it."""
+    from types import SimpleNamespace
+
+    from forkloop.world import load_world
+
+    world = load_world("claims-ops-v1")
+    calls: list[str] = []
+
+    def machine(flag_present: bool):
+        async def exec_(cmd, args=None, **kw):
+            calls.append(" ".join(args or []))
+            if "grep -c -- '--disable-gpu'" in (args or [""])[-1]:
+                return SimpleNamespace(exit_code=0, stdout="1\n" if flag_present else "0\n", stderr="")
+            return SimpleNamespace(exit_code=0, stdout="", stderr="")
+        return SimpleNamespace(exec=exec_, capabilities={"gui"}, backend_name="solari")
+
+    assert await world.ensure_chrome_gpu_flag(machine(True)) is False
+    assert len(calls) == 1
+    calls.clear()
+    assert await world.ensure_chrome_gpu_flag(machine(False)) is True
+    assert len(calls) == 2 and "--disable-gpu" in calls[1] and "pkill -x chrome" in calls[1]

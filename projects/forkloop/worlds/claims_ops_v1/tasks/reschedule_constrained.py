@@ -15,7 +15,7 @@ from forkloop.oracle import Check, OracleSpec
 from forkloop.tasks import Seeding, TaskInstance, make_task_id
 
 from ..openemr import openemr_sql as osql
-from .common import ANCHOR, WEEKDAYS, BaseData, episode_id_base, load_base, make_person, rng_for, sql_ts
+from .common import APPS_HINT, ANCHOR, WEEKDAYS, BaseData, episode_id_base, load_base, make_person, rng_for, sql_ts
 
 FAMILY = "reschedule_constrained"
 
@@ -77,7 +77,7 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
 
     instruction = (f"In OpenEMR (log in as admin / pass if asked), move {person.name}'s (DOB {person.dob.isoformat()}) appointment with "
                    f"{provider['name']} to {slot_desc}, keeping the same provider and visit type. "
-                   f"Do not touch any other appointment.")
+                   f"Do not touch any other appointment. {APPS_HINT}")
 
     effects = [
         Check(id="event_date", kind="query", db="openemr", sql="SELECT pc_eventDate FROM openemr_postcalendar_events WHERE pc_eid = ?",

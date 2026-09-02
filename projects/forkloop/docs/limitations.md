@@ -38,17 +38,28 @@ directory should be read as *design intent*, not result.
 - The SDK presses a key list sequentially; chords must be a single
   `"ctrl+a"` string (backend does this). Keyboard focus after a fork is not
   guaranteed to be in Chrome: navigation clicks the omnibox first.
-- **Family 1 is blocked on the OpenEMR calendar's provider list.** The
-  calendar's `Providers` box shows only "Administrator" even though
-  `getProviderInfo()`'s exact query returns all six seeded providers
-  (`authorized=1, calendar=1, active=1, facility_id=3`, uuid present,
-  `password='NoLongerUsed'`, `cal_ui=3` all tried). The filter is therefore in
-  the calendar's rendering layer (PostCalendar template / JS); the leading
-  hypothesis is a required `users_facility` row per provider. Until fixed,
-  the seeded appointment (provider 100003) is invisible in the day view and
-  family 1 cannot be completed through the GUI. Families 2 and 3 are
-  unaffected on the portal side; the OpenEMR insurance edit for family 2 has
-  not been driven through the GUI yet.
+- **Family 1 was never blocked server-side (re-measured 2026-09-02).** The
+  "only Administrator" provider list had two causes, both now understood:
+  (1) Chrome's renderer crashed on every authenticated OpenEMR page ("Aw,
+  Snap! Error code: 5") because the Solari `default` desktop has no working
+  GPU process (`Failed to send GpuControl.CreateCommandBuffer` in
+  `chrome.log`); `--disable-gpu` fixes it; `browser_setup.sh` now starts Chrome with it and the
+  `before_episode` stage relaunches Chrome when a golden lacks it (≈ 8 s, only
+  on pre-v6 goldens).
+  (2) OpenEMR's calendar narrows the Providers box to the logged-in user's
+  `pc_username` session value; the seeded providers are all there and one
+  click on "All Users" (≈ (63, 567) at 1280×720) shows seven provider
+  columns. Verified with an authenticated curl fetch (all seven `<option>`s,
+  the provider dropdown of `add_edit_event.php` lists them too) and with
+  screenshots through the agent channel. A reschedule has still not been
+  driven end to end through the GUI.
+- **`snapshot()` is refused on forked machines.** A desktop created with
+  `from_snapshot` returns 409 `Not snapshottable` (three attempts, state
+  `running`); a fresh desktop snapshots fine. So golden images can only be
+  produced on the original build machine (hence the from-scratch rebuild for
+  the `--disable-gpu` fix), and `env.checkpoint()` — the branch point of
+  `best_of_n` in both `revert` and `fork` modes — cannot run on this account.
+  `collect --best-of 1` is the only mode that works today.
 - Attachment upload through the GTK file chooser has not been exercised.
 - An OpenEMR page reload (F5) on the tabs UI drops the session; agents that
   reload will have to log in again (credentials are in the instruction).
@@ -62,8 +73,11 @@ directory should be read as *design intent*, not result.
   a live snapshot are still *unverified*.
   The reviewer's claim that recording is rejected with snapshot-restored
   machines is likewise untested; forkloop never depends on native recording.
-- **Teacher and student have not run.** The teacher needs an Anthropic key;
-  the student needs a GPU box serving a model. Both are the next steps.
+- **The teacher has run on family 3 only** (2/2 verified, `runs/teacher-pilot4`);
+  families 1 and 2 have not been driven by it yet. `forkloop metrics` reports
+  `cost / success` from VM time only — model tokens are in `steps.jsonl` but not
+  priced into that number yet (≈ 250–530k input tokens per verified episode).
+  The student needs a GPU box serving a model.
 - **Chart 1 and Chart 2 do not exist.** `train/plot.py --demo` renders
   clearly labelled synthetic placeholders so the pipeline can be checked.
   No learning curve has been produced; no teacher trajectory has been

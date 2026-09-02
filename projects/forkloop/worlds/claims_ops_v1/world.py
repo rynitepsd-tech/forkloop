@@ -135,6 +135,48 @@ class ClaimsOpsWorld(World):
         # Clear the Downloads dir so an attachment from a previous branch cannot leak in
         # (revert already does this; this is belt-and-braces for fork-mode reuse).
         await machine.exec("sh", ["-c", f"rm -rf {self.config.paths['downloads']}/* 2>/dev/null; true"])
+        if "gui" in machine.capabilities:
+            await self.ensure_chrome_gpu_flag(machine)
+
+    async def diagnostics(self, machine: Any) -> dict[str, str]:
+        """Chrome's stderr log and the kernel ring buffer, so a renderer crash leaves evidence."""
+        if machine.backend_name == "fake" or "gui" not in machine.capabilities:
+            return {}
+        out: dict[str, str] = {}
+        for name, cmd in (("chrome.log", "tail -n 200 /home/desktop/chrome.log 2>/dev/null"),
+                          ("dmesg.log", "dmesg 2>/dev/null | tail -n 60"),
+                          ("chrome_ps.txt", "ps -eo pid,rss,etimes,args --sort=-rss | grep -a '[c]hrome' | cut -c1-200 | head -20")):
+            try:
+                r = await machine.exec("sh", ["-c", cmd], timeout_ms=15_000)
+                out[name] = r.stdout
+            except Exception as e:  # noqa: BLE001
+                out[name] = f"(unavailable: {type(e).__name__}: {e})"
+        return out
+
+    async def ensure_chrome_gpu_flag(self, machine: Any) -> bool:
+        """Relaunch Chrome with ``--disable-gpu`` if the snapshot's Chrome lacks it.
+
+        The Solari ``default`` desktop has no working GPU process, and without the
+        flag every authenticated OpenEMR page kills the renderer ("Aw, Snap! Error
+        code: 5"). Golden images built after 2026-09-02 start Chrome with the flag
+        (``browser_setup.sh``), so this is a no-op costing one ``ps``; on older
+        goldens it relaunches Chrome on the portal claims list (the canonical initial
+        screen; both app logins live in the profile and survive). Returns True when
+        a relaunch happened.
+        """
+        r = await machine.exec("sh", ["-c", "ps -eo args | grep -m1 '[g]oogle-chrome' | grep -c -- '--disable-gpu'"])
+        if r.stdout.strip() == "1":
+            return False
+        script = (
+            "pkill -x chrome; sleep 1.5; runuser -u desktop -- env DISPLAY=:0 HOME=/home/desktop XDG_RUNTIME_DIR=/run/desktop "
+            "setsid -f google-chrome --no-first-run --no-default-browser-check --user-data-dir=/home/desktop/.config/forkloop-chrome "
+            "--password-store=basic --window-position=0,0 --window-size=1280,720 --disable-session-crashed-bubble "
+            "--disk-cache-size=1 --media-cache-size=1 --disable-infobars --disable-gpu --disable-dev-shm-usage "
+            "--enable-logging=stderr --v=0 'http://localhost:8080/claims' "
+            ">/home/desktop/chrome.log 2>&1; sleep 6"
+        )
+        await machine.exec("bash", ["-c", script], timeout_ms=60_000)
+        return True
 
 
 __all__ = ["ClaimsOpsWorld"]

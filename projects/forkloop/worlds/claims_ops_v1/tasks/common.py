@@ -305,6 +305,9 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+APPS_HINT = f"Apps: OpenEMR at {OPENEMR_URL}, payer portal at {PORTAL_URL}."
+
+
 def portal_url(path: str) -> str:
     return PORTAL_URL + path
 

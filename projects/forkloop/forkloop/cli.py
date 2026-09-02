@@ -90,7 +90,8 @@ async def _build(args: argparse.Namespace) -> int:
     else:
       m = await backend.create(template=w.config.template, resolution=w.config.resolution, cpu=args.cpu or int(res.get("cpu", 2)),
                              mem_mb=args.mem_mb or int(res.get("mem_mb", 4096)), disk_gb=args.disk_gb or res.get("disk_gb"),
-                             metadata={"forkloop": "1", "run_id": "build"})
+                             metadata={"forkloop": "1", "run_id": "build"},
+                             timeout_ms=180 * 60_000)  # a golden build outlives the 30-minute default (onTimeout=kill)
     try:
         sid = await w.build(m, log=print)
         print(f"\nGOLDEN_SNAPSHOT={sid}\nexport {w.config.golden_snapshot_env}={sid}")

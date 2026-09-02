@@ -46,6 +46,7 @@ class EpisodeState:
     dbs: dict[str, DbAccess]
     baseline: Baseline
     step: int = 0
+    budget_steps: int = 0  # steps that count against max_steps (everything except wait)
     invalid: int = 0
     history: list[str] = field(default_factory=list)
     started_at: float = field(default_factory=time.monotonic)
@@ -165,6 +166,8 @@ class Env:
         ep.history.append(raw if parsed is None else parsed.to_compact())
         i = ep.step
         ep.step += 1
+        if parsed is None or parsed.type != "wait":
+            ep.budget_steps += 1  # waits are free: they change nothing and a real agent needs many of them
         if ep.recorder:
             ep.recorder.record_step(i, shot_before=shot_before, shot_after=shot_after, action=parsed, raw_action=raw,
                                     valid=parsed is not None and error is None,
@@ -177,7 +180,7 @@ class Env:
         if parsed is not None and parsed.is_terminal:
             ep.terminated = True
             ep.end_reason = "done"
-        elif ep.step >= int(budget.get("max_steps", 60)):
+        elif ep.budget_steps >= int(budget.get("max_steps", 60)):
             ep.truncated = True
             ep.end_reason = "max_steps"
         elif time.monotonic() - ep.started_at >= float(budget.get("max_seconds", 600)):
@@ -209,8 +212,22 @@ class Env:
             verdict.reason_code = "BUDGET_EXCEEDED"
         ep.verdict = verdict
         if ep.recorder:
+            await self._save_diagnostics(ep)
             ep.recorder.finish(verdict, extra={"end_reason": ep.end_reason, "invalid_actions": ep.invalid})
         return verdict
+
+    async def _save_diagnostics(self, ep: EpisodeState) -> None:
+        """Keep the world's diagnostic logs (browser, kernel) next to the episode. Never fails the episode."""
+        try:
+            files = await self.world.diagnostics(ep.machine)
+        except Exception as e:  # noqa: BLE001
+            files = {"diagnostics_error.txt": f"{type(e).__name__}: {e}"}
+        if not files or ep.recorder is None:
+            return
+        d = ep.recorder.dir / "diagnostics"
+        d.mkdir(exist_ok=True)
+        for name, text in files.items():
+            (d / name).write_text(text or "", encoding="utf-8", errors="replace")
 
     # ------------------------------------------------------------- search
     async def checkpoint(self) -> EnvCheckpoint:
@@ -225,6 +242,7 @@ class Env:
         assert ep is not None
         await ep.machine.revert(cp.snapshot_id)
         ep.step, ep.history, ep.invalid = cp.step, list(cp.history), cp.invalid
+        ep.budget_steps = min(ep.budget_steps, cp.step)
         ep.started_at = cp.started_at
         ep.terminated = ep.truncated = False
         ep.verdict = None

@@ -172,7 +172,7 @@ class TaskInstance:
     seeding: Seeding                 # see below
     expected: dict                   # family-specific, controller-only
     oracle: OracleSpec               # see §6
-    budget: dict                     # {"max_steps": 60, "max_seconds": 600}
+    budget: dict                     # {"max_steps": 60, "max_seconds": 600}; wait() actions do not count toward max_steps
     difficulty: dict                 # knobs used, for analysis ({"distractors": 3, "require_attachment": false, ...})
 
 @dataclass
@@ -217,6 +217,9 @@ class Check:
     reason_code: str = "CHECK_FAILED"# emitted when this check fails
     allow: dict | None = None        # baseline_checksum only: {"portal.claims": ["C-1042"], "openemr.insurance_data": [100004]}
     exempt_tables: list[str] | None = None   # baseline_checksum: append-only tables ignored (audit_log, log, page_views, appeals, resubmissions)
+    # Row hashes leave out `world.yaml` `oracle.ignore_columns` ({db: [column, ...]}): columns the app rewrites by
+    # itself when a record is merely displayed (OpenEMR backfills `uuid` on first access). Without this, viewing a
+    # patient was a COLLATERAL_EDIT (measured 2026-09-02).
 
 @dataclass
 class OracleSpec:

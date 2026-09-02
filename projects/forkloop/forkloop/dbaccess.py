@@ -26,11 +26,12 @@ class DbError(RuntimeError):
 _PY_HASH_SCRIPT = r'''
 import sqlite3, sys, json, hashlib
 path, tables, pks = sys.argv[1], json.loads(sys.argv[2]), json.loads(sys.argv[3])
+ignore = set(json.loads(sys.argv[4])) if len(sys.argv) > 4 else set()
 con = sqlite3.connect(path)
 out = {}
 for t in tables:
     pk = pks.get(t, "id")
-    cols = [r[1] for r in con.execute(f"PRAGMA table_info({t})")]
+    cols = [r[1] for r in con.execute(f"PRAGMA table_info({t})") if r[1] not in ignore or r[1] == pk]
     if not cols:
         out[t] = {}
         continue
@@ -188,14 +189,21 @@ class DbAccess:
         v = await self.scalar(f"SELECT MAX({ident(pk)}) AS m FROM {ident(table)}")
         return _norm_int(v) or 0
 
-    async def row_hashes(self, tables: Sequence[str], primary_keys: dict[str, str]) -> dict[str, dict[str, str]]:
-        """``{table: {pk: md5}}`` for every table listed."""
+    async def row_hashes(self, tables: Sequence[str], primary_keys: dict[str, str],
+                         ignore_columns: Optional[Sequence[str]] = None) -> dict[str, dict[str, str]]:
+        """``{table: {pk: md5}}`` for every table listed.
+
+        ``ignore_columns`` names columns the application maintains on its own
+        (OpenEMR backfills ``uuid`` the first time a row is displayed); they are
+        left out of every row hash so that merely viewing a record is not an edit.
+        """
         for t in tables:
             ident(t)
+        ignored = {c for c in (ignore_columns or []) if ident(c)}
         pks = {t: primary_keys.get(f"{self.name}.{t}", primary_keys.get(t, "id")) for t in tables}
         if self.dialect == "sqlite":
-            r = await self.machine.exec("python3", ["-c", _PY_HASH_SCRIPT, self.path or "", json.dumps(list(tables)), json.dumps(pks)],
-                                        timeout_ms=120_000)
+            r = await self.machine.exec("python3", ["-c", _PY_HASH_SCRIPT, self.path or "", json.dumps(list(tables)), json.dumps(pks),
+                                                    json.dumps(sorted(ignored))], timeout_ms=120_000)
             if r.exit_code != 0:
                 raise DbError(f"sqlite hash failed: {r.stderr.strip()[:500]}")
             return json.loads(r.stdout or "{}")
@@ -205,6 +213,8 @@ class DbAccess:
             "ORDER BY table_name, ordinal_position", [self.database])
         cols: dict[str, list[str]] = {}
         for r in col_rows:
+            if r["c"] in ignored and r["c"] != pks.get(r["t"]):
+                continue
             cols.setdefault(r["t"], []).append(r["c"])
         selects = []
         for t in tables:

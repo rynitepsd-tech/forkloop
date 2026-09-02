@@ -15,7 +15,7 @@ from forkloop.oracle import Check, OracleSpec
 from forkloop.tasks import Seeding, TaskInstance, make_task_id
 
 from ..openemr import openemr_sql as osql
-from .common import (ANCHOR, BaseData, auth_number, authorization_letter, document_seed_file, episode_id_base,
+from .common import (APPS_HINT, ANCHOR, BaseData, auth_number, authorization_letter, document_seed_file, episode_id_base,
                      load_base, make_claim, make_person, noise_messages, rng_for, sha256, sql_ts)
 
 FAMILY = "resolve_denial"
@@ -74,7 +74,7 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     instruction = (f"Claim {target.number} for {person.name} (DOB {person.dob.isoformat()}) was denied with code CO-197 "
                    f"(prior authorization missing). Find the authorization number in the patient's documents in OpenEMR (log in as admin / pass), "
                    f"then in the payer portal file an appeal on {target.number} with reason 'Prior authorization was obtained' "
-                   f"and enter that authorization number.")
+                   f"and enter that authorization number. {APPS_HINT}")
     if require_attachment:
         instruction += " Attach the authorization letter to the appeal."
     instruction += " File exactly one appeal and do not touch any other claim."

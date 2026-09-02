@@ -13,7 +13,7 @@ from forkloop.oracle import Check, OracleSpec
 from forkloop.tasks import Seeding, TaskInstance, make_task_id
 
 from ..openemr import openemr_sql as osql
-from .common import (ANCHOR, PAYERS, BaseData, episode_id_base, load_base, make_claim, make_person, member_id,
+from .common import (APPS_HINT, ANCHOR, PAYERS, BaseData, episode_id_base, load_base, make_claim, make_person, member_id,
                      noise_messages, rng_for, similar_member_id, sql_ts)
 
 FAMILY = "update_insurance_reconcile"
@@ -61,11 +61,11 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     if partially_updated:
         instruction = (f"{person.name}'s (DOB {person.dob.isoformat()}) insurance is now {new_plan}, member ID {new_member}, "
                        f"and OpenEMR already reflects this. In the payer portal, resubmit claim {target.number} with the corrected member ID. "
-                       f"Leave every other claim untouched.")
+                       f"Leave every other claim untouched. {APPS_HINT}")
     else:
         instruction = (f"{person.name}'s (DOB {person.dob.isoformat()}) insurance changed to {new_plan}, member ID {new_member}. "
                        f"Update the primary insurance in OpenEMR (log in as admin / pass; plan name and policy number), then in the payer portal resubmit "
-                       f"claim {target.number} with the corrected member ID. Do not resubmit or appeal any other claim.")
+                       f"claim {target.number} with the corrected member ID. Do not resubmit or appeal any other claim. {APPS_HINT}")
 
     effects = [
         Check(id="openemr_policy", kind="query", db="openemr",

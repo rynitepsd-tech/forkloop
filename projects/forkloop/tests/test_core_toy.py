@@ -274,3 +274,70 @@ async def test_pool_falls_back_to_fork_when_revert_is_refused(world, backend):
     assert len(reverts) == 1 and info["reset"]["ok"]
     await env.close()
     await pool.close()
+
+
+async def test_pool_retries_a_hung_create(world, backend):
+    """A create call that never answers (seen on Solari) is abandoned after create_timeout_s and retried."""
+    import asyncio
+
+    real_create = backend.create
+    calls = []
+
+    async def flaky_create(**kw):
+        calls.append(1)
+        if len(calls) == 1:
+            await asyncio.sleep(30)  # hangs: must be cut off by the pool's timeout
+        return await real_create(**kw)
+
+    backend.create = flaky_create  # type: ignore[method-assign]
+    pool = WorkerPool(backend, world, size=1, mode="fork", create_timeout_s=0.2)
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
+    obs, info = await env.reset(1)
+    assert info["reset"]["ok"] and len(calls) == 2
+    assert any(e["event"] == "create_retry" and "timed out" in e["error"] for e in pool.events)
+    await env.close()
+    await pool.close()
+
+
+async def test_waits_do_not_count_toward_max_steps(world, backend):
+    env = Env(world, backend, family="reach_target", settle_s=0)
+    obs, _ = await env.reset(1)
+    env.ep.task.budget = {"max_steps": 3, "max_seconds": 600}
+    for _ in range(5):
+        obs, r, term, trunc, info = await env.step(Action.wait(0.01))
+        assert not term and not trunc
+    for k in range(3):
+        obs, r, term, trunc, info = await env.step(Action.click(1, 1))
+    assert trunc and env.ep is None or info["end_reason"] == "max_steps"
+    await env.close()
+
+
+def test_row_hash_script_ignores_app_maintained_columns(tmp_path):
+    """OpenEMR backfills uuid when a row is displayed; ignore_columns keeps that out of the hash."""
+    import json
+    import sqlite3
+    import subprocess
+    import sys
+
+    from forkloop.dbaccess import _PY_HASH_SCRIPT
+
+    db = tmp_path / "t.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE patient_data (id INTEGER PRIMARY KEY, pid INTEGER, fname TEXT, uuid BLOB)")
+    con.execute("INSERT INTO patient_data VALUES (1, 1, 'Rosa', NULL)")
+    con.commit()
+
+    def hashes(ignore):
+        out = subprocess.run([sys.executable, "-c", _PY_HASH_SCRIPT, str(db), json.dumps(["patient_data"]), json.dumps({"patient_data": "id"}),
+                              json.dumps(ignore)], capture_output=True, text=True, check=True).stdout
+        return json.loads(out)["patient_data"]["1"]
+
+    h0_plain, h0_ign = hashes([]), hashes(["uuid"])
+    con.execute("UPDATE patient_data SET uuid = X'A2A54178D93542288FDE3EE484CA6650' WHERE id = 1")
+    con.commit()
+    assert hashes([]) != h0_plain            # a plain hash sees the backfill as a change
+    assert hashes(["uuid"]) == h0_ign        # the ignoring hash does not
+    con.execute("UPDATE patient_data SET fname = 'Rosie' WHERE id = 1")
+    con.commit()
+    assert hashes(["uuid"]) != h0_ign        # a real edit is still caught
+    assert hashes(["id"]) is not None        # ignoring the pk column itself is harmless

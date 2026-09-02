@@ -5,6 +5,8 @@ once it exists. Newest first.
 
 | Date | What happened | Number | Post |
 | --- | --- | --- | --- |
+| 2026-09-02 | **First verified teacher trajectories**: `claude-opus-5` scores 1.0 on 2/2 family-3 episodes through the real desktop world (`runs/teacher-pilot4`). On the way: teacher screenshot-queue fix, waits exempt from `max_steps`, app URLs in instructions, `oracle.ignore_columns` for OpenEMR's uuid backfill, per-episode Chrome/kernel diagnostics, pool create timeout. | 2/2 | — |
+| 2026-09-02 | Family-1 "blocker" diagnosed: Chrome renderer crash without `--disable-gpu` + OpenEMR's per-user provider filter ("All Users" fixes it). `snapshot()` refused on forks → golden v6 rebuilt from scratch with the Chrome fix. Teacher wired for identity-linked keys (`ANTHROPIC_WORKSPACE_ID`); blocked on the workspace id. Solari message drafted (`docs/solari-message.md`). | calendar renders | — |
 | 2026-09-02 | Pool now falls back to fork mode when `revert()` is refused (verified live on the account); reset reports label the method actually used. Handoff doc written. | — | — |
 | 2026-09-02 | Desktop reset benchmark (fork, n=10): p50 25.0 s, one failure from a full disk → golden v5 rebuilt lean (≈550 MB free). Spike 2: two forks in parallel from one snapshot. Spike 3: recording works on forked desktops, `recordingUrl` never populates. Family 1 blocked on the calendar provider list (documented). | p50 25.0 s | — |
 | 2026-09-02 | Starter plan: golden **desktop** world built (`snap_dl4e05ciyt1p`); scripted GUI episode through the real agent channel → reward 1.0, decoy control → `WRONG_VALUE`. Frames in `docs/demo_episode/`. | reward 1.0 | — |

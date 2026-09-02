@@ -13,9 +13,14 @@ pkill -x chrome 2>/dev/null; pkill chrome 2>/dev/null || true
 sleep 2
 # Deterministic layout: fixed position/size, no first-run dialogs. Bubbles (save password,
 # translate, sign-in) are disabled by the enterprise policy build.sh installs.
+# --disable-gpu is required: the Solari desktop has no usable GPU process ("Failed to send
+# GpuControl.CreateCommandBuffer" in chrome.log) and every authenticated OpenEMR page then
+# kills the renderer ("Aw, Snap! Error code: 5") — the login page and the portal survive
+# only because they never touch GPU compositing. Measured 2026-09-02 on golden v5 forks.
 nohup google-chrome --no-first-run --no-default-browser-check --user-data-dir="$PROFILE" \
   --password-store=basic --window-position=0,0 --window-size=1280,720 --disable-session-crashed-bubble \
-  --disk-cache-size=1 --media-cache-size=1 --disable-infobars "$PORTAL/login" >"$HOME/chrome.log" 2>&1 &
+  --disk-cache-size=1 --media-cache-size=1 --disable-infobars --disable-gpu --disable-dev-shm-usage \
+  --enable-logging=stderr --v=0 "$PORTAL/login" >"$HOME/chrome.log" 2>&1 &
 sleep 9
 WID=$(xdotool search --onlyvisible --class chrome | head -1 || true)
 [[ -n "$WID" ]] && wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz || true

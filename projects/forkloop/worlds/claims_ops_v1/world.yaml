@@ -35,6 +35,12 @@ families: [reschedule_constrained, update_insurance_reconcile, resolve_denial]
 budget: {max_steps: 60, max_seconds: 600}
 forbidden_paths: ["/admin", "/debug", "/api/"]
 oracle:
+  # Columns OpenEMR rewrites by itself when a record is merely displayed: it backfills `uuid`
+  # on first access, and that write bumps the ON UPDATE timestamps `patient_data.last_updated`
+  # and `documents.revision` (measured column by column on 2026-09-02). Hashing them turned
+  # every viewed patient into a COLLATERAL_EDIT. Real edits still change other columns.
+  ignore_columns:
+    openemr: [uuid, last_updated, revision]
   checksum_tables:
     portal: [patients, claims, appeals, resubmissions, providers, users, messages]
     openemr: [patient_data, insurance_data, openemr_postcalendar_events, documents, categories_to_documents, users, insurance_companies]

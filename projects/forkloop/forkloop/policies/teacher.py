@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import re
 import time
 from typing import Any, Optional
@@ -26,6 +27,7 @@ from .base import PolicyResult
 
 DEFAULT_MODEL = "claude-opus-5"
 NOT_EXECUTED = "Not executed: an earlier computer action in this turn failed."
+LOCAL_MEMBERS = ("screenshot", "zoom", "cursor_position")  # answered from the latest observation, never an env step
 
 SYSTEM_PROMPT = """You are operating a Linux desktop (Chrome browser, screen {w}x{h}) to complete an administrative task in two web applications: a payer portal and OpenEMR. You see the screen only through screenshots.
 
@@ -38,6 +40,19 @@ Rules:
 """
 
 CONF_RE = re.compile(r"confidence\s*[:=]\s*([01](?:\.\d+)?|\.\d+)", re.I)
+
+
+def anthropic_default_headers() -> dict[str, str]:
+    """Extra headers for the Anthropic client.
+
+    Identity-linked API keys (the kind issued to a person rather than a
+    workspace) are refused with 400 ``anthropic-workspace-id is required``
+    unless every request names the workspace it acts in. Set
+    ``ANTHROPIC_WORKSPACE_ID`` (``wrkspc_...``, from the Console's Workspaces
+    page) and the header is sent; ordinary keys need nothing.
+    """
+    ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+    return {"anthropic-workspace-id": ws} if ws else {}
 
 
 def _b64png(png: bytes) -> str:
@@ -80,7 +95,7 @@ class TeacherPolicy:
         if self._client is None:
             import anthropic  # type: ignore
 
-            self._client = anthropic.AsyncAnthropic()
+            self._client = anthropic.AsyncAnthropic(default_headers=anthropic_default_headers())
         return self._client
 
     # -------------------------------------------------------------- api
@@ -177,6 +192,11 @@ class TeacherPolicy:
                                    "toolset_name": getattr(b, "toolset_name", "computer")})
             self._drain_local(obs)
         blk = self.queue.pop(0)
+        if blk["name"] in LOCAL_MEMBERS:
+            # A screenshot/zoom/cursor_position queued *behind* real actions: answer it from
+            # the observation that follows the preceding action instead of failing the step.
+            self.executed.append({**blk, "_local": True})
+            return await self.act(obs)
         try:
             action = self._to_action(blk, obs)
         except InvalidAction as e:
@@ -196,7 +216,7 @@ class TeacherPolicy:
 
     def _drain_local(self, obs: Observation) -> None:
         """Answer screenshot/zoom/cursor_position members without touching the env."""
-        while self.queue and self.queue[0]["name"] in ("screenshot", "zoom", "cursor_position"):
+        while self.queue and self.queue[0]["name"] in LOCAL_MEMBERS:
             blk = self.queue.pop(0)
             self.executed.append({**blk, "_local": True})
 
@@ -286,4 +306,4 @@ class TeacherPolicy:
         return {"type": getattr(b, "type", "text"), "text": getattr(b, "text", "")}
 
 
-__all__ = ["TeacherPolicy", "DEFAULT_MODEL", "SYSTEM_PROMPT"]
+__all__ = ["TeacherPolicy", "DEFAULT_MODEL", "SYSTEM_PROMPT", "anthropic_default_headers"]

@@ -145,14 +145,16 @@ class Baseline:
 
     tables: dict[str, TableSnapshot] = field(default_factory=dict)    # "db.table" → snapshot
     watermarks: dict[str, int] = field(default_factory=dict)           # "db.table" → max pk at seed time
+    ignore_columns: dict[str, list[str]] = field(default_factory=dict)  # db → columns left out of every row hash
 
     @staticmethod
     async def capture(dbs: dict[str, "DbAccess"], checksum_tables: dict[str, list[str]],
-                      primary_keys: dict[str, str], watermark_tables: dict[str, list[str]]) -> "Baseline":
-        b = Baseline()
+                      primary_keys: dict[str, str], watermark_tables: dict[str, list[str]],
+                      ignore_columns: Optional[dict[str, list[str]]] = None) -> "Baseline":
+        b = Baseline(ignore_columns={k: list(v) for k, v in (ignore_columns or {}).items()})
         for db_name, tables in checksum_tables.items():
             db = dbs[db_name]
-            hashes = await db.row_hashes(tables, primary_keys)
+            hashes = await db.row_hashes(tables, primary_keys, b.ignore_columns.get(db_name))
             for t, rows in hashes.items():
                 b.tables[f"{db_name}.{t}"] = TableSnapshot(pk=primary_keys.get(f"{db_name}.{t}", "id"), rows=rows)
         for db_name, tables in watermark_tables.items():
@@ -164,7 +166,7 @@ class Baseline:
 
     def to_dict(self) -> dict[str, Any]:
         return {"tables": {k: {"pk": v.pk, "rows": v.rows} for k, v in self.tables.items()},
-                "watermarks": dict(self.watermarks)}
+                "watermarks": dict(self.watermarks), "ignore_columns": dict(self.ignore_columns)}
 
 
 @dataclass
@@ -181,7 +183,7 @@ async def diff_baseline(baseline: Baseline, dbs: dict[str, "DbAccess"], primary_
         db_name, t = key.split(".", 1)
         by_db.setdefault(db_name, []).append(t)
     for db_name, tables in by_db.items():
-        now = await dbs[db_name].row_hashes(tables, primary_keys)
+        now = await dbs[db_name].row_hashes(tables, primary_keys, baseline.ignore_columns.get(db_name))
         for t in tables:
             key = f"{db_name}.{t}"
             before = baseline.tables[key].rows

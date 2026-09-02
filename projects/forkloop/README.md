@@ -15,7 +15,7 @@ Median reset:              19.1 s sandbox (n=10, 0 fail) / 25.0 s desktop incl. 
 Solari compute:            ≈ $1.50 so far (sandbox + desktop builds, ~40 resets, spikes) — docs/cost.md
 ```
 
-Chart 2 has two real bars (`bench/chart2_solari.png`: fork-mode resets on Solari sandboxes and desktops, n=10 each; revert(), local and cold bars unmeasured). Chart 1 does not exist yet; `train/examples/` holds *synthetic placeholders* so the plotting pipeline can be checked, and their titles say so. Everything that needs a Solari key, a GPU, or a teacher-model budget is built and tested offline but has not been run for real. `docs/limitations.md` is the honest list.
+Chart 2 has two real bars (`bench/chart2_solari.png`: fork-mode resets on Solari sandboxes and desktops, n=10 each; revert(), local and cold bars unmeasured). Chart 1 does not exist yet; `train/examples/` holds *synthetic placeholders* so the plotting pipeline can be checked, and their titles say so. The teacher has run for real: `claude-opus-5` scores 1.0 on 2/2 family-3 episodes through the live desktop world (`runs/teacher-pilot4`, 2026-09-02; ≈ $1.4–2.8 of model spend per episode). Everything that needs a GPU is built and tested offline but has not been run for real. `docs/limitations.md` is the honest list.
 
 Picking this up in a new session? Start with [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
@@ -26,7 +26,7 @@ Picking this up in a new session? Start with [`docs/HANDOFF.md`](docs/HANDOFF.md
 | Core library (`forkloop/`): backends, env, pool, reset, oracle, recorder, exporters, search, metrics, CLI | built, 158 offline tests green |
 | `claims-ops-v1` world: payer portal (FastAPI + SQLite), OpenEMR 8.3.0 install + seed layer, 3 task families + held-out compositions | **golden desktop snapshot built and verified** (`snap_dl4e05ciyt1p`: OpenEMR + portal + Chrome logged in, locked to localhost); a scripted GUI episode through the real agent channel scored 1.0 and a decoy-number control was rejected (`docs/demo_episode/`) |
 | `toy-counter` world | built; runs the whole loop (revert, seed, oracle, search, export) in seconds offline |
-| Teacher policy (Anthropic computer-use toolset) and student policy (vLLM, Fara/Qwen/UI-TARS output formats) | built; not run against live endpoints (**needs an `ANTHROPIC_API_KEY`** for the teacher; none on the build machine) |
+| Teacher policy (Anthropic computer-use toolset) and student policy (vLLM, Fara/Qwen/UI-TARS output formats) | teacher **verified live**: 2/2 family-3 episodes at reward 1.0 (`docs/spikes.md`); student not run against a live endpoint |
 | Training ladder (`train/`): SFT export, LoRA, held-out eval with Wilson CIs, plots, bake-off | built; no GPU run yet |
 | Reset benchmark + local docker-compose baseline + cost model | **fork-mode measured on Solari**: p50 19.1 s, p95 21.8 s, 0/10 failures; revert bar blocked (409 on this account); local and cold bars not run |
 | Day-1 spikes | run on Free then Starter: `revert()` is 409 on sandboxes *and* desktops (fork mode is the reset); fork restores RAM + windows; screenshot 0.13 s, click 0.19 s, observe-act-observe 0.45 s p50; snapshot 14–22 s — `docs/spikes.md` |

@@ -144,6 +144,10 @@ class World:
     def watermark_tables(self) -> dict[str, list[str]]:
         return {k: list(v) for k, v in self.config.oracle.get("watermark_tables", {}).items()}
 
+    def ignore_columns(self) -> dict[str, list[str]]:
+        """db → columns the app rewrites on its own (never counted as agent edits)."""
+        return {k: list(v) for k, v in self.config.oracle.get("ignore_columns", {}).items()}
+
     def primary_keys(self) -> dict[str, str]:
         return dict(self.config.oracle.get("primary_keys", {}))
 
@@ -179,6 +183,10 @@ class World:
         await machine.press(["ctrl", "l"])
         await machine.type_text(url)
         await machine.press(["Return"])
+
+    async def diagnostics(self, machine: "Machine") -> dict[str, str]:
+        """Text files worth keeping next to a finished episode (browser/kernel logs). Best effort."""
+        return {}
 
     async def before_episode(self, machine: "Machine") -> None:
         """Hook after seeding, before the agent's first observation."""

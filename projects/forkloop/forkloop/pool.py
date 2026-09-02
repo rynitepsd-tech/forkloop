@@ -106,7 +106,7 @@ class WorkerPool:
                  golden_snapshot: Optional[str] = None, run_id: Optional[str] = None,
                  cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
                  timeout_ms: int = 30 * 60_000, max_retries: int = 6, disk_gb: Optional[int] = None,
-                 fallback_to_fork: bool = True) -> None:
+                 fallback_to_fork: bool = True, create_timeout_s: float = 240.0) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
         self.backend = backend
@@ -114,6 +114,8 @@ class WorkerPool:
         self.mode = mode
         #: Switch the pool to fork mode the first time ``revert()`` is refused.
         self.fallback_to_fork = fallback_to_fork
+        #: Give up on a single create call after this long and retry (the SDK has no timeout of its own).
+        self.create_timeout_s = create_timeout_s
         #: None until a revert has been attempted; then True/False for this account.
         self.revert_supported: Optional[bool] = None
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
@@ -176,13 +178,16 @@ class WorkerPool:
         delay = 1.0
         for attempt in range(1, self.max_retries + 1):
             try:
-                return await self.backend.create(
+                # Solari's create call has been seen to hang for many minutes with no answer
+                # (2026-09-02); treat that like a capacity error and try again.
+                return await asyncio.wait_for(self.backend.create(
                     template=self.world.config.template, from_snapshot=from_snapshot,
                     resolution=self.world.config.resolution, cpu=self.cpu, mem_mb=self.mem_mb,
                     record=self.record, metadata={"forkloop": "1", "run_id": self.run_id, "world": self.world.name},
-                    timeout_ms=self.timeout_ms, disk_gb=self.disk_gb)
-            except (ConcurrencyError, CapacityError) as e:
-                self.events.append({"t": time.time(), "event": "create_retry", "attempt": attempt, "error": str(e)})
+                    timeout_ms=self.timeout_ms, disk_gb=self.disk_gb), timeout=self.create_timeout_s)
+            except (ConcurrencyError, CapacityError, asyncio.TimeoutError) as e:
+                err = str(e) or f"create timed out after {self.create_timeout_s:.0f}s"
+                self.events.append({"t": time.time(), "event": "create_retry", "attempt": attempt, "error": err})
                 if attempt == self.max_retries:
                     raise
                 await asyncio.sleep(delay + random.random() * 0.5)
