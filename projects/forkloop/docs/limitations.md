@@ -38,11 +38,20 @@ directory should be read as *design intent*, not result.
 - The SDK presses a key list sequentially; chords must be a single
   `"ctrl+a"` string (backend does this). Keyboard focus after a fork is not
   guaranteed to be in Chrome: navigation clicks the omnibox first.
-- The calendar's provider list showed only "Administrator" at first glance
-  (the listbox scrolls); not yet confirmed that the six seeded providers are
-  selectable in the OpenEMR calendar UI. Family 1 has not been driven through
-  the GUI yet.
+- **Family 1 is blocked on the OpenEMR calendar's provider list.** The
+  calendar's `Providers` box shows only "Administrator" even though
+  `getProviderInfo()`'s exact query returns all six seeded providers
+  (`authorized=1, calendar=1, active=1, facility_id=3`, uuid present,
+  `password='NoLongerUsed'`, `cal_ui=3` all tried). The filter is therefore in
+  the calendar's rendering layer (PostCalendar template / JS); the leading
+  hypothesis is a required `users_facility` row per provider. Until fixed,
+  the seeded appointment (provider 100003) is invisible in the day view and
+  family 1 cannot be completed through the GUI. Families 2 and 3 are
+  unaffected on the portal side; the OpenEMR insurance edit for family 2 has
+  not been driven through the GUI yet.
 - Attachment upload through the GTK file chooser has not been exercised.
+- An OpenEMR page reload (F5) on the tabs UI drops the session; agents that
+  reload will have to log in again (credentials are in the instruction).
 
 ## Not yet measured (needs more time or a key)
 

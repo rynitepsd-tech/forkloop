@@ -5,6 +5,7 @@ once it exists. Newest first.
 
 | Date | What happened | Number | Post |
 | --- | --- | --- | --- |
+| 2026-09-02 | Desktop reset benchmark (fork, n=10): p50 25.0 s, one failure from a full disk → golden v5 rebuilt lean (≈550 MB free). Spike 2: two forks in parallel from one snapshot. Spike 3: recording works on forked desktops, `recordingUrl` never populates. Family 1 blocked on the calendar provider list (documented). | p50 25.0 s | — |
 | 2026-09-02 | Starter plan: golden **desktop** world built (`snap_dl4e05ciyt1p`); scripted GUI episode through the real agent channel → reward 1.0, decoy control → `WRONG_VALUE`. Frames in `docs/demo_episode/`. | reward 1.0 | — |
 | 2026-09-02 | Spike 5: screenshot 0.13 s, click 0.19 s, observe-act-observe loop 0.45 s p50 (≈2.2 steps/s). Fork restores RAM + windows (uptime continues). `revert()` 409 on desktops as well. | 0.45 s | — |
 | 2026-09-01 | Fork-mode reset benchmark on Solari sandboxes: 10/10 ok, p50 19.1 s (restore 17.4 s + seed/health/baseline 1.7 s). Chart 2 fork bar rendered. | p50 19.1 s | — |
