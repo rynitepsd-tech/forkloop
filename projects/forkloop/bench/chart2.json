@@ -1,0 +1,25 @@
+{
+  "title": "Reset latency \u2014 claims-ops-v1 on Solari (revert() unavailable on this account)",
+  "synthetic": false,
+  "methods": [
+    {
+      "name": "fork \u2014 sandbox, headless (Free)",
+      "n": 10,
+      "p50_s": 19.087514375001774,
+      "p95_s": 21.8431417649459,
+      "p99_s": 22.06454022018399,
+      "failure_rate": 0.0,
+      "cost_per_1k_usd": 1.013
+    },
+    {
+      "name": "fork \u2014 desktop incl. screen stages (Starter)",
+      "n": 10,
+      "p50_s": 25.00790891700308,
+      "p95_s": 26.58017532499507,
+      "p99_s": 26.66014876499772,
+      "failure_rate": 0.1,
+      "cost_per_1k_usd": 0.931
+    }
+  ],
+  "note": "revert(), local docker-compose and cold-build bars not measured"
+}

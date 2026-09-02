@@ -11,11 +11,11 @@ Held-out success:          not yet measured
 Verified trajectories:     0 (collection not started)
 LLM-graded rewards:        0 — by construction, see forkloop/oracle.py
 Unrelated records edited:  checked on every episode (COLLATERAL_EDIT reason code)
-Median reset:              19.1 s sandbox / ~21 s desktop incl. screen stages (fork from golden, 0 failures); revert() refused on this account
+Median reset:              19.1 s sandbox (n=10, 0 fail) / 25.0 s desktop incl. screen stages (n=10, 1 fail, disk-full); revert() refused on this account
 Solari compute:            ≈ $1.50 so far (sandbox + desktop builds, ~40 resets, spikes) — docs/cost.md
 ```
 
-Chart 2 has one real bar (`bench/chart2_solari_fork.png`: fork-mode resets on Solari sandboxes, n=10). Chart 1 does not exist yet; `train/examples/` holds *synthetic placeholders* so the plotting pipeline can be checked, and their titles say so. Everything that needs a Solari key, a GPU, or a teacher-model budget is built and tested offline but has not been run for real. `docs/limitations.md` is the honest list.
+Chart 2 has two real bars (`bench/chart2_solari.png`: fork-mode resets on Solari sandboxes and desktops, n=10 each; revert(), local and cold bars unmeasured). Chart 1 does not exist yet; `train/examples/` holds *synthetic placeholders* so the plotting pipeline can be checked, and their titles say so. Everything that needs a Solari key, a GPU, or a teacher-model budget is built and tested offline but has not been run for real. `docs/limitations.md` is the honest list.
 
 ## Status (2026-09-01)
 

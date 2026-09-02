@@ -186,6 +186,8 @@ if [[ -d /var/lib/mysql && ! -d /var/lib/mysql/mysql ]]; then
   rm -rf /var/lib/mysql/*
   mariadb-install-db --user=mysql --datadir=/var/lib/mysql >/dev/null
 fi
+# Small InnoDB redo log (default 96 MB) — the 4 GB desktop disk cannot spare it.
+printf '[mysqld]\ninnodb_log_file_size=16M\ninnodb_use_native_aio=0\n' > /etc/mysql/mariadb.conf.d/99-forkloop.cnf
 systemctl enable --now mariadb
 for _ in $(seq 1 30); do
   mariadb -e 'SELECT 1' >/dev/null 2>&1 && break

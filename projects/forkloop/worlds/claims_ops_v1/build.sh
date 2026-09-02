@@ -103,6 +103,13 @@ else
     bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
 fi
 
-apt-get clean; rm -rf /var/lib/apt/lists/*
+# Reclaim space so episodes have headroom on the 4 GB disk (a full disk breaks OpenEMR: "table 'log' is full").
+apt-get purge -y -qq gcc g++ cpp gcc-11 g++-11 cpp-11 >/dev/null 2>&1 || true
+apt-get autoremove -y -qq >/dev/null 2>&1 || true
+apt-get clean; rm -rf /var/lib/apt/lists/* /var/cache/forkloop /tmp/openemr* /usr/share/doc/* /usr/share/man/*
+journalctl --vacuum-size=8M >/dev/null 2>&1 || true
+find /var/log -type f \( -name '*.gz' -o -name '*.[0-9]' \) -delete 2>/dev/null || true
+for f in /var/log/syslog /var/log/kern.log /var/log/auth.log /var/log/apache2/*.log /var/log/mysql/*.log; do [[ -f "$f" ]] && : > "$f"; done
+rm -rf /home/*/.cache/google-chrome /home/*/.config/forkloop-chrome/Default/Cache /home/*/.config/forkloop-chrome/Default/Code\ Cache 2>/dev/null || true
 log "disk at end: $(df -h / | tail -1)"
 log "done"

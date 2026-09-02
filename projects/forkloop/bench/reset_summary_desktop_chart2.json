@@ -1,0 +1,17 @@
+{
+  "title": "Reset latency \u2014 claims-ops-v1 on Solari desktops (Starter; revert() unavailable)",
+  "synthetic": false,
+  "methods": [
+    {
+      "name": "create(from_snapshot) fork",
+      "n": 10,
+      "p50_s": 25.00790891700308,
+      "p95_s": 26.58017532499507,
+      "p99_s": 26.66014876499772,
+      "failure_rate": 0.1,
+      "cost_per_1k_usd": 0.931,
+      "state_restored": "disk + DBs (new machine id; RAM/process survival unverified)"
+    }
+  ],
+  "note": ""
+}

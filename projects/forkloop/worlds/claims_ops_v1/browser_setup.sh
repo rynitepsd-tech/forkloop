@@ -15,7 +15,7 @@ sleep 2
 # translate, sign-in) are disabled by the enterprise policy build.sh installs.
 nohup google-chrome --no-first-run --no-default-browser-check --user-data-dir="$PROFILE" \
   --password-store=basic --window-position=0,0 --window-size=1280,720 --disable-session-crashed-bubble \
-  --disable-infobars "$PORTAL/login" >"$HOME/chrome.log" 2>&1 &
+  --disk-cache-size=1 --media-cache-size=1 --disable-infobars "$PORTAL/login" >"$HOME/chrome.log" 2>&1 &
 sleep 9
 WID=$(xdotool search --onlyvisible --class chrome | head -1 || true)
 [[ -n "$WID" ]] && wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz || true
