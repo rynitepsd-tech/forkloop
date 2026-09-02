@@ -13,7 +13,9 @@ SKIP_OPENEMR=0
 HEADLESS=0
 PORTAL_DB=/var/lib/forkloop/portal/portal.db
 PORTAL_UPLOADS=/var/lib/forkloop/portal/uploads
-DESKTOP_USER="${DESKTOP_USER:-user}"
+# The X session owner (Solari's default desktop runs XFCE as "desktop" on Xvfb :0); detect it.
+DESKTOP_USER="${DESKTOP_USER:-$(ps -eo user,comm | awk '$2=="xfce4-session"{print $1; exit}')}"
+DESKTOP_USER="${DESKTOP_USER:-desktop}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +29,19 @@ done
 
 log() { printf '[build %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 export DEBIAN_FRONTEND=noninteractive
+
+log "disk: $(df -h / | tail -1)"
+if [[ "$HEADLESS" == "0" ]]; then
+  # The `default` desktop template ships VS Code (~1 GB) and LibreOffice (~0.3 GB) on a
+  # 4 GB disk that cannot be enlarged (disk_gb is ignored); OpenEMR + MariaDB + PHP need
+  # that space. The world only needs Chrome.
+  log "slimming the desktop image (purging VS Code and LibreOffice)"
+  (apt-get purge -y -qq code 'libreoffice*' >/dev/null 2>&1 || true)
+  rm -rf /usr/share/code /usr/lib/libreoffice
+  (apt-get autoremove -y -qq >/dev/null 2>&1 || true)
+  apt-get clean
+  log "disk after slimming: $(df -h / | tail -1)"
+fi
 
 log "apt packages"
 apt-get update -qq
@@ -77,14 +92,17 @@ fi
 if [[ "$HEADLESS" == "1" ]]; then
   log "headless build: skipping browser profile setup"
 else
+  # Chrome enterprise policy: no password-save / translate / sign-in bubbles that would steal focus from an agent.
+  mkdir -p /etc/opt/chrome/policies/managed
+  install -m 644 "$BUILD_DIR/worlds/claims_ops_v1/chrome_policy.json" /etc/opt/chrome/policies/managed/forkloop.json
   log "browser profile: log into both apps and pin the window layout"
   # Runs as the desktop user so the Chrome profile lives in their home. The controller's
   # initial-screen step later only needs ctrl+l + URL because both sessions are already valid.
-  if command -v sudo >/dev/null && id "$DESKTOP_USER" >/dev/null 2>&1; then
-    sudo -u "$DESKTOP_USER" bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
-  else
+  # Chrome refuses to run as root; run the setup as the session user with its display and runtime dir.
+  runuser -u "$DESKTOP_USER" -- env DISPLAY=:0 HOME="/home/$DESKTOP_USER" XDG_RUNTIME_DIR="/run/$DESKTOP_USER" \
     bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
-  fi
 fi
 
+apt-get clean; rm -rf /var/lib/apt/lists/*
+log "disk at end: $(df -h / | tail -1)"
 log "done"

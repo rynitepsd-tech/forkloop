@@ -64,7 +64,7 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
                        f"Leave every other claim untouched.")
     else:
         instruction = (f"{person.name}'s (DOB {person.dob.isoformat()}) insurance changed to {new_plan}, member ID {new_member}. "
-                       f"Update the primary insurance in OpenEMR (plan name and policy number), then in the payer portal resubmit "
+                       f"Update the primary insurance in OpenEMR (log in as admin / pass; plan name and policy number), then in the payer portal resubmit "
                        f"claim {target.number} with the corrected member ID. Do not resubmit or appeal any other claim.")
 
     effects = [

@@ -122,8 +122,9 @@ class ClaimsOpsWorld(World):
         url = screen.get("url")
         if not url:
             return
-        # Agent-channel only: focus Chrome's omnibox, replace the URL, go.
-        await machine.press(["ctrl", "l"])
+        # Agent-channel only: click the omnibox (keyboard focus is not guaranteed to be in
+        # Chrome right after a fork), replace the URL, go.
+        await machine.click(640, 90)
         await machine.press(["ctrl", "a"])
         await machine.type_text(url)
         await machine.press(["Return"])

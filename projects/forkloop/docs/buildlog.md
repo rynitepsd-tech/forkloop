@@ -5,6 +5,8 @@ once it exists. Newest first.
 
 | Date | What happened | Number | Post |
 | --- | --- | --- | --- |
+| 2026-09-02 | Starter plan: golden **desktop** world built (`snap_dl4e05ciyt1p`); scripted GUI episode through the real agent channel → reward 1.0, decoy control → `WRONG_VALUE`. Frames in `docs/demo_episode/`. | reward 1.0 | — |
+| 2026-09-02 | Spike 5: screenshot 0.13 s, click 0.19 s, observe-act-observe loop 0.45 s p50 (≈2.2 steps/s). Fork restores RAM + windows (uptime continues). `revert()` 409 on desktops as well. | 0.45 s | — |
 | 2026-09-01 | Fork-mode reset benchmark on Solari sandboxes: 10/10 ok, p50 19.1 s (restore 17.4 s + seed/health/baseline 1.7 s). Chart 2 fork bar rendered. | p50 19.1 s | — |
 | 2026-09-01 | Golden `claims-ops-v1` world built on a real Solari sandbox (OpenEMR 8.3.0 + portal); headless controller loop verified: oracle rewarded 2 correct UI-path appeals, rejected a decoy number (`WRONG_VALUE`). | snap_dl4cngznmvr7 | — |
 | 2026-09-01 | First real measurements (Free plan): desktops 402; `revert()` 409 "Not revertable" and destructive on a running machine; snapshot 14–20 s; from_snapshot ≈ 18 s. | 409 | — |

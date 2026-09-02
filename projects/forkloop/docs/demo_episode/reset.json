@@ -1,0 +1,50 @@
+{
+  "method": "fork",
+  "ok": true,
+  "error": null,
+  "total_seconds": 20.9395,
+  "stages": [
+    {
+      "name": "restore",
+      "seconds": 16.9262,
+      "ok": true,
+      "note": ""
+    },
+    {
+      "name": "seed",
+      "seconds": 0.6186,
+      "ok": true,
+      "note": ""
+    },
+    {
+      "name": "before_episode",
+      "seconds": 0.0805,
+      "ok": true,
+      "note": ""
+    },
+    {
+      "name": "health",
+      "seconds": 0.5936,
+      "ok": true,
+      "note": ""
+    },
+    {
+      "name": "baseline",
+      "seconds": 0.734,
+      "ok": true,
+      "note": ""
+    },
+    {
+      "name": "initial_screen",
+      "seconds": 1.2405,
+      "ok": true,
+      "note": ""
+    },
+    {
+      "name": "stable_screen",
+      "seconds": 0.7459,
+      "ok": true,
+      "note": ""
+    }
+  ]
+}

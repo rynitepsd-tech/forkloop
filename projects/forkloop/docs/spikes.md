@@ -14,6 +14,27 @@ crashed run: `python spikes/_common.py --reap` (kills everything tagged
 
 ---
 
+## Measured on 2026-09-02 — Starter plan, real desktops
+
+Desktops work on Starter (`create_desktop` ready in 0.3 s). Results:
+
+| Spike | Result |
+| --- | --- |
+| 1 revert latency | **`revert()` → 409 `Not revertable` on a desktop too.** Not plan-gated; not available to this account at all. `snapshot()` on a paused machine → `Not snapshottable`. |
+| 5 action round-trip (n=50) | screenshot p50 0.128 s (p99 0.138), click p50 0.187 s (p99 0.437), screenshot→click→screenshot loop p50 **0.447 s** (p95 0.665, p99 0.703) → ≈ 2.2 agent steps/s |
+| 4 memory survival (fork variant) | A `create(from_snapshot)` desktop resumes with the snapshot's **kernel uptime continuing** (804 s vs 816 s on the original), services active, and the Chrome window present: forks restore RAM + processes + windows, not just disk. First fork 32.6 s to ready; subsequent 17–20 s. |
+| golden desktop world | `snap_dl4e05ciyt1p` (v4): OpenEMR 8.3.0 + portal, Chrome logged into the portal, product-registration modal opted out, Chrome policy restricts URLs to localhost and disables password/translate bubbles, 1280×720, stable initial screen. Built after purging VS Code + LibreOffice (the 4 GB disk was 100% full otherwise). |
+| scripted GUI episode | `scripts/gui_episode.py`: reset 20.9 s (restore 16.9 · seed 0.6 · health 0.6 · baseline 0.7 · initial screen 1.2 · stable screen 0.8), 16 steps through the agent channel, **reward 1.0**; decoy-number control → **`WRONG_VALUE`**, milestones 0.67. Frames in `docs/demo_episode/`. |
+
+Things that bit and are now in the build scripts: Chrome refuses to run as
+root (session user is `desktop` on Xvfb `:0`); the SDK presses `["ctrl","a"]`
+as two keys, chords must be one string `"ctrl+a"` (fixed in the backend);
+keyboard focus is not guaranteed after a fork, so navigation clicks the
+omnibox first; `pkill -f google-chrome` kills the shell that runs it; the
+OpenEMR session does not survive into the snapshot, so the OpenEMR family
+starts on its login page with credentials in the instruction; the
+`disk_gb` request is ignored on desktops as on sandboxes.
+
 ## Measured on 2026-09-01 — golden world + fork-mode reset benchmark (Free plan, sandboxes)
 
 The `claims-ops-v1` world was built for real on a headless sandbox

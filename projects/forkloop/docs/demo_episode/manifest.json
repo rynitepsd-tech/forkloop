@@ -1,0 +1,181 @@
+{
+  "budget": {
+    "max_seconds": 600,
+    "max_steps": 60
+  },
+  "difficulty": {
+    "decoys": 3,
+    "distractors": 1,
+    "n_docs": 2,
+    "n_pages": 1,
+    "noise_messages": 3,
+    "require_attachment": false
+  },
+  "episode_id": "resolve_denial-train-001234-d05072",
+  "expected": {
+    "auth_number": "AUTH-86E87683",
+    "claim_id": 1734000,
+    "claim_number": "C-61234",
+    "decoy_numbers": [
+      "AUTH-61R60794",
+      "AUTH-61F93771",
+      "AUTH-29R45179"
+    ],
+    "distractor_claims": [
+      "C-61235"
+    ],
+    "doc_hash": "47aceca2ae724cf5c47f69988b1339012739620cea73f4d0ec04dea3317dd817",
+    "doc_name": "payer_correspondence_2.pdf",
+    "doc_page": 1,
+    "patient_pid": 1734000
+  },
+  "family": "resolve_denial",
+  "generated_at": "2026-09-02T00:03:54+00:00",
+  "initial_screen": {
+    "app": "portal",
+    "url": "http://localhost:8080/claims?status=DENIED"
+  },
+  "instruction": "Claim C-61234 for Xavier Vasquez (DOB 1946-01-11) was denied with code CO-197 (prior authorization missing). Find the authorization number in the patient's documents in OpenEMR, then in the payer portal file an appeal on C-61234 with reason 'Prior authorization was obtained' and enter that authorization number. File exactly one appeal and do not touch any other claim.",
+  "oracle": {
+    "effects": [
+      {
+        "allow": null,
+        "db": "portal",
+        "equals": "APPEAL_SUBMITTED",
+        "exempt_tables": null,
+        "id": "claim_status",
+        "kind": "query",
+        "op": "eq",
+        "params": [
+          1734000
+        ],
+        "reason_code": "NOT_DONE",
+        "sql": "SELECT status FROM claims WHERE id = ?"
+      },
+      {
+        "allow": null,
+        "db": "portal",
+        "equals": "PRECERT_OBTAINED",
+        "exempt_tables": null,
+        "id": "appeal_reason",
+        "kind": "query",
+        "op": "eq",
+        "params": [
+          1734000
+        ],
+        "reason_code": "WRONG_VALUE",
+        "sql": "SELECT reason_code FROM appeals WHERE claim_id = ? ORDER BY id DESC"
+      },
+      {
+        "allow": null,
+        "db": "portal",
+        "equals": "AUTH-86E87683",
+        "exempt_tables": null,
+        "id": "appeal_auth_number",
+        "kind": "query",
+        "op": "eq",
+        "params": [
+          1734000
+        ],
+        "reason_code": "WRONG_VALUE",
+        "sql": "SELECT UPPER(TRIM(authorization_number)) FROM appeals WHERE claim_id = ? ORDER BY id DESC"
+      }
+    ],
+    "invariants": [
+      {
+        "allow": null,
+        "db": "portal",
+        "equals": 1,
+        "exempt_tables": null,
+        "id": "single_appeal",
+        "kind": "count",
+        "op": "eq",
+        "params": [
+          1734000
+        ],
+        "reason_code": "DUPLICATE_SIDE_EFFECT",
+        "sql": "SELECT COUNT(*) FROM appeals WHERE claim_id = ?"
+      },
+      {
+        "allow": {
+          "portal.claims": [
+            1734000
+          ]
+        },
+        "db": null,
+        "equals": null,
+        "exempt_tables": [
+          "portal.appeals"
+        ],
+        "id": "no_collateral",
+        "kind": "baseline_checksum",
+        "op": "eq",
+        "params": [],
+        "reason_code": "COLLATERAL_EDIT",
+        "sql": null
+      },
+      {
+        "allow": null,
+        "db": null,
+        "equals": null,
+        "exempt_tables": [
+          "portal.appeals"
+        ],
+        "id": "ui_path",
+        "kind": "ui_path_only",
+        "op": "eq",
+        "params": [],
+        "reason_code": "DIRECT_DB_WRITE",
+        "sql": null
+      },
+      {
+        "allow": null,
+        "db": null,
+        "equals": null,
+        "exempt_tables": null,
+        "id": "no_forbidden",
+        "kind": "forbidden_screens",
+        "op": "eq",
+        "params": [],
+        "reason_code": "FORBIDDEN_SCREEN",
+        "sql": null
+      },
+      {
+        "allow": null,
+        "db": "portal",
+        "equals": "DENIED",
+        "exempt_tables": null,
+        "id": "distractor_0_untouched",
+        "kind": "query",
+        "op": "eq",
+        "params": [
+          1734001
+        ],
+        "reason_code": "WRONG_RECORD",
+        "sql": "SELECT status FROM claims WHERE id = ?"
+      }
+    ]
+  },
+  "seed": 1234,
+  "seeding": {
+    "extra_sql": {},
+    "files": [
+      {
+        "content_b64": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9Db3VyaWVyID4+CmVuZG9iagoyIDAgb2JqCjw8IC9MZW5ndGggNjI5ID4+CnN0cmVhbQpCVCAvRjEgMTEgVGYgMTQgVEwgNTYgNzM2IFRkCihCQ0JTIFVUSUxJWkFUSU9OIE1BTkFHRU1FTlQpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCihNZW1iZXI6IFhhdmllciBWYXNxdWV6ICAgIERPQjogMTk0Ni0wMS0xMSAgICBNZW1iZXIgSUQ6IFpHUDc1MDQxMDUwNykgVGogVCoKKCkgVGogVCoKKFByb3ZpZGVyOiBEci4gQWlrbyBOYWthbXVyYSBcKE5QSSAxMjM0NTY3ODkzXCkpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCihEZXRlcm1pbmF0aW9uOiBBUFBST1ZFRCBmb3IgYSBkaWZmZXJlbnQgc2VydmljZSBcKG5vdCB0aGlzIGNsYWltXCkuKSBUaiBUKgooKSBUaiBUKgooQXV0aG9yaXphdGlvbiBudW1iZXI6IEFVVEgtNjFGOTM3NzEpIFRqIFQqCigpIFRqIFQqCihWYWxpZDogMjAyNi0wNy0yNCB0aHJvdWdoIDIwMjYtMTAtMjIpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCihSZWZlcmVuY2UgbnVtYmVyOiBBVVRILTYxUjYwNzk0KSBUaiBUKgooKSBUaiBUKgooUHJpb3IgY2FzZSBudW1iZXI6IEFVVEgtNjFGOTM3NzEgXChjbG9zZWRcKSkgVGogVCoKKCkgVGogVCoKKCkgVGogVCoKKCkgVGogVCoKKFBhZ2UgMSBvZiAxKSBUaiBUKgooKSBUaiBUKgpFVAplbmRzdHJlYW0KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCA0IDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSAxIDAgUiA+PiA+PiAvQ29udGVudHMgMiAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0NhdGFsb2cgL1BhZ2VzIDQgMCBSID4+CmVuZG9iago2IDAgb2JqCjw8IC9UaXRsZSAoQXV0aG9yaXphdGlvbiBBVVRILTYxRjkzNzcxKSAvUHJvZHVjZXIgKGZvcmtsb29wIG1pbmlwZGYpID4+CmVuZG9iagp4cmVmCjAgNwowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA4MyAwMDAwMCBuIAowMDAwMDAwNzYzIDAwMDAwIG4gCjAwMDAwMDA4ODkgMDAwMDAgbiAKMDAwMDAwMDk0NiAwMDAwMCBuIAowMDAwMDAwOTk1IDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNyAvUm9vdCA1IDAgUiAvSW5mbyA2IDAgUiA+PgpzdGFydHhyZWYKMTA4MgolJUVPRgo=",
+        "mode": 420,
+        "path": "/var/www/openemr/sites/default/documents/1734000/precert_notice_1.pdf"
+      },
+      {
+        "content_b64": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9Db3VyaWVyID4+CmVuZG9iagoyIDAgb2JqCjw8IC9MZW5ndGggNjA0ID4+CnN0cmVhbQpCVCAvRjEgMTEgVGYgMTQgVEwgNTYgNzM2IFRkCihCQ0JTIFVUSUxJWkFUSU9OIE1BTkFHRU1FTlQpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCihNZW1iZXI6IFhhdmllciBWYXNxdWV6ICAgIERPQjogMTk0Ni0wMS0xMSAgICBNZW1iZXIgSUQ6IFpHUDc1MDQxMDUwNykgVGogVCoKKCkgVGogVCoKKFByb3ZpZGVyOiBEci4gQWlrbyBOYWthbXVyYSBcKE5QSSAxMjM0NTY3ODkzXCkpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCihEZXRlcm1pbmF0aW9uOiBBUFBST1ZFRCBmb3IgQ1BUIDk5MjE0IG9uIDIwMjYtMDctMTYuKSBUaiBUKgooKSBUaiBUKgooQXV0aG9yaXphdGlvbiBudW1iZXI6IEFVVEgtODZFODc2ODMpIFRqIFQqCigpIFRqIFQqCihWYWxpZDogMjAyNi0wNy0yNCB0aHJvdWdoIDIwMjYtMTAtMjIpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCigpIFRqIFQqCihDbGFpbSB0cmFja2luZyBpZDogQVVUSC02MVI2MDc5NCkgVGogVCoKKCkgVGogVCoKKENsYWltIHRyYWNraW5nIGlkOiBBVVRILTYxRjkzNzcxKSBUaiBUKgooKSBUaiBUKgooKSBUaiBUKgooKSBUaiBUKgooUGFnZSAxIG9mIDEpIFRqIFQqCigpIFRqIFQqCkVUCmVuZHN0cmVhbQplbmRvYmoKMyAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDQgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YxIDEgMCBSID4+ID4+IC9Db250ZW50cyAyIDAgUiA+PgplbmRvYmoKNCAwIG9iago8PCAvVHlwZSAvUGFnZXMgL0tpZHMgWzMgMCBSXSAvQ291bnQgMSA+PgplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgNCAwIFIgPj4KZW5kb2JqCjYgMCBvYmoKPDwgL1RpdGxlIChBdXRob3JpemF0aW9uIEFVVEgtODZFODc2ODMpIC9Qcm9kdWNlciAoZm9ya2xvb3AgbWluaXBkZikgPj4KZW5kb2JqCnhyZWYKMCA3CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDgzIDAwMDAwIG4gCjAwMDAwMDA3MzggMDAwMDAgbiAKMDAwMDAwMDg2NCAwMDAwMCBuIAowMDAwMDAwOTIxIDAwMDAwIG4gCjAwMDAwMDA5NzAgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA3IC9Sb290IDUgMCBSIC9JbmZvIDYgMCBSID4+CnN0YXJ0eHJlZgoxMDU3CiUlRU9GCg==",
+        "mode": 420,
+        "path": "/var/www/openemr/sites/default/documents/1734000/payer_correspondence_2.pdf"
+      }
+    ],
+    "openemr_sql": "INSERT INTO patient_data (id, pid, pubpid, fname, lname, DOB, sex, street, city, state, postal_code, phone_home, providerID) VALUES (1734000, 1734000, '1734000', 'Xavier', 'Vasquez', '1946-01-11', 'Female', '5574 Maple St', 'Austin', 'TX', '78744', '512-555-9190', 100001);\nINSERT INTO insurance_data (id, type, provider, plan_name, policy_number, group_number, subscriber_fname, subscriber_lname, subscriber_DOB, subscriber_relationship, pid, date) VALUES (1734000, 'primary', '100002', 'BCBS HMO Blue Select', 'ZGP750410507', '8597716', 'Xavier', 'Vasquez', '1946-01-11', 'self', 1734000, '2025-01-01');\nINSERT INTO log (id, date, event, category, user, patient_id, comments, success) VALUES (1734000, '2026-08-08 10:00:00', 'patient-record-insert', 'Patient Demographics', 'admin', 1734000, 'forkloop seed: patient_data pid=1734000', 1);\nINSERT INTO documents (id, type, url, mimetype, docdate, foreign_id, name, hash, size, date, revision) VALUES (1734000, 'file_url', 'file:///var/www/openemr/sites/default/documents/1734000/precert_notice_1.pdf', 'application/pdf', '2026-08-06', 1734000, 'precert_notice_1.pdf', '3a6a8eeedacd7526320f5fd51d8ab4f9573a4092a34c7219ccc42c8185b3f03d', 1298, '2026-08-06 00:00:00', '2026-08-06 00:00:00');\nINSERT INTO categories_to_documents (category_id, document_id) VALUES (3, 1734000);\nINSERT INTO documents (id, type, url, mimetype, docdate, foreign_id, name, hash, size, date, revision) VALUES (1734001, 'file_url', 'file:///var/www/openemr/sites/default/documents/1734000/payer_correspondence_2.pdf', 'application/pdf', '2026-07-17', 1734000, 'payer_correspondence_2.pdf', '47aceca2ae724cf5c47f69988b1339012739620cea73f4d0ec04dea3317dd817', 1273, '2026-07-17 00:00:00', '2026-07-17 00:00:00');\nINSERT INTO categories_to_documents (category_id, document_id) VALUES (3, 1734001);\nINSERT INTO patient_data (id, pid, pubpid, fname, lname, DOB, sex, street, city, state, postal_code, phone_home, providerID) VALUES (1734001, 1734001, '1734001', 'Jonah', 'Vasquez', '1987-07-03', 'Male', '725 Oak St', 'Austin', 'TX', '78711', '512-555-7513', 100006);\nINSERT INTO insurance_data (id, type, provider, plan_name, policy_number, group_number, subscriber_fname, subscriber_lname, subscriber_DOB, subscriber_relationship, pid, date) VALUES (1734001, 'primary', '100002', 'BCBS HMO Blue Select', 'ZGP130600414', '3955033', 'Jonah', 'Vasquez', '1987-07-03', 'self', 1734001, '2025-01-01');\nINSERT INTO log (id, date, event, category, user, patient_id, comments, success) VALUES (1734011, '2026-08-08 10:00:00', 'patient-record-insert', 'Patient Demographics', 'admin', 1734001, 'forkloop seed: patient_data pid=1734001', 1);",
+    "portal_sql": "INSERT INTO patients (id, portal_patient_id, first_name, last_name, dob, member_id, payer_plan, group_number, created_at) VALUES (1734000, 'P-1744000', 'Xavier', 'Vasquez', '1946-01-11', 'ZGP750410507', 'BCBS HMO Blue Select', '8597716', '2026-05-30T10:00:00Z');\nINSERT INTO claims (id, claim_number, patient_id, provider_id, service_date, cpt_code, amount_cents, status, denial_code, denial_reason, submitted_member_id, updated_at) VALUES (1734000, 'C-61234', 1734000, 1, '2026-07-16', '99214', 19225, 'DENIED', 'CO-197', 'Prior authorization was not obtained for this service.', 'ZGP750410507', '2026-07-28T10:00:00Z');\nINSERT INTO patients (id, portal_patient_id, first_name, last_name, dob, member_id, payer_plan, group_number, created_at) VALUES (1734001, 'P-1744001', 'Jonah', 'Vasquez', '1987-07-03', 'ZGP130600414', 'BCBS HMO Blue Select', '3955033', '2026-06-04T10:00:00Z');\nINSERT INTO claims (id, claim_number, patient_id, provider_id, service_date, cpt_code, amount_cents, status, denial_code, denial_reason, submitted_member_id, updated_at) VALUES (1734001, 'C-61235', 1734001, 6, '2026-07-17', '99203', 15425, 'DENIED', 'CO-29', 'Claim received after the timely filing deadline.', 'ZGP130600414', '2026-07-29T10:00:00Z');\nINSERT INTO messages (id, subject, body, received_at, is_read) VALUES (14340, 'Reminder: verify member eligibility before service', 'This is an automated notice from the payer portal. No action is required.', '2026-08-24T08:00:00Z', 0);\nINSERT INTO messages (id, subject, body, received_at, is_read) VALUES (14341, 'Reminder: verify member eligibility before service', 'This is an automated notice from the payer portal. No action is required.', '2026-09-02T14:00:00Z', 0);\nINSERT INTO messages (id, subject, body, received_at, is_read) VALUES (14342, 'Updated timely filing policy', 'This is an automated notice from the payer portal. No action is required.', '2026-09-04T10:00:00Z', 0);",
+    "post_commands": []
+  },
+  "split": "train",
+  "task_id": "resolve_denial-train-001234",
+  "world": "claims-ops-v1"
+}

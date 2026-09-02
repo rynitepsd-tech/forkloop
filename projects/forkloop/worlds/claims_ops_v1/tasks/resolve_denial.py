@@ -72,7 +72,7 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
         portal_sql.append(noise_messages(rng, noise, 2000 + (seed % 100000) * 10))
 
     instruction = (f"Claim {target.number} for {person.name} (DOB {person.dob.isoformat()}) was denied with code CO-197 "
-                   f"(prior authorization missing). Find the authorization number in the patient's documents in OpenEMR, "
+                   f"(prior authorization missing). Find the authorization number in the patient's documents in OpenEMR (log in as admin / pass), "
                    f"then in the payer portal file an appeal on {target.number} with reason 'Prior authorization was obtained' "
                    f"and enter that authorization number.")
     if require_attachment:

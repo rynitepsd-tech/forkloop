@@ -193,7 +193,9 @@ class SolariMachine:
 
     async def press(self, keys: list[str]) -> None:
         self._gui()
-        await self._d.keyboard.press(list(keys))
+        # The guest presses a list of keys one after another; a chord must be one xdotool
+        # string ("ctrl+l"). Verified on a live desktop: ["ctrl", "a"] typed the letter a.
+        await self._d.keyboard.press(["+".join(keys)] if len(keys) > 1 else list(keys))
 
 
 class SolariBackend:
@@ -246,13 +248,27 @@ class SolariBackend:
     async def attach(self, machine_id: str, *, resolution: str = "1280x720") -> SolariMachine:
         """Re-attach to a running machine by id (e.g. resume a failed world build)."""
         try:
+            view = await self._client.get(machine_id)
             if self.kind == "sandbox":
                 d = await self._client.connect(machine_id)
             else:
-                d = await self._client.connect_desktop(machine_id)  # type: ignore[attr-defined]
+                # Mirror SandboxClient.create_desktop's handle construction for an existing session:
+                # the SDK has no connect_desktop(), only connect() → Sandbox (no GUI surface).
+                from urllib.parse import quote as _q
+
+                from solari_core.desktop import Desktop, DesktopConfig  # type: ignore
+                from solari_core.types import CreateDesktopResponse  # type: ignore
+
+                origin = self._client._t.ws_origin()
+                session = CreateDesktopResponse(sessionId=view.sandboxId, controlUrl=f"{origin}/control/{_q(machine_id, safe='')}",
+                                                streamUrl="", expiresAt=view.expiresAt)
+                base = self._client._handle_config()
+                cfg = DesktopConfig(headers=base.headers, hooks=base.hooks)
+                if base.callTimeoutMs is not None:
+                    cfg.callTimeoutMs = base.callTimeoutMs
+                d = Desktop(session, cfg)
         except Exception as e:  # noqa: BLE001
             raise _wrap_error(e)
-        view = await self._client.get(machine_id)
         m = SolariMachine(d, self, parse_resolution(resolution), dict(view.metadata or {}), kind=self.kind)
         await m.connect(wait_ready_s=self.ready_timeout_s)
         return m

@@ -78,3 +78,5 @@ Filled during the build. One row per charge; running total in USD.
 | Date | Item | Amount | Running total |
 | --- | --- | --- | --- |
 | | | | |
+| 2026-09-02 | Starter: desktop build (3 attempts, ~1 VM-h), spikes 1/5, fork tests, 2 GUI episodes, desktop reset bench ×10 (~1.2 VM-h at $0.134/h) | ≈ $0.30 | ≈ $0.55 |
+| 2026-09-02 | Snapshot storage: 3 snapshots ≈ 24.7 GB (sandbox golden, desktop v1 parent, desktop v4); price unpublished | unknown | ≈ $0.55 + storage |

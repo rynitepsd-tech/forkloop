@@ -25,7 +25,26 @@ directory should be read as *design intent*, not result.
   browser profile / window layout half of the world (`browser_setup.sh`) has
   still never run — it needs a desktop.
 
-## Not yet measured (needs a paid plan or more time)
+## Measured on 2026-09-02 (Starter, desktops)
+
+- `revert()` is refused on desktops too (409). Fork mode is the reset on this
+  account: ~17–20 s restore + ~4 s seed/health/baseline/screen ≈ 21 s.
+- The desktop's 4 GB disk cannot be enlarged; the build purges VS Code and
+  LibreOffice to fit OpenEMR (golden image ends ~95% full — episodes have
+  ~200 MB of headroom; the uploads and documents they write are small).
+- The OpenEMR PHP session does not survive into the snapshot; the OpenEMR
+  family starts on the login page and the instruction carries `admin / pass`.
+  The portal's 30-day signed cookie does survive.
+- The SDK presses a key list sequentially; chords must be a single
+  `"ctrl+a"` string (backend does this). Keyboard focus after a fork is not
+  guaranteed to be in Chrome: navigation clicks the omnibox first.
+- The calendar's provider list showed only "Administrator" at first glance
+  (the listbox scrolls); not yet confirmed that the six seeded providers are
+  selectable in the OpenEMR calendar UI. Family 1 has not been driven through
+  the GUI yet.
+- Attachment upload through the GTK file chooser has not been exercised.
+
+## Not yet measured (needs more time or a key)
 
 - **Spikes 1–6 have not run** (they need a desktop). `docs/spikes.md` holds
   the questions, commands, and empty tables. Revert latency on a desktop,
@@ -34,15 +53,8 @@ directory should be read as *design intent*, not result.
   a live snapshot are still *unverified*.
   The reviewer's claim that recording is rejected with snapshot-restored
   machines is likewise untested; forkloop never depends on native recording.
-- **The golden snapshot has never been built on a real desktop.**
-  `worlds/claims_ops_v1/build.sh` and `openemr/install.sh` are complete and
-  parse, and the OpenEMR facts they rely on (release asset name and sha256,
-  `InstallerAuto.php` arguments, the `OPENEMR_ENABLE_INSTALLER_AUTO=1`
-  requirement, `database.sql` column names) were verified against the
-  8.3.0 sources, but the first real run will find something. Budget an
-  afternoon for it. `browser_setup.sh` in particular assumes the `default`
-  template ships Google Chrome, xdotool, and wmctrl, and that the login
-  forms autofocus their username field.
+- **Teacher and student have not run.** The teacher needs an Anthropic key;
+  the student needs a GPU box serving a model. Both are the next steps.
 - **Chart 1 and Chart 2 do not exist.** `train/plot.py --demo` renders
   clearly labelled synthetic placeholders so the pipeline can be checked.
   No learning curve has been produced; no teacher trajectory has been

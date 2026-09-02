@@ -1,0 +1,31 @@
+{
+  "PasswordManagerEnabled": false,
+  "BrowserSignin": 0,
+  "TranslateEnabled": false,
+  "DefaultNotificationsSetting": 2,
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "PromotionalTabsEnabled": false,
+  "DefaultBrowserSettingEnabled": false,
+  "MetricsReportingEnabled": false,
+  "BackgroundModeEnabled": false,
+  "SafeBrowsingProtectionLevel": 0,
+  "PrivacySandboxPromptEnabled": false,
+  "ShowHomeButton": false,
+  "SearchSuggestEnabled": false,
+  "SpellCheckServiceEnabled": false,
+  "RestoreOnStartup": 4,
+  "RestoreOnStartupURLs": [
+    "http://localhost:8080/claims"
+  ],
+  "URLBlocklist": [
+    "*"
+  ],
+  "URLAllowlist": [
+    "localhost",
+    "127.0.0.1",
+    "chrome://newtab",
+    "about:blank"
+  ],
+  "HomepageLocation": "http://localhost:8080/claims"
+}

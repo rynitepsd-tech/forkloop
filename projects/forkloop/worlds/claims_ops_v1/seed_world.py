@@ -66,7 +66,7 @@ def _composition(family: str, seed: int, split: str) -> TaskInstance:
                                         docdate=ANCHOR - dt.timedelta(days=30))]
     portal_sql = [person.portal_sql(ANCHOR - dt.timedelta(days=100)), c31.portal_sql(), c197.portal_sql(), c29.portal_sql()]
     instruction = (f"{person.name}'s (DOB {person.dob.isoformat()}) insurance changed to {new_plan}, member ID {new_member}. "
-                   f"Update the primary insurance in OpenEMR, then in the payer portal: resubmit claim {c31.number} with the corrected "
+                   f"Update the primary insurance in OpenEMR (log in as admin / pass), then in the payer portal: resubmit claim {c31.number} with the corrected "
                    f"member ID, and file an appeal on claim {c197.number} with reason 'Prior authorization was obtained' using the "
                    f"authorization number from the patient's OpenEMR documents. Claim {c29.number} must be left as it is.")
     effects = [

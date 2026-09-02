@@ -75,7 +75,7 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     statements.append(osql.insert_log(id=eid + 50, event="scheduling-insert", category="Scheduling", user="admin",
                                       patient_id=person.pid, comments=f"forkloop seed: event {ev_id}", date=sql_ts(ANCHOR - dt.timedelta(days=2))))
 
-    instruction = (f"In OpenEMR, move {person.name}'s (DOB {person.dob.isoformat()}) appointment with "
+    instruction = (f"In OpenEMR (log in as admin / pass if asked), move {person.name}'s (DOB {person.dob.isoformat()}) appointment with "
                    f"{provider['name']} to {slot_desc}, keeping the same provider and visit type. "
                    f"Do not touch any other appointment.")
 
@@ -100,7 +100,7 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     return TaskInstance(
         world="claims-ops-v1", family=family, seed=seed, split=split, task_id=make_task_id(family, split, seed),
         instruction=instruction,
-        initial_screen={"app": "openemr", "url": "http://localhost/openemr/interface/main/main_screen.php?auth=login&site=default"},
+        initial_screen={"app": "openemr", "url": "http://localhost/openemr/interface/login/login.php?site=default"},
         seeding=Seeding(portal_sql="", openemr_sql="\n".join(statements), files=[], post_commands=[]),
         expected={"event_id": ev_id, "target_date": target_date.isoformat(), "window": list(window),
                   "provider_openemr_id": provider["openemr_id"], "patient_pid": person.pid, "decoy_event_ids": decoy_ids},

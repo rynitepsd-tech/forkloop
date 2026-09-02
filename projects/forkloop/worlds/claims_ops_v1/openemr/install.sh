@@ -178,6 +178,14 @@ done
 # 4. MariaDB: service, database, user, password file
 # ----------------------------------------------------------------------------
 step "Configuring MariaDB"
+# A previous attempt that died mid-init (e.g. disk full) leaves a datadir without the
+# mysql schema; mariadbd then aborts with "Table 'mysql.plugin' doesn't exist". Re-init.
+if [[ -d /var/lib/mysql && ! -d /var/lib/mysql/mysql ]]; then
+  log "  MariaDB datadir has no mysql schema; re-initialising"
+  systemctl stop mariadb >/dev/null 2>&1 || true
+  rm -rf /var/lib/mysql/*
+  mariadb-install-db --user=mysql --datadir=/var/lib/mysql >/dev/null
+fi
 systemctl enable --now mariadb
 for _ in $(seq 1 30); do
   mariadb -e 'SELECT 1' >/dev/null 2>&1 && break
@@ -424,6 +432,12 @@ PHPEOF
     else
       log "  WARNING: uuid backfill failed (non-fatal; run sql_upgrade.php or ignore if the UI works)"
     fi
+    # Suppress the "Product Registration" modal that otherwise pops on first login (it would
+    # sit on top of the calendar and block an agent). Columns verified on 8.3.0.
+    step "Opting out of product registration / telemetry"
+    mysql -u "$DB_USER" --password="$DB_PASS" "$DB_NAME" -e \
+      "INSERT INTO product_registration (email, opt_out, auth_by_id, telemetry_disabled, last_ask_date, last_ask_version, options) SELECT '', 1, 1, 1, NOW(), '${OPENEMR_VERSION}', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM product_registration)" \
+      && log "  product_registration opt-out row present"
     date -u +%Y-%m-%dT%H:%M:%SZ > "$DEMO_MARKER"
   fi
 fi

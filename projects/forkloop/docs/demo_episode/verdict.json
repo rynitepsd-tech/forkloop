@@ -1,0 +1,62 @@
+{
+  "reward": 1.0,
+  "milestones": 1.0,
+  "reason_code": "OK",
+  "failed": [],
+  "details": {
+    "claim_status": {
+      "expected": "APPEAL_SUBMITTED",
+      "actual": "APPEAL_SUBMITTED",
+      "passed": true,
+      "op": "eq"
+    },
+    "appeal_reason": {
+      "expected": "PRECERT_OBTAINED",
+      "actual": "PRECERT_OBTAINED",
+      "passed": true,
+      "op": "eq"
+    },
+    "appeal_auth_number": {
+      "expected": "AUTH-86E87683",
+      "actual": "AUTH-86E87683",
+      "passed": true,
+      "op": "eq"
+    },
+    "single_appeal": {
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "op": "eq"
+    },
+    "no_collateral": {
+      "passed": true,
+      "unexpected_changes": [],
+      "n_unexpected": 0
+    },
+    "ui_path": {
+      "passed": true,
+      "checked": 1,
+      "unaudited_changes": []
+    },
+    "no_forbidden": {
+      "passed": true,
+      "visited": [],
+      "n_pages": 5
+    },
+    "distractor_0_untouched": {
+      "expected": "DENIED",
+      "actual": "DENIED",
+      "passed": true,
+      "op": "eq"
+    }
+  },
+  "n_effects": 3,
+  "n_invariants": 5,
+  "success": true,
+  "wall_seconds": 24.843,
+  "n_steps": 17,
+  "n_invalid": 0,
+  "finished_at": "2026-09-02T00:04:19+00:00",
+  "end_reason": "done",
+  "invalid_actions": 0
+}
