@@ -40,9 +40,9 @@ class Worker:
                     sid, built_here = await self.pool._ensure_golden(self.machine)
                     self.pool.golden = sid
                     if not built_here:  # another worker built it first; bring this machine to the same state
-                        await self.machine.revert(sid)
+                        await self._revert_or_fall_back(sid)
             else:
-                await self.machine.revert(self.pool.golden)  # type: ignore[arg-type]
+                await self._revert_or_fall_back(self.pool.golden)  # type: ignore[arg-type]
         elif self.pool.mode == "fork":
             if self.machine is not None:
                 await self.machine.kill()
@@ -63,6 +63,34 @@ class Worker:
         self.stats["restore_seconds"].append(time.monotonic() - t0)
         return self.machine
 
+    async def _revert_or_fall_back(self, snapshot_id: str) -> None:
+        """``revert()`` this worker's machine, or switch the whole pool to fork mode.
+
+        Some accounts refuse ``revert()`` outright (HTTP 409 ``Not revertable``),
+        and a refused revert can leave the machine unreachable — so on failure the
+        machine is discarded and replaced with a fresh ``create(from_snapshot)``.
+        The switch is pool-wide, logged in ``events``, and happens at most once.
+        """
+        try:
+            await self.machine.revert(snapshot_id)  # type: ignore[union-attr]
+            self.pool.revert_supported = True
+            return
+        except Exception as e:  # noqa: BLE001
+            if not self.pool.fallback_to_fork:
+                raise
+            self.pool.revert_supported = False
+            self.pool.mode = "fork"
+            self.pool.events.append({"t": time.time(), "event": "revert_unsupported_fell_back_to_fork",
+                                     "error": f"{type(e).__name__}: {e}"})
+        # The machine may have been destroyed by the failed revert; replace it either way.
+        if self.machine is not None:
+            try:
+                await self.machine.kill()
+            except Exception:  # noqa: BLE001
+                pass
+            self.machine = None
+        self.machine = await self.pool._create(from_snapshot=snapshot_id)
+
     async def snapshot(self, name: Optional[str] = None) -> str:
         assert self.machine is not None
         return await self.machine.snapshot(name)
@@ -77,12 +105,17 @@ class WorkerPool:
     def __init__(self, backend: Backend, world: World, *, size: Optional[int] = None, mode: str = "revert",
                  golden_snapshot: Optional[str] = None, run_id: Optional[str] = None,
                  cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
-                 timeout_ms: int = 30 * 60_000, max_retries: int = 6, disk_gb: Optional[int] = None) -> None:
+                 timeout_ms: int = 30 * 60_000, max_retries: int = 6, disk_gb: Optional[int] = None,
+                 fallback_to_fork: bool = True) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
         self.backend = backend
         self.world = world
         self.mode = mode
+        #: Switch the pool to fork mode the first time ``revert()`` is refused.
+        self.fallback_to_fork = fallback_to_fork
+        #: None until a revert has been attempted; then True/False for this account.
+        self.revert_supported: Optional[bool] = None
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
         self.golden = golden_snapshot or world.golden_snapshot_id()
         self.run_id = run_id or ("run-" + uuid.uuid4().hex[:8])
@@ -200,6 +233,7 @@ class WorkerPool:
 
     def stats(self) -> dict[str, Any]:
         return {"size": self.size, "mode": self.mode, "golden": self.golden, "run_id": self.run_id,
+                "revert_supported": self.revert_supported,
                 "workers": [{"index": w.index, "machine": w.machine.id if w.machine else None,
                              "restores": w.stats["restores"]} for w in self.workers],
                 "events": self.events[-50:]}

@@ -65,6 +65,9 @@ class ResetController:
 
         # 1. restore the golden world state
         machine = await stage("restore", worker.restore())
+        # The pool may have switched modes mid-restore (e.g. revert refused → fork),
+        # so label the report with what actually happened, not what was asked for.
+        report.method = worker.pool.mode
         dbs = self.world.databases(machine)
         # 2. seed
         await stage("seed", apply_seeding(machine, dbs, task.seeding))

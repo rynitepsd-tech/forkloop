@@ -237,3 +237,40 @@ def test_wilson():
     assert p == 0 and lo == 0 and hi < 0.35
     p, lo, hi = wilson(10, 10)
     assert hi == 1.0 and lo > 0.65
+
+
+async def test_pool_falls_back_to_fork_when_revert_is_refused(world, backend):
+    """Reproduces the test account: revert() → 409 and the machine is dead afterwards.
+
+    The pool must notice once, switch itself to fork mode, and keep serving
+    episodes instead of failing every reset.
+    """
+    from forkloop.backends.base import BackendError
+
+    reverts = []
+
+    async def refuse(snapshot_id):
+        reverts.append(snapshot_id)
+        m.alive = False  # a refused revert destroyed the machine on the real account
+        raise BackendError("Not revertable")
+
+    pool = WorkerPool(backend, world, size=1, mode="revert")
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
+    obs, _ = await env.reset(1)
+    m = env.ep.machine
+    first_id = m.id
+    m.revert = refuse  # type: ignore[method-assign]
+    await env.step(Action.done())
+
+    obs, info = await env.reset(2)  # would raise before the fallback existed
+    assert reverts, "revert was never attempted"
+    assert pool.revert_supported is False
+    assert pool.mode == "fork"
+    assert env.ep.machine.id != first_id  # replaced, not reused
+    assert info["reset"]["ok"] and info["reset"]["method"] == "fork"
+    assert any(e["event"] == "revert_unsupported_fell_back_to_fork" for e in pool.events)
+
+    obs, info = await env.reset(3)  # stays in fork mode, no further revert attempts
+    assert len(reverts) == 1 and info["reset"]["ok"]
+    await env.close()
+    await pool.close()
