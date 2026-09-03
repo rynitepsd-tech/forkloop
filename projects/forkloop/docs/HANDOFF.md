@@ -146,8 +146,22 @@ cannot run on this account in either mode. Use `--best-of 1`.
    `--history-k 16`) but no loops and the right auth number read on one seed —
    it runs out of the 60-action budget. Third run = `--prev-shot`
    (previous screenshot too) + `--max-steps 120 --max-seconds 900`
-   (`run.json` records `budget_override`). If that verifies, Luna is the
-   volume teacher; if not, the next lever is OpenAI's native computer tool.
+   (`run.json` records `budget_override`) **verified seed 1 at 1.0 for
+   $0.045** (`runs/luna-high-v3-s0-2`; Opus: $1.83 on the same seed). Seed 0
+   lost 70 actions to a read-only address bar in a Chrome popup window and a
+   decoy letter; prompt v4 (popup + decoy guidance, alternating-loop warning)
+   **verified 2/3** (`runs/luna-high-v4-s0-2`: seeds 1 and 2 for $0.04–0.08
+   each; seed 0 with four decoys still fails). Volume run on seeds 3–19 with
+   the v4 configuration is `runs/luna-high-v4-s3-19`; compare its success
+   rate and per-seed outcomes with Opus's seeds 3–14 via
+   `scripts/episode_table.py`. **Result: Luna v4 11/20 (55 %) at $0.15 per
+   verified vs Opus 9/15 (60 %) at $3.55; 8 vs 9 on shared seeds**
+   (`scripts/compare_teachers.py`). Luna is the volume teacher from here;
+   Opus stays the reference for audits and hard families. v5 prompt
+   (`hosted_gui_agent_v5.md`: one tab per app, exact transcription, keep
+   the number in reasoning) + `detail: high` images is being retried on the
+   seeds v4 failed (`runs/luna-high-v5-retry`). Next: Luna on families 1–2,
+   then seeds 20–99 (≈ $8) for the SFT set.
    Cheaper lever already in: the teacher caches its prompt (moving breakpoint
    + pruning hysteresis), which should cut Opus input cost by more than half;
    check `cache_read` in the next run's `metrics`.

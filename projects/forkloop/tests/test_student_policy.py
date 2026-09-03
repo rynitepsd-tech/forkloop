@@ -576,3 +576,24 @@ async def test_prev_screenshot_is_sent_from_the_second_call_on():
     obs2 = Observation(screenshot=buf.getvalue(), width=1280, height=720, instruction="x", step=1, history=["click(10, 20)"])
     await pol.act(obs2)
     assert seen == [1, 2]
+
+
+def test_loop_warning_detects_alternating_pairs():
+    from forkloop.policies.student import loop_warning
+    h = ['key("ctrl+l")', 'type("http://x\\n")'] * 3
+    assert loop_warning(h) is not None and "alternated" in loop_warning(h)
+    assert loop_warning(['key("ctrl+l")', 'type("http://x\\n")'] * 2) is None
+
+
+def test_image_detail_hint_is_sent_only_when_set():
+    import io
+    from PIL import Image
+    from forkloop.policies.student import StudentPolicy
+    from forkloop.types import Observation
+    buf = io.BytesIO(); Image.new("RGB", (64, 36)).save(buf, format="PNG")
+    obs = Observation(screenshot=buf.getvalue(), width=1280, height=720, instruction="x", step=0, history=[])
+    hi = StudentPolicy("http://stub/v1", "m", image_max_side=64, image_detail="high").build_messages(obs)[0]
+    parts = [p for p in hi[-1]["content"] if p["type"] == "image_url"]
+    assert parts[-1]["image_url"]["detail"] == "high"
+    lo = StudentPolicy("http://stub/v1", "m", image_max_side=64).build_messages(obs)[0]
+    assert "detail" not in [p for p in lo[-1]["content"] if p["type"] == "image_url"][-1]["image_url"]

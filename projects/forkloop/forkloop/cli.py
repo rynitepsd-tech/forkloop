@@ -87,6 +87,7 @@ def _policy(spec: str, args: argparse.Namespace):
             system_prompt = Path(args.system_prompt_file).read_text()
         return StudentPolicy(base_url=args.student_url, model=args.model or "student", prompt_style=args.prompt_style,
                              system_prompt=system_prompt, history_k=args.history_k, prev_screenshot=args.prev_shot,
+                             image_detail=(args.image_detail or ("high" if hosted else None)),
                              api_key=os.environ.get("STUDENT_API_KEY") or os.environ.get("OPENAI_API_KEY"),
                              hosted_reasoning=hosted, max_tokens=4096 if hosted else 512, timeout_s=300.0 if hosted else 120.0,
                              extra_body={"reasoning_effort": args.effort} if hosted else None)
@@ -303,6 +304,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                            help="student: replace the system prompt with this file ({w},{h},{w1},{h1} are filled in)")
             p.add_argument("--history-k", type=int, default=8, help="student: previous actions shown as text")
             p.add_argument("--prev-shot", action="store_true", help="student: also send the screenshot from before the last action")
+            p.add_argument("--image-detail", default=None, help="student: OpenAI image detail hint (hosted default: high)")
             p.add_argument("--max-steps", type=int, default=None, help="override the task's action budget for this run")
             p.add_argument("--max-seconds", type=float, default=None, help="override the task's wall budget for this run")
             p.add_argument("--script", default=None, help="JSON list of compact actions for --policy scripted")

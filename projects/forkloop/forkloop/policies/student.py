@@ -223,6 +223,16 @@ def loop_warning(history: list[str] | None, *, min_repeats: int = 3, px: int = 2
     hist = [h.strip() for h in (history or []) if isinstance(h, str) and h.strip()]
     if len(hist) < min_repeats:
         return None
+    # An alternating two-action cycle (key("ctrl+l"), type(url), key("ctrl+l"), type(url), ...)
+    # is a loop too: measured 2026-09-03 when the address bar never took the typed URL.
+    if len(hist) >= 2 * min_repeats:
+        tail2 = hist[-2 * min_repeats:]
+        a, b = tail2[-2], tail2[-1]
+        if a != b and all(tail2[i] == (a if i % 2 == 0 else b) for i in range(len(tail2))):
+            return (f"WARNING: you have alternated {a} and {b} {min_repeats} times and the screen is not changing. "
+                    "That approach is not working. Look at the screenshot: check where keyboard focus is (a document "
+                    "viewer or an iframe may be swallowing keys), click the element you need first, or use a different "
+                    "route (a menu, a link, another tab, or key(\"F5\")).")
     tail = hist[-min_repeats:]
     parsed = []
     for h in tail:
@@ -376,6 +386,7 @@ class StudentPolicy:
         name: str | None = None,
         hosted_reasoning: bool = False,
         prev_screenshot: bool = False,
+        image_detail: str | None = None,
     ) -> None:
         if prompt_style not in PROMPT_STYLES:
             raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}, got {prompt_style!r}")
@@ -403,6 +414,10 @@ class StudentPolicy:
         #: Also send the screenshot from before the previous action, so the model can see
         #: whether that action changed anything (the loop failure mode of 2026-09-03).
         self.prev_screenshot = bool(prev_screenshot)
+        #: OpenAI-style image fidelity hint ("high"/"low"/"auto"); None omits the field (vLLM).
+        #: Hosted models default to "auto", which may downscale a 1280x720 screenshot enough to
+        #: misread an authorization code (measured 2026-09-03: "G" read as "6", digits dropped).
+        self.image_detail = image_detail
         self._prev_data_url: str | None = None
         self.name = name or f"student:{model}:{prompt_style}"
         headers = {"Content-Type": "application/json"}
@@ -473,12 +488,18 @@ class StudentPolicy:
             history = history[-self.history_k:] if self.history_k > 0 else []
         text = build_user_text(getattr(obs, "instruction", ""), history, self.prompt_style,
                                step=getattr(obs, "step", None))
+        def img(url: str) -> dict[str, Any]:
+            part: dict[str, Any] = {"url": url}
+            if self.image_detail:
+                part["detail"] = self.image_detail
+            return {"type": "image_url", "image_url": part}
+
         content: list[dict[str, Any]] = [{"type": "text", "text": text}]
         if self.prev_screenshot and self._prev_data_url and history:
             content.append({"type": "text", "text": f"Screen BEFORE your last action ({history[-1]}):"})
-            content.append({"type": "image_url", "image_url": {"url": self._prev_data_url}})
+            content.append(img(self._prev_data_url))
             content.append({"type": "text", "text": "Screen NOW (act on this one):"})
-        content.append({"type": "image_url", "image_url": {"url": data_url}})
+        content.append(img(data_url))
         self._prev_data_url = data_url
         messages = [
             {"role": "system", "content": system},
