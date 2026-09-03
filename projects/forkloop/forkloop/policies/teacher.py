@@ -88,7 +88,7 @@ class TeacherPolicy:
         self.last_confidence: Optional[float] = None
         self.last_text = ""
         self.scale = 1.0
-        self.usage = {"in": 0, "out": 0}
+        self.usage = {"in": 0, "out": 0, "cache_read": 0, "cache_write": 0}
 
     @property
     def client(self) -> Any:
@@ -151,6 +151,8 @@ class TeacherPolicy:
         if usage is not None:
             self.usage["in"] += int(getattr(usage, "input_tokens", 0) or 0)
             self.usage["out"] += int(getattr(usage, "output_tokens", 0) or 0)
+            self.usage["cache_read"] += int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+            self.usage["cache_write"] += int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
         return resp
 
     # ------------------------------------------------------------- loop

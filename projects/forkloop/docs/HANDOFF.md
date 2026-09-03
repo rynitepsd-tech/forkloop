@@ -1,4 +1,4 @@
-# Handoff — Forkloop, as of 2026-09-02
+# Handoff — Forkloop, as of 2026-09-02 (late evening)
 
 Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
@@ -7,10 +7,9 @@ measurement), `docs/limitations.md` (everything unproven or broken).
 **One line:** a snapshot-native training loop for vision-only GUI agents on
 Solari desktops — build a payer-portal + OpenEMR world once, snapshot it, and
 every episode reset is one API call. The library, the world, the oracle and the
-training scripts are built and tested; the world runs for real on Solari; the
-teacher and student have never run.
+training scripts are built and tested; the world runs for real on Solari; the teacher verifies 8/12 family-3 episodes; the student has never run.
 
-Last commit on `main`: `60c680f`; the 2026-09-02 evening work (pool revert fallback, `--disable-gpu`, apt-source fix, teacher workspace header, docs) is uncommitted in the working tree. Repo: `rynitepsd-tech/forkloop`
+Last commit on `main`: `6283430`. **Uncommitted in the working tree** (late 2026-09-02): priced metrics (`forkloop/metrics.py`, `tests/test_metrics_cost.py`), pool orphan-reaping on 429 and `collect --reset-retries`, the teacher pre-flight, cache-token accounting in `teacher.py`, wider episode diagnostics (`worlds/claims_ops_v1/world.py`), `scripts/episode_table.py`, `docs/solari-repro.md`, and the doc updates below. `runs/` is git-ignored; the trajectories live only on this Mac. Repo: `rynitepsd-tech/forkloop`
 (fork of `solari-sdk/solari-cookbook`), cloned at `~/Desktop/Solari/repo`,
 project under `projects/forkloop/`.
 
@@ -23,7 +22,7 @@ scratchpad. Recreate it before anything else:
 
 ```bash
 cd ~/Desktop/Solari/repo/projects/forkloop
-rm -f venv && python3.11 -m venv venv && ./venv/bin/pip install -q -e ".[dev,world]"
+rm -f venv && python3.11 -m venv venv && ./venv/bin/pip install -q -e ".[dev,world,teacher]"
 ```
 
 Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`
@@ -79,7 +78,7 @@ it needs the teacher and a student.
 
 ## What is blocked
 
-**Rung 1 exists: the teacher scored 1.0 on 2/2 family-3 episodes** (`runs/teacher-pilot4`, seeds 1 and 3, ≈ $1.4–2.8 of Opus per episode, 21–37 model calls). Next is volume: `collect --seeds 0-19` for family 3, then families 2 and 1.
+**Rung 1 has volume: 8/12 family-3 episodes verified** (66.7 % [39.1, 86.2]; `runs/teacher-pilot4`, `runs/teacher-f3-s0-9`, `runs/teacher-f3-s1-9`; `scripts/episode_table.py` prints the per-episode table, `runs/exports/` holds the SFT pairs — 573 examples from the 8 verified episodes). $2.22 per episode, $4.00 per verified episode, all but a cent of it Opus. **Every failure is the 60-action budget, and three of the four were spent recovering from 2–3 Chrome tab crashes** (`docs/spikes.md`). The crashes, not the policy, are the next thing to fix: they happen with `--disable-gpu` in place, `chrome.log` shows `Network service crashed`, and the guest kernel logged RCU stalls mid-episode — suspect memory pressure on the 4 GB desktop or vCPU starvation on the host. Try one collect at `mem_mb: 8192` (world.yaml `resources`, 4 vCPU/8 GB is $0.248/h) and compare crash counts; if that fixes it the 4 GB price is not the real price.
 
 **The teacher completed family 3 end to end** (pilot 3, seed 1, `runs/teacher-pilot3`): right authorization number, letter downloaded, appeal filed with attachment via the GTK chooser; every effect check passed. It scored 0 only because OpenEMR rewrites `uuid` on rows it displays and the checksum oracle counted that as collateral — fixed with `oracle.ignore_columns` in `world.yaml` (`docs/contracts.md` §6). Seeds 1 and 3 then scored 1.0 (pilot 4).
 
@@ -120,23 +119,27 @@ cannot run on this account in either mode. Use `--best-of 1`.
 
 ## Next steps, in order
 
-1. **Confirm Solari creates machines again** (`forkloop reap --dry-run` lists
-   nothing, yet creates returned 429 on the evening of 2026-09-02); if not,
-   send `docs/solari-message.md`, which now includes that symptom.
-2. **Teacher trajectories on family 3** (the world, oracle and recorder are
-   ready; this produces the rung-1 result and the first real data):
+1. **Chrome tab crashes** (see "What is blocked"): run seeds 10–14 once at 8 GB
+   and once at 4 GB, compare the `crashes`/`netsvc` columns of
+   `scripts/episode_table.py`, and read the new `sys.txt`/`dmesg.log` stall
+   lines against `t_wall`. Whichever wins becomes the world default.
+2. **More family-3 seeds and the other families** (the command below; seeds
+   0–9 are done; the 429/orphan failure mode is handled by the pool now):
    ```bash
    ./venv/bin/python -m forkloop.cli collect --world claims-ops-v1 --policy teacher \
-     --families resolve_denial --seeds 0-19 --best-of 1 --pool-mode fork --concurrency 2
+     --families resolve_denial --seeds 10-19 --best-of 1 --pool-mode fork --concurrency 2
    ```
    `--best-of` > 1 cannot work on this account (forks are not snapshottable).
+   Budget: about $2.20 of Opus per episode; Solari is negligible.
 3. **Rebuild golden v6** when Solari is stable (see "What is true today"), then **drive one family-1 reschedule through the GUI** the way
    `scripts/gui_episode.py` does the appeal (login → Calendar → "All Users" →
    open the event → change date/time → Save), then let the teacher loose on
    family 1 too.
-4. **Send `docs/solari-message.md`** (Discord #support or email). If Solari
-   enables `revert()` or fork snapshots, the Chart 2 revert bar and best-of-N
-   search follow from one benchmark run each.
+4. **Solari support email was sent on 2026-09-02** (the text is
+   `docs/solari-message.md`; `docs/solari-repro.md` maps each item to the
+   script that reproduces it, for the reply). If Solari enables `revert()` or
+   fork snapshots, the Chart 2 revert bar and best-of-N search follow from one
+   benchmark run each. New for the thread: mid-episode RCU stalls in the guest.
 5. **Check snapshot storage pricing** in the console; five snapshots of
    6–8 GB are on the account now (v6 plus the v5 lineage; the lineage can be
    deleted once v6 is verified, newest first).
@@ -160,6 +163,11 @@ same areas.
   `["ctrl", "a"]` types the letter a. The backend now joins them into `"ctrl+a"`.
 - **Keyboard focus is not guaranteed after a fork.** Navigation clicks the
   omnibox at (640, 90) before typing a URL.
+- **A fresh venv needs the `teacher` extra** or every model call fails with
+  `ModuleNotFoundError: anthropic` while the desktops keep billing; `collect`
+  now refuses to start without it. **A killed `collect` leaves its machines
+  running** (SIGTERM skips `pool.close()`): run `forkloop reap` before the
+  next run, or let the pool's 429 handler reap them.
 - **The desktop disk is 4 GB and `disk_gb` is ignored.** The build purges VS Code
   and LibreOffice and trims caches; a full disk breaks OpenEMR with
   "table 'log' is full", which is exactly the one benchmark failure.

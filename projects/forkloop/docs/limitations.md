@@ -73,10 +73,13 @@ directory should be read as *design intent*, not result.
   a live snapshot are still *unverified*.
   The reviewer's claim that recording is rejected with snapshot-restored
   machines is likewise untested; forkloop never depends on native recording.
-- **The teacher has run on family 3 only** (2/2 verified, `runs/teacher-pilot4`);
-  families 1 and 2 have not been driven by it yet. `forkloop metrics` reports
-  `cost / success` from VM time only — model tokens are in `steps.jsonl` but not
-  priced into that number yet (≈ 250–530k input tokens per verified episode).
+- **The teacher has run on family 3 only** (8/12 verified over seeds 0–9 plus pilot 4, `runs/teacher-*`; every failure is the 60-action budget after Chrome tab crashes or PDF-viewer confusion — see `docs/spikes.md`);
+  families 1 and 2 have not been driven by it yet. `forkloop metrics` now prices
+  model tokens (`MODEL_PRICES_PER_M`, model read from `run.json`) on top of VM
+  time: pilot 4 is $2.10 per verified episode, of which $2.08 is Opus tokens
+  (≈ 250–530k input tokens per episode) and $0.015 is the desktop. Token cost
+  is ~140× the VM cost, so the teacher's price, not Solari's, sets the cost of
+  data; nothing in the harness uses prompt caching yet.
   The student needs a GPU box serving a model.
 - **Chart 1 and Chart 2 do not exist.** `train/plot.py --demo` renders
   clearly labelled synthetic placeholders so the pipeline can be checked.

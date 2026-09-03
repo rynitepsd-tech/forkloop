@@ -33,6 +33,25 @@ def _backend(name: str, world: Any, latency: float = 0.0):
     return SolariBackend()
 
 
+def _policy_model(spec: str, args: argparse.Namespace) -> Optional[str]:
+    if spec == "teacher":
+        return args.model or "claude-opus-5"
+    if spec == "student":
+        return args.model or "student"
+    return None
+
+
+def _preflight(spec: str) -> None:
+    """Fail before any machine is created when the policy cannot possibly run."""
+    if spec == "teacher":
+        try:
+            import anthropic  # noqa: F401
+        except ImportError as e:
+            raise SystemExit("teacher policy needs the anthropic package: pip install -e '.[teacher]'") from e
+        if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+            raise SystemExit("teacher policy needs ANTHROPIC_API_KEY (source ~/.config/forkloop/env)")
+
+
 def _policy(spec: str, args: argparse.Namespace):
     if spec == "random":
         from .policies.scripted import RandomPolicy
@@ -110,7 +129,9 @@ async def _run(args: argparse.Namespace) -> int:
 
     w = load_world(args.world)
     backend = _backend(args.backend, w)
-    rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name})
+    _preflight(args.policy)
+    rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name,
+                                                       "model": _policy_model(args.policy, args)})
     env = Env(w, backend, family=args.family, split=args.split, recorder=rec)
     try:
         pol = _policy(args.policy, args)
@@ -140,15 +161,20 @@ def _seed_list(spec: str) -> list[int]:
 async def _collect(args: argparse.Namespace) -> int:
     from .env import Env, run_episode
     from .pool import WorkerPool
+    from .reset import ResetError
     from .search import best_of_n
     from .trajectories import Recorder
     from .world import load_world
 
+    _preflight(args.policy)
     w = load_world(args.world)
     backend = _backend(args.backend, w)
     rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name,
-                                                       "best_of": args.best_of})
-    pool = WorkerPool(backend, w, size=args.concurrency, mode=args.pool_mode)
+                                                       "best_of": args.best_of, "model": _policy_model(args.policy, args),
+                                                       "effort": args.effort if args.policy == "teacher" else None,
+                                                       "pool_mode": args.pool_mode, "concurrency": args.concurrency,
+                                                       "cpu": args.cpu, "mem_mb": args.mem_mb})
+    pool = WorkerPool(backend, w, size=args.concurrency, mode=args.pool_mode, cpu=args.cpu, mem_mb=args.mem_mb)
     await pool.start()
     seeds = _seed_list(args.seeds)
     families = args.families or w.config.families
@@ -157,21 +183,35 @@ async def _collect(args: argparse.Namespace) -> int:
     results: list[dict[str, Any]] = []
 
     async def one(fam: str, seed: int) -> None:
-        async with sem:
-            env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec)
-            pol = _policy(args.policy, args)
-            try:
-                if args.best_of > 1:
-                    v = await best_of_n(env, pol, args.best_of, seed, family=fam, mode=args.search_mode)
-                else:
-                    v = await run_episode(env, pol, seed, family=fam)
-                results.append({"family": fam, "seed": seed, "reward": v.reward, "reason": v.reason_code})
-                print(f"{fam} seed={seed} reward={v.reward} reason={v.reason_code}", flush=True)
-            except Exception as e:  # noqa: BLE001
-                results.append({"family": fam, "seed": seed, "error": f"{type(e).__name__}: {e}"})
-                print(f"{fam} seed={seed} ERROR {type(e).__name__}: {e}", flush=True)
-            finally:
-                await env.close()
+        for attempt in range(1, args.reset_retries + 2):
+            async with sem:
+                env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec)
+                pol = _policy(args.policy, args)
+                try:
+                    if args.best_of > 1:
+                        v = await best_of_n(env, pol, args.best_of, seed, family=fam, mode=args.search_mode)
+                    else:
+                        v = await run_episode(env, pol, seed, family=fam)
+                    results.append({"family": fam, "seed": seed, "reward": v.reward, "reason": v.reason_code})
+                    print(f"{fam} seed={seed} reward={v.reward} reason={v.reason_code}", flush=True)
+                    return
+                except ResetError as e:
+                    # The machine never came up (capacity, concurrency cap, health): nothing was
+                    # spent on the policy, so the seed is retried after a pause rather than lost.
+                    if attempt <= args.reset_retries:
+                        print(f"{fam} seed={seed} reset failed (attempt {attempt}): {e}; retrying in "
+                              f"{args.reset_retry_wait_s:.0f}s", flush=True)
+                    else:
+                        results.append({"family": fam, "seed": seed, "error": f"ResetError: {e}"})
+                        print(f"{fam} seed={seed} ERROR ResetError: {e}", flush=True)
+                        return
+                except Exception as e:  # noqa: BLE001
+                    results.append({"family": fam, "seed": seed, "error": f"{type(e).__name__}: {e}"})
+                    print(f"{fam} seed={seed} ERROR {type(e).__name__}: {e}", flush=True)
+                    return
+                finally:
+                    await env.close()
+            await asyncio.sleep(args.reset_retry_wait_s)
 
     try:
         await asyncio.gather(*(one(f, s) for f, s in jobs))
@@ -199,7 +239,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 def cmd_metrics(args: argparse.Namespace) -> int:
     from .metrics import format_table, summarize_run
 
-    s = summarize_run(args.run)
+    s = summarize_run(args.run, model=args.model, vm_hour_usd=args.vm_hour_usd)
     print(format_table(s))
     if args.json:
         Path(args.json).write_text(json.dumps(s, indent=2))
@@ -243,6 +283,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             p.add_argument("--run-id", default=None)
             p.add_argument("--best-of", type=int, default=1)
             p.add_argument("--search-mode", choices=["revert", "fork"], default="revert")
+            p.add_argument("--cpu", type=int, default=None, help="vCPUs per machine (default: world.yaml resources)")
+            p.add_argument("--mem-mb", type=int, default=None, help="RAM per machine in MB (default: world.yaml resources)")
 
     sub.add_parser("worlds", help="list worlds").set_defaults(fn=cmd_worlds)
     p = sub.add_parser("task", help="print a generated task"); common(p)
@@ -261,11 +303,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--families", nargs="*", default=None); p.add_argument("--seeds", default="0-49")
     p.add_argument("--concurrency", type=int, default=int(os.environ.get("FORKLOOP_CONCURRENCY", 2)))
     p.add_argument("--pool-mode", choices=["revert", "fork"], default="revert")
+    p.add_argument("--reset-retries", type=int, default=2, help="re-queue a seed whose reset failed this many times")
+    p.add_argument("--reset-retry-wait-s", type=float, default=60.0)
     p.set_defaults(fn=lambda a: asyncio.run(_collect(a)))
     p = sub.add_parser("export", help="export a run"); p.add_argument("--run", required=True)
     p.add_argument("--format", choices=["jsonl", "sft", "osworld"], default="jsonl"); p.add_argument("--out", required=True)
     p.add_argument("--history-k", type=int, default=8); p.add_argument("--limit", type=int, default=None); p.set_defaults(fn=cmd_export)
     p = sub.add_parser("metrics", help="summarise a run"); p.add_argument("--run", required=True); p.add_argument("--json", default=None)
+    p.add_argument("--model", default=None, help="price tokens as this model (default: run.json model)")
+    p.add_argument("--vm-hour-usd", type=float, default=0.134, help="VM $/h incl. screen (Starter 2 vCPU/4 GB: 0.134)")
     p.set_defaults(fn=cmd_metrics)
     p = sub.add_parser("reset-bench", help="reset benchmark (Chart 2)", add_help=False)
     p.add_argument("rest", nargs=argparse.REMAINDER)

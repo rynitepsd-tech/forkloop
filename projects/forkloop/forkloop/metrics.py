@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import statistics
 from collections import Counter
@@ -27,8 +28,49 @@ def _rate(k: int, n: int) -> dict[str, float]:
     return {"value": round(p, 4), "lo": round(lo, 4), "hi": round(hi, 4), "k": k, "n": n}
 
 
+# USD per 1M tokens: (input, output). Cache reads are billed at 0.1x input and cache
+# writes at 1.25x input. Source: docs.anthropic.com pricing, read 2026-09-02.
+MODEL_PRICES_PER_M: dict[str, tuple[float, float]] = {
+    "claude-opus-5": (5.0, 25.0),
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+CACHE_READ_MULT, CACHE_WRITE_MULT = 0.1, 1.25
+
+
+def episode_tokens(episode: dict[str, Any]) -> dict[str, int]:
+    """Token usage of one episode.
+
+    Policies report *cumulative* usage on every step (`steps.jsonl` `tokens` is the running
+    total, so batched actions from one model call repeat the same numbers). The episode's
+    usage is therefore the maximum over steps, never the sum.
+    """
+    keys = ("in", "out", "cache_read", "cache_write")
+    out = {k: 0 for k in keys}
+    for s in episode["steps"]:
+        t = s.get("tokens") or {}
+        for k in keys:
+            out[k] = max(out[k], int(t.get(k, 0) or 0))
+    return out
+
+
+def token_cost_usd(tokens: dict[str, int], prices_per_m: tuple[float, float]) -> float:
+    p_in, p_out = prices_per_m
+    return (tokens.get("in", 0) * p_in + tokens.get("out", 0) * p_out
+            + tokens.get("cache_read", 0) * p_in * CACHE_READ_MULT
+            + tokens.get("cache_write", 0) * p_in * CACHE_WRITE_MULT) / 1e6
+
+
 def summarize_episodes(episodes: list[dict[str, Any]], *, vm_hour_usd: float = 0.134,
-                       token_prices_per_m: tuple[float, float] = (0.0, 0.0)) -> dict[str, Any]:
+                       token_prices_per_m: Optional[tuple[float, float]] = None,
+                       model: Optional[str] = None) -> dict[str, Any]:
+    """Summarise episodes. Token cost uses `token_prices_per_m` if given, else the price
+    table entry for `model`; with neither, tokens are counted but priced at zero."""
+    if token_prices_per_m is None:
+        token_prices_per_m = MODEL_PRICES_PER_M.get(model or "", (0.0, 0.0))
     n = len(episodes)
     succ = [e for e in episodes if e["verdict"] and e["verdict"].get("reward", 0) >= 1.0]
     reasons = Counter((e["verdict"] or {}).get("reason_code", "NO_VERDICT") for e in episodes)
@@ -36,10 +78,10 @@ def summarize_episodes(episodes: list[dict[str, Any]], *, vm_hour_usd: float = 0
     walls = [float((e["verdict"] or {}).get("wall_seconds", 0.0)) for e in episodes if e["verdict"]]
     n_actions = sum(steps)
     n_invalid = sum(1 for e in episodes for s in e["steps"] if not s.get("valid", True))
-    tok_in = sum(int((s.get("tokens") or {}).get("in", 0)) for e in episodes for s in e["steps"])
-    tok_out = sum(int((s.get("tokens") or {}).get("out", 0)) for e in episodes for s in e["steps"])
+    per_ep = [episode_tokens(e) for e in episodes]
+    tokens = {k: sum(t[k] for t in per_ep) for k in ("in", "out", "cache_read", "cache_write")}
     vm_cost = sum(walls) / 3600 * vm_hour_usd
-    tok_cost = tok_in / 1e6 * token_prices_per_m[0] + tok_out / 1e6 * token_prices_per_m[1]
+    tok_cost = token_cost_usd(tokens, token_prices_per_m)
     total_cost = vm_cost + tok_cost
     milestones = [float((e["verdict"] or {}).get("milestones", 0.0)) for e in episodes if e["verdict"]]
     resets = [e["reset"]["total_seconds"] for e in episodes if e.get("reset") and e["reset"].get("ok")]
@@ -52,12 +94,17 @@ def summarize_episodes(episodes: list[dict[str, Any]], *, vm_hour_usd: float = 0
         "median_reset_s": round(statistics.median(resets), 3) if resets else None,
         "cost_per_success_usd": round(total_cost / len(succ), 4) if succ else None,
         "cost_total_usd": round(total_cost, 4),
+        "cost_vm_usd": round(vm_cost, 4),
+        "cost_tokens_usd": round(tok_cost, 4),
+        "cost_per_episode_usd": round(total_cost / n, 4) if n else None,
+        "model": model,
+        "token_prices_per_m": list(token_prices_per_m),
         "invalid_action_rate": _rate(n_invalid, n_actions),
         "wrong_record_rate": _rate(reasons.get("WRONG_RECORD", 0), n),
         "duplicate_side_effect_rate": _rate(reasons.get("DUPLICATE_SIDE_EFFECT", 0), n),
         "collateral_edit_rate": _rate(reasons.get("COLLATERAL_EDIT", 0), n),
         "reason_codes": dict(sorted(reasons.items())),
-        "tokens": {"in": tok_in, "out": tok_out},
+        "tokens": tokens,
         "by_family": _by(episodes, "family"),
         "by_split": _by(episodes, "split"),
     }
@@ -75,6 +122,14 @@ def _by(episodes: list[dict[str, Any]], key: str) -> dict[str, Any]:
 
 
 def summarize_run(run_dir: str | Path, **kw: Any) -> dict[str, Any]:
+    """Summarise a run directory. The model (for token pricing) comes from `run.json` when
+    the caller does not pass one."""
+    run_dir = Path(run_dir)
+    if kw.get("model") is None and (run_dir / "run.json").exists():
+        try:
+            kw["model"] = json.loads((run_dir / "run.json").read_text()).get("model")
+        except (OSError, ValueError):
+            pass
     eps = [load_episode(p) for p in iter_episode_dirs(run_dir)]
     s = summarize_episodes(eps, **kw)
     s["run_dir"] = str(run_dir)
@@ -99,6 +154,11 @@ def format_table(summary: dict[str, Any]) -> str:
         ("duplicate side-effect rate", r(summary["duplicate_side_effect_rate"])),
         ("collateral-edit rate", r(summary["collateral_edit_rate"])),
         ("cost / success (USD)", str(summary["cost_per_success_usd"])),
+        ("cost / episode (USD)", str(summary["cost_per_episode_usd"])),
+        ("  of which VM / tokens", f"{summary['cost_vm_usd']} / {summary['cost_tokens_usd']}"),
+        ("tokens in / out", f"{summary['tokens']['in']} / {summary['tokens']['out']}"
+         + (f" (cache read {summary['tokens']['cache_read']})" if summary['tokens'].get('cache_read') else "")),
+        ("model priced as", str(summary.get("model"))),
     ]
     w = max(len(a) for a, _ in rows)
     lines = [f"{a.ljust(w)}  {b}" for a, b in rows]
@@ -106,4 +166,5 @@ def format_table(summary: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["wilson", "summarize_run", "summarize_episodes", "format_table"]
+__all__ = ["wilson", "summarize_run", "summarize_episodes", "format_table", "episode_tokens",
+           "token_cost_usd", "MODEL_PRICES_PER_M"]

@@ -105,7 +105,7 @@ class WorkerPool:
     def __init__(self, backend: Backend, world: World, *, size: Optional[int] = None, mode: str = "revert",
                  golden_snapshot: Optional[str] = None, run_id: Optional[str] = None,
                  cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
-                 timeout_ms: int = 30 * 60_000, max_retries: int = 6, disk_gb: Optional[int] = None,
+                 timeout_ms: int = 30 * 60_000, max_retries: int = 10, disk_gb: Optional[int] = None,
                  fallback_to_fork: bool = True, create_timeout_s: float = 240.0) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
@@ -190,8 +190,15 @@ class WorkerPool:
                 self.events.append({"t": time.time(), "event": "create_retry", "attempt": attempt, "error": err})
                 if attempt == self.max_retries:
                     raise
+                if isinstance(e, ConcurrencyError):
+                    # The cap is usually held by a machine of ours that an earlier process left
+                    # behind (a killed run, or a listing that lagged at start-up). Re-list and
+                    # kill orphans before waiting; a stale listing at pool start is not fatal.
+                    killed = await self.reap_orphans()
+                    if killed:
+                        continue
                 await asyncio.sleep(delay + random.random() * 0.5)
-                delay = min(delay * 2, 30.0)
+                delay = min(delay * 2, 60.0)
         raise RuntimeError("unreachable")
 
     async def _ensure_golden(self, machine: Machine) -> tuple[str, bool]:

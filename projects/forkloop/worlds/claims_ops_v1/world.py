@@ -144,8 +144,9 @@ class ClaimsOpsWorld(World):
             return {}
         out: dict[str, str] = {}
         for name, cmd in (("chrome.log", "tail -n 200 /home/desktop/chrome.log 2>/dev/null"),
-                          ("dmesg.log", "dmesg 2>/dev/null | tail -n 60"),
-                          ("chrome_ps.txt", "ps -eo pid,rss,etimes,args --sort=-rss | grep -a '[c]hrome' | cut -c1-200 | head -20")):
+                          ("sys.txt", "uptime; echo; free -m; echo; df -h / | tail -1; echo; cat /proc/loadavg"),
+                          ("dmesg.log", "dmesg 2>/dev/null | grep -E 'rcu:|stall|Out of memory|oom-kill|segfault|traps:|hung task' | tail -n 30; echo '--- tail'; dmesg 2>/dev/null | tail -n 60"),
+                          ("chrome_ps.txt", "ps -eo pid,rss,etimes,args --sort=-rss | grep -a '[c]hrome' | cut -c1-600 | head -20")):
             try:
                 r = await machine.exec("sh", ["-c", cmd], timeout_ms=15_000)
                 out[name] = r.stdout

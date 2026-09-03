@@ -471,3 +471,15 @@ Reset protocol (fixed order):
 `cost_per_success_usd`, `invalid_action_rate`, `wrong_record_rate`,
 `duplicate_side_effect_rate`, `collateral_edit_rate`, with Wilson 95% CIs on
 rates. `forkloop/metrics.py` computes them from a run directory.
+
+Cost: `cost_total_usd = cost_vm_usd + cost_tokens_usd`. VM cost is
+`wall_seconds / 3600 × vm_hour_usd` (default 0.134, Starter 2 vCPU/4 GB with
+screen). Token cost prices the episode's usage with `MODEL_PRICES_PER_M[model]`
+(input, output per 1M; cache reads at 0.1× input, cache writes at 1.25×), where
+`model` comes from `run.json` (`collect` writes it) or `metrics --model`. An
+unknown model prices tokens at zero and the table says so (`model priced as`).
+
+The `tokens` field on a `steps.jsonl` line is the policy's **cumulative** usage
+for the episode (`{"in", "out", "cache_read", "cache_write"}`), so batched
+actions from one model call repeat the same numbers; an episode's usage is the
+maximum over its steps, never the sum (`metrics.episode_tokens`).

@@ -12,7 +12,7 @@ A Python 3.11 library + two worlds + training scripts. `reset()` on a Solari des
 
 ```bash
 # from projects/forkloop, with the venv active (python3.11)
-pip install -e ".[dev,world]"
+pip install -e ".[dev,world,teacher]"
 pytest                                   # ~2 min, all offline, no keys needed
 pytest tests/test_core_toy.py -x         # fastest signal for core changes
 pytest tests/test_claims_ops_world.py    # oracle + world on the fake backend

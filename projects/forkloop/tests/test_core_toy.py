@@ -341,3 +341,21 @@ def test_row_hash_script_ignores_app_maintained_columns(tmp_path):
     con.commit()
     assert hashes(["uuid"]) != h0_ign        # a real edit is still caught
     assert hashes(["id"]) is not None        # ignoring the pk column itself is harmless
+
+
+async def test_pool_reaps_an_orphan_when_the_cap_bites(world, backend):
+    """A machine left behind by an earlier process (different run_id) holds a slot of the cap
+    and is invisible at pool start; the pool must kill it when create() answers 429."""
+    pool = WorkerPool(backend, world, size=1, mode="fork")
+    await pool.start()  # nothing to reap yet
+    orphan = await backend.create(metadata={"forkloop": "1", "run_id": "run-dead", "world": world.name})
+    stray = await backend.create(metadata={"forkloop": "1", "run_id": "run-dead2", "world": world.name})
+    assert backend.concurrency_cap == 2  # both slots are now taken by strays
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
+    obs, info = await env.reset(1)
+    assert info["reset"]["ok"]
+    assert not orphan.alive and not stray.alive
+    assert any(e["event"] == "create_retry" for e in pool.events)
+    assert any(e["event"] == "reaped" and orphan.id in e["ids"] for e in pool.events)
+    await env.close()
+    await pool.close()
