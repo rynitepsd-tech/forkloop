@@ -53,7 +53,9 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     half = rng.choice(["morning", "afternoon"])
     target_date = _next_weekday(cur_date, wd_idx)
     window = ("08:00:00", "11:59:59") if half == "morning" else ("12:00:00", "17:59:59")
-    slot_desc = f"the next {WEEKDAYS[wd_idx]} {half}"
+    # "next" is relative to the appointment's own date, not to today: say so, or an agent that
+    # has not found the appointment yet reads it as "next <weekday> from now" (Luna, 2026-09-03).
+    slot_desc = f"the next {WEEKDAYS[wd_idx]} {half} after its current date (the appointment is within the next two weeks)"
 
     statements: list[str] = [person.openemr_sql(rng, eid)]
     for i, d in enumerate(distractors, start=1):

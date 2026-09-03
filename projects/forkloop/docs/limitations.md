@@ -51,8 +51,11 @@ directory should be read as *design intent*, not result.
   click on "All Users" (≈ (63, 567) at 1280×720) shows seven provider
   columns. Verified with an authenticated curl fetch (all seven `<option>`s,
   the provider dropdown of `add_edit_event.php` lists them too) and with
-  screenshots through the agent channel. A reschedule has still not been
-  driven end to end through the GUI.
+  screenshots through the agent channel. **A reschedule was driven end to end
+  through the GUI on 2026-09-03** (GPT-5.6 Luna v5, `runs/luna-v5-fam12-s0-2`,
+  seed 0 verified). Seed 1 exposed an instruction ambiguity — "the next
+  Monday" read as next Monday from today rather than after the appointment —
+  fixed in the generator text (manifests for family 1 change from this commit).
 - **`snapshot()` is refused on forked machines.** A desktop created with
   `from_snapshot` returns 409 `Not snapshottable` (three attempts, state
   `running`); a fresh desktop snapshots fine. So golden images can only be
