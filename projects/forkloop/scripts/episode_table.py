@@ -3,7 +3,7 @@
     python scripts/episode_table.py runs/teacher-pilot4 runs/teacher-f3-s0-9 runs/teacher-f3-s1-9 [--md]
 
 "crashes" counts model turns whose note mentions a crashed page/tab (the teacher's own
-words); "netsvc" counts Chrome "Network service crashed" lines; "stall" is the number of
+words); "netsvc" counts Chrome "Network service crashed" lines; "crashpad" counts crash reports Chrome's crashpad handler wrote (one per crashed process); "stall" is the number of
 RCU stall reports in the guest kernel log captured at episode end (the golden image
 carries one from its own snapshot, so subtract the baseline when comparing).
 """
@@ -42,6 +42,7 @@ def row(ep_dir: Path, model: str) -> dict:
         "wall_s": round(float(v.get("wall_seconds", 0.0))),
         "crashes": sum(1 for n in notes if CRASH.search(n)),
         "netsvc": chrome.count("Network service crashed"),
+        "crashpad": chrome.count("scaling_cur_freq"),
         "stall": len(re.findall(r"self-detected stall", dmesg)),
         "tok_in": toks["in"],
         "tok_out": toks["out"],
@@ -61,7 +62,7 @@ def main() -> None:
         model = a.model or meta.get("model") or "claude-opus-5"
         for d in iter_episode_dirs(r):
             rows.append({"run": Path(r).name, **row(d, model)})
-    cols = ["run", "episode", "reward", "reason", "steps", "waits", "wall_s", "crashes", "netsvc", "stall", "tok_in", "tok_out", "usd"]
+    cols = ["run", "episode", "reward", "reason", "steps", "waits", "wall_s", "crashes", "netsvc", "crashpad", "stall", "tok_in", "tok_out", "usd"]
     if a.md:
         print("| " + " | ".join(cols) + " |")
         print("|" + "---|" * len(cols))

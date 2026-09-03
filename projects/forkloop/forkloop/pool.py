@@ -232,8 +232,9 @@ class WorkerPool:
         for info in infos:
             if info.id in mine or info.state not in ("running", "starting", "paused"):
                 continue
-            if info.metadata.get("run_id") == self.run_id:
-                continue
+            # A machine tagged with *this* run_id that no worker owns is a leak from a failed
+            # create (the worker never received the handle); it counts against the cap, so it
+            # is an orphan too.
             try:
                 await self.backend.kill_machine(info.id)
                 killed.append(info.id)

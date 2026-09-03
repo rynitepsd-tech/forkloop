@@ -33,7 +33,16 @@ def _backend(name: str, world: Any, latency: float = 0.0):
     return SolariBackend()
 
 
-def _policy_model(spec: str, args: argparse.Namespace) -> Optional[str]:
+def _budget_override(args: argparse.Namespace) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if getattr(args, "max_steps", None):
+        out["max_steps"] = int(args.max_steps)
+    if getattr(args, "max_seconds", None):
+        out["max_seconds"] = float(args.max_seconds)
+    return out
+
+
+def _policy_model(spec: str, args: argparse.Namespace) -> Optional[str]:  # noqa: D401
     if spec == "teacher":
         return args.model or "claude-opus-5"
     if spec == "student":
@@ -41,8 +50,12 @@ def _policy_model(spec: str, args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def _preflight(spec: str) -> None:
+def _preflight(spec: str, args: Optional[argparse.Namespace] = None) -> None:
     """Fail before any machine is created when the policy cannot possibly run."""
+    args = args or argparse.Namespace()
+    if spec == "student" and "openai.com" in getattr(args, "student_url", "") and not (
+            os.environ.get("STUDENT_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        raise SystemExit("hosted student needs OPENAI_API_KEY (or STUDENT_API_KEY) in the environment")
     if spec == "teacher":
         try:
             import anthropic  # noqa: F401
@@ -68,7 +81,15 @@ def _policy(spec: str, args: argparse.Namespace):
     if spec == "student":
         from .policies.student import StudentPolicy
 
-        return StudentPolicy(base_url=args.student_url, model=args.model or "student", prompt_style=args.prompt_style)
+        hosted = "openai.com" in args.student_url
+        system_prompt = None
+        if getattr(args, "system_prompt_file", None):
+            system_prompt = Path(args.system_prompt_file).read_text()
+        return StudentPolicy(base_url=args.student_url, model=args.model or "student", prompt_style=args.prompt_style,
+                             system_prompt=system_prompt, history_k=args.history_k, prev_screenshot=args.prev_shot,
+                             api_key=os.environ.get("STUDENT_API_KEY") or os.environ.get("OPENAI_API_KEY"),
+                             hosted_reasoning=hosted, max_tokens=4096 if hosted else 512, timeout_s=300.0 if hosted else 120.0,
+                             extra_body={"reasoning_effort": args.effort} if hosted else None)
     raise SystemExit(f"unknown policy {spec!r}")
 
 
@@ -129,7 +150,7 @@ async def _run(args: argparse.Namespace) -> int:
 
     w = load_world(args.world)
     backend = _backend(args.backend, w)
-    _preflight(args.policy)
+    _preflight(args.policy, args)
     rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name,
                                                        "model": _policy_model(args.policy, args)})
     env = Env(w, backend, family=args.family, split=args.split, recorder=rec)
@@ -166,14 +187,15 @@ async def _collect(args: argparse.Namespace) -> int:
     from .trajectories import Recorder
     from .world import load_world
 
-    _preflight(args.policy)
+    _preflight(args.policy, args)
     w = load_world(args.world)
     backend = _backend(args.backend, w)
     rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name,
                                                        "best_of": args.best_of, "model": _policy_model(args.policy, args),
                                                        "effort": args.effort if args.policy == "teacher" else None,
                                                        "pool_mode": args.pool_mode, "concurrency": args.concurrency,
-                                                       "cpu": args.cpu, "mem_mb": args.mem_mb})
+                                                       "cpu": args.cpu, "mem_mb": args.mem_mb,
+                                                       "budget_override": _budget_override(args)})
     pool = WorkerPool(backend, w, size=args.concurrency, mode=args.pool_mode, cpu=args.cpu, mem_mb=args.mem_mb)
     await pool.start()
     seeds = _seed_list(args.seeds)
@@ -185,7 +207,8 @@ async def _collect(args: argparse.Namespace) -> int:
     async def one(fam: str, seed: int) -> None:
         for attempt in range(1, args.reset_retries + 2):
             async with sem:
-                env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec)
+                env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec,
+                          budget_override=_budget_override(args))
                 pol = _policy(args.policy, args)
                 try:
                     if args.best_of > 1:
@@ -276,6 +299,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             p.add_argument("--effort", default="high")
             p.add_argument("--student-url", default=os.environ.get("STUDENT_URL", "http://localhost:8000/v1"))
             p.add_argument("--prompt-style", default="compact")
+            p.add_argument("--system-prompt-file", default=None,
+                           help="student: replace the system prompt with this file ({w},{h},{w1},{h1} are filled in)")
+            p.add_argument("--history-k", type=int, default=8, help="student: previous actions shown as text")
+            p.add_argument("--prev-shot", action="store_true", help="student: also send the screenshot from before the last action")
+            p.add_argument("--max-steps", type=int, default=None, help="override the task's action budget for this run")
+            p.add_argument("--max-seconds", type=float, default=None, help="override the task's wall budget for this run")
             p.add_argument("--script", default=None, help="JSON list of compact actions for --policy scripted")
             p.add_argument("--policy-seed", type=int, default=0)
             p.add_argument("--split", default="train")

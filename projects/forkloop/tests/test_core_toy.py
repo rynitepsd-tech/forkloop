@@ -359,3 +359,31 @@ async def test_pool_reaps_an_orphan_when_the_cap_bites(world, backend):
     assert any(e["event"] == "reaped" and orphan.id in e["ids"] for e in pool.events)
     await env.close()
     await pool.close()
+
+
+async def test_pool_reaps_a_leaked_machine_from_its_own_run(world, backend):
+    """A create that failed after the machine existed leaves one tagged with our run_id and owned
+    by no worker; reap_orphans must kill it, or it holds a cap slot for the rest of the run."""
+    pool = WorkerPool(backend, world, size=1, mode="fork")
+    await pool.start()
+    leaked = await backend.create(metadata={"forkloop": "1", "run_id": pool.run_id, "world": world.name})
+    killed = await pool.reap_orphans()
+    assert leaked.id in killed and not leaked.alive
+    await pool.close()
+
+
+async def test_budget_override_caps_steps_per_run(world, backend):
+    pool = WorkerPool(backend, world, size=1, mode="fork")
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0, budget_override={"max_steps": 2})
+    obs, _ = await env.reset(1)
+    pol = RandomPolicy(seed=0)
+    n = 0
+    while True:
+        a, meta = await pol.act(obs)
+        obs, r, term, trunc, info = await env.step(a, meta=meta)
+        n += 1
+        if term or trunc or n > 20:
+            break
+    assert trunc and env.ep.end_reason == "max_steps" and env.ep.budget_steps == 2
+    await env.close()
+    await pool.close()

@@ -28,6 +28,7 @@ import asyncio
 import base64
 import io
 import json
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -211,8 +212,48 @@ def build_system_prompt(style: str, width: int, height: int, *, fara_allowed: tu
     raise ValueError(f"unknown prompt_style {style!r}; expected one of {PROMPT_STYLES}")
 
 
+_ACT_RE = re.compile(r"^\s*(\w+)\s*\((.*)\)\s*$", re.S)
+
+
+def loop_warning(history: list[str] | None, *, min_repeats: int = 3, px: int = 20) -> str | None:
+    """Detect a stuck policy from its own history: the last ``min_repeats`` actions are the
+    same kind and (for pointer actions) land within ``px`` of each other, or are all waits.
+    Returns a warning line for the prompt, or None. Model-agnostic; measured need: GPT-5.6 Luna
+    clicked an already-focused search box 40 times in a row (2026-09-03)."""
+    hist = [h.strip() for h in (history or []) if isinstance(h, str) and h.strip()]
+    if len(hist) < min_repeats:
+        return None
+    tail = hist[-min_repeats:]
+    parsed = []
+    for h in tail:
+        m = _ACT_RE.match(h)
+        if not m:
+            return None
+        nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", m.group(2))[:2]]
+        parsed.append((m.group(1), nums))
+    kinds = {k for k, _ in parsed}
+    if len(kinds) != 1:
+        return None
+    kind = parsed[0][0]
+    if kind in ("click", "double_click", "right_click", "move", "scroll"):
+        xs = [n for _, n in parsed if len(n) >= 2]
+        if len(xs) < min_repeats or max(abs(a[0] - b[0]) + abs(a[1] - b[1]) for a in xs for b in xs) > px:
+            return None
+        return (f"WARNING: your last {min_repeats} actions were the same {kind} at about "
+                f"({int(xs[-1][0])}, {int(xs[-1][1])}) and the screen did not change. Do NOT repeat it. "
+                "If that element is a text field it is already focused: type into it now. Otherwise choose a "
+                "different element, press a key, or navigate by URL.")
+    if kind == "wait":
+        return (f"WARNING: your last {min_repeats} actions were waits. The page is not going to change on its own. "
+                "Act now: click, type, press a key, or navigate by URL.")
+    if kind in ("key", "type"):
+        return (f"WARNING: your last {min_repeats} actions were the same {kind}. Repeating it will not help; "
+                "look at the screen and try a different approach.")
+    return None
+
+
 def build_user_text(instruction: str, history: list[str] | None, style: str, step: int | None = None) -> str:
-    """The text part of the user turn: instruction + last-k history."""
+    """The text part of the user turn: instruction + last-k history (+ a loop warning when stuck)."""
     lines = [f"Task: {instruction.strip()}" if style != "fara" else instruction.strip()]
     hist = [h for h in (history or []) if isinstance(h, str) and h.strip()]
     if hist:
@@ -220,6 +261,10 @@ def build_user_text(instruction: str, history: list[str] | None, style: str, ste
         lines.append("Previous actions (oldest first):")
         for i, h in enumerate(hist, 1):
             lines.append(f"{i}. {h.strip()}")
+        warn = loop_warning(hist)
+        if warn:
+            lines.append("")
+            lines.append(warn)
     else:
         lines.append("")
         lines.append("Previous actions: none (this is the first step).")
@@ -329,6 +374,8 @@ class StudentPolicy:
         transport: Any = None,
         screen_size: tuple[int, int] | None = None,
         name: str | None = None,
+        hosted_reasoning: bool = False,
+        prev_screenshot: bool = False,
     ) -> None:
         if prompt_style not in PROMPT_STYLES:
             raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}, got {prompt_style!r}")
@@ -350,6 +397,13 @@ class StudentPolicy:
         self.system_prompt_override = system_prompt
         self.fara_allowed = tuple(fara_allowed)
         self.screen_size = tuple(screen_size) if screen_size else None
+        #: Hosted reasoning models (OpenAI GPT-5.x via /chat/completions) reject sampling
+        #: parameters and count reasoning tokens against ``max_completion_tokens``.
+        self.hosted_reasoning = bool(hosted_reasoning)
+        #: Also send the screenshot from before the previous action, so the model can see
+        #: whether that action changed anything (the loop failure mode of 2026-09-03).
+        self.prev_screenshot = bool(prev_screenshot)
+        self._prev_data_url: str | None = None
         self.name = name or f"student:{model}:{prompt_style}"
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -358,6 +412,8 @@ class StudentPolicy:
             base_url=self.base_url, headers=headers, timeout=httpx.Timeout(self.timeout_s), transport=transport
         )
         self.n_requests = 0
+        #: Cumulative usage for the episode, like TeacherPolicy (steps carry the running total).
+        self.usage = {"in": 0, "out": 0}
         self.n_errors = 0
 
     # -- lifecycle ---------------------------------------------------------- #
@@ -409,7 +465,7 @@ class StudentPolicy:
         data_url, model_size, orig = prepare_image(obs.screenshot, self.image_max_side)
         screen = self._screen_size(obs, orig)
         coord_size = self._coord_from_size(model_size, screen)
-        system = self.system_prompt_override or build_system_prompt(
+        system = self._formatted_override(coord_size) if self.system_prompt_override else build_system_prompt(
             self.prompt_style, coord_size[0], coord_size[1], fara_allowed=self.fara_allowed
         )
         history = list(getattr(obs, "history", None) or [])
@@ -417,12 +473,16 @@ class StudentPolicy:
             history = history[-self.history_k:] if self.history_k > 0 else []
         text = build_user_text(getattr(obs, "instruction", ""), history, self.prompt_style,
                                step=getattr(obs, "step", None))
+        content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+        if self.prev_screenshot and self._prev_data_url and history:
+            content.append({"type": "text", "text": f"Screen BEFORE your last action ({history[-1]}):"})
+            content.append({"type": "image_url", "image_url": {"url": self._prev_data_url}})
+            content.append({"type": "text", "text": "Screen NOW (act on this one):"})
+        content.append({"type": "image_url", "image_url": {"url": data_url}})
+        self._prev_data_url = data_url
         messages = [
             {"role": "system", "content": system},
-            {"role": "user", "content": [
-                {"type": "text", "text": text},
-                {"type": "image_url", "image_url": {"url": data_url}},
-            ]},
+            {"role": "user", "content": content},
         ]
         ctx = {"model_size": model_size, "screen_size": screen, "coord_size": coord_size, "orig_size": orig}
         return messages, ctx
@@ -441,6 +501,10 @@ class StudentPolicy:
             body["seed"] = int(self.seed)
         if self.top_p is not None:
             body["top_p"] = float(self.top_p)
+        if self.hosted_reasoning:
+            for k in ("temperature", "top_p", "seed"):
+                body.pop(k, None)
+            body["max_completion_tokens"] = body.pop("max_tokens")
         body.update(self.extra_body)
         return body, ctx
 
@@ -492,23 +556,30 @@ class StudentPolicy:
             return None, meta
         return action, meta
 
+    def _formatted_override(self, coord_size: tuple[int, int]) -> str:
+        """Fill {w}/{h}/{w1}/{h1} in a user-supplied system prompt; other braces are left alone."""
+        w, h = int(coord_size[0]), int(coord_size[1])
+        out = self.system_prompt_override
+        for k, v in (("{w1}", w - 1), ("{h1}", h - 1), ("{w}", w), ("{h}", h)):
+            out = out.replace(k, str(v))
+        return out
+
     async def _post(self, body: dict) -> dict:
         self.n_requests += 1
         resp = await self._client.post("/chat/completions", json=body)
         resp.raise_for_status()
         return resp.json()
 
-    @staticmethod
-    def _tokens(data: dict, n: int = 1) -> dict:
+    def _tokens(self, data: dict, n: int = 1) -> dict:
         usage = data.get("usage") or {}
-        tin = int(usage.get("prompt_tokens") or 0)
-        tout = int(usage.get("completion_tokens") or 0)
-        return {"in": tin, "out": tout // max(1, n)}
+        self.usage["in"] += int(usage.get("prompt_tokens") or 0)
+        self.usage["out"] += int(usage.get("completion_tokens") or 0)
+        return dict(self.usage)
 
     def _error_meta(self, exc: BaseException, latency: float, raw: str = "") -> dict:
         self.n_errors += 1
         return {
-            "raw_action": raw, "model_latency_s": latency, "tokens": {"in": 0, "out": 0},
+            "raw_action": raw, "model_latency_s": latency, "tokens": dict(self.usage),
             "note": f"request failed: {type(exc).__name__}: {exc}", "parsed": None, "error": True,
         }
 

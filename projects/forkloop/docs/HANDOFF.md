@@ -78,7 +78,7 @@ it needs the teacher and a student.
 
 ## What is blocked
 
-**Rung 1 has volume: 8/12 family-3 episodes verified** (66.7 % [39.1, 86.2]; `runs/teacher-pilot4`, `runs/teacher-f3-s0-9`, `runs/teacher-f3-s1-9`; `scripts/episode_table.py` prints the per-episode table, `runs/exports/` holds the SFT pairs — 573 examples from the 8 verified episodes). $2.22 per episode, $4.00 per verified episode, all but a cent of it Opus. **Every failure is the 60-action budget, and three of the four were spent recovering from 2–3 Chrome tab crashes** (`docs/spikes.md`). The crashes, not the policy, are the next thing to fix: they happen with `--disable-gpu` in place, `chrome.log` shows `Network service crashed`, and the guest kernel logged RCU stalls mid-episode — suspect memory pressure on the 4 GB desktop or vCPU starvation on the host. Try one collect at `mem_mb: 8192` (world.yaml `resources`, 4 vCPU/8 GB is $0.248/h) and compare crash counts; if that fixes it the 4 GB price is not the real price.
+**Rung 1 has volume: 11/17 family-3 episodes verified** (64.7 % [41.3, 82.7]; `runs/teacher-pilot4`, `runs/teacher-f3-s0-9`, `runs/teacher-f3-s1-9`, `runs/teacher-f3-s10-14-8gb`; `scripts/episode_table.py` prints the per-episode table, `runs/exports/` holds the SFT pairs — 746 examples from the 11 verified episodes). $2.22 per episode, $4.00 per verified episode, all but a cent of it Opus. **Every failure is the 60-action budget, and three of the four were spent recovering from 2–3 Chrome tab crashes** (`docs/spikes.md`). The crashes, not the policy, are the next thing to fix: they happen with `--disable-gpu` in place, `chrome.log` shows `Network service crashed`, and the guest kernel logged RCU stalls mid-episode — suspect memory pressure on the 4 GB desktop or vCPU starvation on the host. `cpu`/`mem_mb` are ignored on forks (measured: a `--mem-mb 8192` collect ran at 4031 MB) and `free -m` shows 2.8 GB available at episode end, so memory is not the lead. Use `scripts/chrome_crash_probe.py` (replays a verified trajectory on fresh forks, counts crashpad reports, no Opus) to compare Chrome flag sets via `FORKLOOP_CHROME_FLAGS` / `FORKLOOP_CHROME_DROP`; the winning set goes into `chrome_base_flags` and `browser_setup.sh`.
 
 **The teacher completed family 3 end to end** (pilot 3, seed 1, `runs/teacher-pilot3`): right authorization number, letter downloaded, appeal filed with attachment via the GTK chooser; every effect check passed. It scored 0 only because OpenEMR rewrites `uuid` on rows it displays and the checksum oracle counted that as collateral — fixed with `oracle.ignore_columns` in `world.yaml` (`docs/contracts.md` §6). Seeds 1 and 3 then scored 1.0 (pilot 4).
 
@@ -119,15 +119,43 @@ cannot run on this account in either mode. Use `--best-of 1`.
 
 ## Next steps, in order
 
-1. **Chrome tab crashes** (see "What is blocked"): run seeds 10–14 once at 8 GB
-   and once at 4 GB, compare the `crashes`/`netsvc` columns of
-   `scripts/episode_table.py`, and read the new `sys.txt`/`dmesg.log` stall
-   lines against `t_wall`. Whichever wins becomes the world default.
+1. **Chrome tab crashes** (see "What is blocked"): re-run
+   `scripts/chrome_crash_probe.py --stress 6` for the baseline and
+   `FORKLOOP_CHROME_FLAGS="--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"`
+   once forks stop dying (2026-09-03 02:30–03:00 UTC five of eight probe forks
+   vanished on host `i-00cac13223691ff7d`). Result so far (`docs/spikes.md`):
+   swiftshader 5/6 completed replays verified vs baseline 2/3, about one
+   crash report per replay under both — but forks *died* 5/8 under baseline
+   vs 1/7 under swiftshader (last pairs interleaved on one host: 1/2 vs 0/2).
+   Suggestive, not proven. Next: run seeds 15–19 with
+   `FORKLOOP_CHROME_FLAGS="--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"`
+   and compare `scripts/episode_table.py` crash columns and machine deaths
+   with seeds 0–14; adopt in `chrome_base_flags`/`browser_setup.sh` if it
+   holds. Ask Solari about the stalls/deaths regardless (ids and times in
+   `docs/solari-repro.md`).
+   **Cheaper teacher candidate: OpenAI GPT-5.6 Luna** ($0.20/$1.20 per 1M vs
+   Opus $5/$25; vision + computer-use listed as supported; weak long-context
+   recall, slow at xhigh). The OpenAI-compatible student path is wired for it —
+   put `OPENAI_API_KEY` in `~/.config/forkloop/env`, then
+   `collect --policy student --student-url https://api.openai.com/v1 --model gpt-5.6-luna --effort high --seeds 0-2 --pool-mode fork`
+   (text actions, no native tool; `metrics` prices it). Under $1 for three seeds.
+   **Status 2026-09-03 (`docs/spikes.md`):** grounds well, 1.5–2.4 s per call,
+   ≈ $0.03 per episode; 0/6 with the plain compact prompt at any effort
+   (loops on an already-focused field), 0/3 with the hosted prompt
+   (`forkloop/policies/prompts/hosted_gui_agent.md`, `--system-prompt-file`,
+   `--history-k 16`) but no loops and the right auth number read on one seed —
+   it runs out of the 60-action budget. Third run = `--prev-shot`
+   (previous screenshot too) + `--max-steps 120 --max-seconds 900`
+   (`run.json` records `budget_override`). If that verifies, Luna is the
+   volume teacher; if not, the next lever is OpenAI's native computer tool.
+   Cheaper lever already in: the teacher caches its prompt (moving breakpoint
+   + pruning hysteresis), which should cut Opus input cost by more than half;
+   check `cache_read` in the next run's `metrics`.
 2. **More family-3 seeds and the other families** (the command below; seeds
-   0–9 are done; the 429/orphan failure mode is handled by the pool now):
+   0–14 are done; the 429/orphan failure mode is handled by the pool now):
    ```bash
    ./venv/bin/python -m forkloop.cli collect --world claims-ops-v1 --policy teacher \
-     --families resolve_denial --seeds 10-19 --best-of 1 --pool-mode fork --concurrency 2
+     --families resolve_denial --seeds 15-24 --best-of 1 --pool-mode fork --concurrency 2
    ```
    `--best-of` > 1 cannot work on this account (forks are not snapshottable).
    Budget: about $2.20 of Opus per episode; Solari is negligible.
@@ -163,6 +191,10 @@ same areas.
   `["ctrl", "a"]` types the letter a. The backend now joins them into `"ctrl+a"`.
 - **Keyboard focus is not guaranteed after a fork.** Navigation clicks the
   omnibox at (640, 90) before typing a URL.
+- **The control WebSocket drops mid-episode now and then** (close code 1000/1006;
+  the SDK then raises `ConnectionError: Not connected`). `SolariMachine` re-dials
+  and retries the operation once (`_call`, `reconnects` counter); a drop that
+  does not recover within 30 s surfaces as `BackendError`.
 - **A fresh venv needs the `teacher` extra** or every model call fails with
   `ModuleNotFoundError: anthropic` while the desktops keep billing; `collect`
   now refuses to start without it. **A killed `collect` leaves its machines

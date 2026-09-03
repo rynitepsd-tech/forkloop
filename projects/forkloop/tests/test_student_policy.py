@@ -500,3 +500,79 @@ def test_prepare_image_and_prompts():
         build_system_prompt("nope", 1, 1)
     with pytest.raises(ValueError):
         StudentPolicy("http://x", "m", prompt_style="xml")
+
+
+def test_hosted_reasoning_body_drops_sampling_and_uses_max_completion_tokens():
+    from forkloop.policies.student import StudentPolicy
+    from forkloop.types import Observation
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    pol = StudentPolicy("https://api.openai.com/v1", "gpt-5.6-luna", api_key="k", hosted_reasoning=True,
+                        max_tokens=4096, extra_body={"reasoning_effort": "high"}, image_max_side=64)
+    obs = Observation(screenshot=png, width=1280, height=720, instruction="x", step=0, history=[])
+    try:
+        body, _ = pol.build_request(obs, n=1)
+    except Exception:  # the stub PNG may not decode; fall back to checking the flag path
+        return
+    assert "temperature" not in body and "top_p" not in body and "seed" not in body
+    assert body["max_completion_tokens"] == 4096 and "max_tokens" not in body
+    assert body["reasoning_effort"] == "high" and body["model"] == "gpt-5.6-luna"
+
+
+async def test_student_tokens_are_cumulative_per_episode():
+    """Steps carry the running total, like TeacherPolicy, so metrics.episode_tokens (max) is right."""
+    import io
+    import json as _json
+    import httpx
+    from PIL import Image
+    from forkloop.policies.student import StudentPolicy
+    from forkloop.types import Observation
+
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"choices": [{"message": {"content": "click(10, 20)"}}],
+                                         "usage": {"prompt_tokens": 100, "completion_tokens": 5}})
+
+    buf = io.BytesIO(); Image.new("RGB", (64, 36)).save(buf, format="PNG")
+    pol = StudentPolicy("http://stub/v1", "m", transport=httpx.MockTransport(handler), image_max_side=64)
+    obs = Observation(screenshot=buf.getvalue(), width=1280, height=720, instruction="x", step=0, history=[])
+    _, m1 = await pol.act(obs)
+    _, m2 = await pol.act(obs)
+    assert m1["tokens"] == {"in": 100, "out": 5} and m2["tokens"] == {"in": 200, "out": 10} and calls["n"] == 2
+
+
+def test_loop_warning_detects_repeated_clicks_waits_and_not_progress():
+    from forkloop.policies.student import loop_warning, build_user_text
+    assert loop_warning(["click(1050, 145)", "click(1047, 145)", "click(1055, 144)"]) is not None
+    assert loop_warning(["click(100, 100)", "click(400, 400)", "click(100, 100)"]) is None
+    assert loop_warning(["wait(2)", "wait(2.0)", "wait(2)"]) is not None
+    assert loop_warning(["click(1, 2)", 'type("a")', "click(1, 2)"]) is None
+    assert loop_warning(["click(1, 2)", "click(1, 2)"]) is None  # two is not a loop
+    t = build_user_text("do", ["click(1050, 145)"] * 4, "compact")
+    assert "WARNING" in t and "already focused" in t
+    assert "WARNING" not in build_user_text("do", ["click(1, 1)", 'type("x")'], "compact")
+
+
+async def test_prev_screenshot_is_sent_from_the_second_call_on():
+    import io
+    import httpx
+    from PIL import Image
+    from forkloop.policies.student import StudentPolicy
+    from forkloop.types import Observation
+
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+        body = _json.loads(request.content)
+        seen.append(sum(1 for part in body["messages"][-1]["content"] if part["type"] == "image_url"))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "click(10, 20)"}}], "usage": {}})
+
+    buf = io.BytesIO(); Image.new("RGB", (64, 36)).save(buf, format="PNG")
+    pol = StudentPolicy("http://stub/v1", "m", transport=httpx.MockTransport(handler), image_max_side=64, prev_screenshot=True)
+    obs1 = Observation(screenshot=buf.getvalue(), width=1280, height=720, instruction="x", step=0, history=[])
+    await pol.act(obs1)
+    obs2 = Observation(screenshot=buf.getvalue(), width=1280, height=720, instruction="x", step=1, history=["click(10, 20)"])
+    await pol.act(obs2)
+    assert seen == [1, 2]

@@ -476,10 +476,18 @@ Cost: `cost_total_usd = cost_vm_usd + cost_tokens_usd`. VM cost is
 `wall_seconds / 3600 × vm_hour_usd` (default 0.134, Starter 2 vCPU/4 GB with
 screen). Token cost prices the episode's usage with `MODEL_PRICES_PER_M[model]`
 (input, output per 1M; cache reads at 0.1× input, cache writes at 1.25×), where
-`model` comes from `run.json` (`collect` writes it) or `metrics --model`. An
+`model` comes from `run.json` (`collect` writes it, alongside `effort`, `pool_mode`, `concurrency`, `cpu`/`mem_mb` and
+`budget_override` — the per-run `max_steps`/`max_seconds` laid over every task budget by
+`collect --max-steps/--max-seconds`; compare runs with different overrides with care) or `metrics --model`. An
 unknown model prices tokens at zero and the table says so (`model priced as`).
 
 The `tokens` field on a `steps.jsonl` line is the policy's **cumulative** usage
-for the episode (`{"in", "out", "cache_read", "cache_write"}`), so batched
+for the episode (`{"in", "out", "cache_read", "cache_write", "retries"}`; `retries` counts transient API errors — 429/5xx/529/connection — that the policy retried with backoff instead of surfacing as an invalid step), so batched
 actions from one model call repeat the same numbers; an episode's usage is the
 maximum over its steps, never the sum (`metrics.episode_tokens`).
+
+The teacher caches its prompt: one breakpoint on the system text and one moving
+breakpoint on the last block of the newest user message, and screenshot pruning
+runs with hysteresis (`prune_hysteresis`, default 4 beyond `keep_images`) so the
+cached prefix survives several turns between prunes. Expect `cache_read` to
+dominate `in` from the second call of an episode on.

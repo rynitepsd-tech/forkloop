@@ -9,6 +9,7 @@ snapshot id. Everything the agent could touch lives inside the VM so that one
 
 from __future__ import annotations
 
+import os
 import base64
 import json
 from pathlib import Path
@@ -144,7 +145,7 @@ class ClaimsOpsWorld(World):
             return {}
         out: dict[str, str] = {}
         for name, cmd in (("chrome.log", "tail -n 200 /home/desktop/chrome.log 2>/dev/null"),
-                          ("sys.txt", "uptime; echo; free -m; echo; df -h / | tail -1; echo; cat /proc/loadavg"),
+                          ("sys.txt", "uptime; echo; nproc; free -m; echo; df -h / | tail -1; echo; cat /proc/loadavg"),
                           ("dmesg.log", "dmesg 2>/dev/null | grep -E 'rcu:|stall|Out of memory|oom-kill|segfault|traps:|hung task' | tail -n 30; echo '--- tail'; dmesg 2>/dev/null | tail -n 60"),
                           ("chrome_ps.txt", "ps -eo pid,rss,etimes,args --sort=-rss | grep -a '[c]hrome' | cut -c1-600 | head -20")):
             try:
@@ -153,6 +154,11 @@ class ClaimsOpsWorld(World):
             except Exception as e:  # noqa: BLE001
                 out[name] = f"(unavailable: {type(e).__name__}: {e})"
         return out
+
+    chrome_base_flags = ("--no-first-run", "--no-default-browser-check", "--user-data-dir=/home/desktop/.config/forkloop-chrome",
+                         "--password-store=basic", "--window-position=0,0", "--window-size=1280,720",
+                         "--disable-session-crashed-bubble", "--disk-cache-size=1", "--media-cache-size=1",
+                         "--disable-infobars", "--disable-gpu", "--disable-dev-shm-usage", "--enable-logging=stderr", "--v=0")
 
     async def ensure_chrome_gpu_flag(self, machine: Any) -> bool:
         """Relaunch Chrome with ``--disable-gpu`` if the snapshot's Chrome lacks it.
@@ -165,15 +171,18 @@ class ClaimsOpsWorld(World):
         screen; both app logins live in the profile and survive). Returns True when
         a relaunch happened.
         """
-        r = await machine.exec("sh", ["-c", "ps -eo args | grep -m1 '[g]oogle-chrome' | grep -c -- '--disable-gpu'"])
-        if r.stdout.strip() == "1":
-            return False
+        # Experiment hooks (docs/limitations.md, Chrome tab crashes): FORKLOOP_CHROME_FLAGS appends
+        # flags, FORKLOOP_CHROME_DROP removes base flags (space-separated); either forces a relaunch.
+        extra = os.environ.get("FORKLOOP_CHROME_FLAGS", "").split()
+        drop = set(os.environ.get("FORKLOOP_CHROME_DROP", "").split())
+        if not extra and not drop:
+            r = await machine.exec("sh", ["-c", "ps -eo args | grep -m1 '[g]oogle-chrome' | grep -c -- '--disable-gpu'"])
+            if r.stdout.strip() == "1":
+                return False
+        flags = [f for f in self.chrome_base_flags if f not in drop] + extra
         script = (
             "pkill -x chrome; sleep 1.5; runuser -u desktop -- env DISPLAY=:0 HOME=/home/desktop XDG_RUNTIME_DIR=/run/desktop "
-            "setsid -f google-chrome --no-first-run --no-default-browser-check --user-data-dir=/home/desktop/.config/forkloop-chrome "
-            "--password-store=basic --window-position=0,0 --window-size=1280,720 --disable-session-crashed-bubble "
-            "--disk-cache-size=1 --media-cache-size=1 --disable-infobars --disable-gpu --disable-dev-shm-usage "
-            "--enable-logging=stderr --v=0 'http://localhost:8080/claims' "
+            "setsid -f google-chrome " + " ".join(flags) + " 'http://localhost:8080/claims' "
             ">/home/desktop/chrome.log 2>&1; sleep 6"
         )
         await machine.exec("bash", ["-c", script], timeout_ms=60_000)

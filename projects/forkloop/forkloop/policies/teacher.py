@@ -13,6 +13,7 @@ never sees the manifest.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import os
@@ -88,14 +89,14 @@ class TeacherPolicy:
         self.last_confidence: Optional[float] = None
         self.last_text = ""
         self.scale = 1.0
-        self.usage = {"in": 0, "out": 0, "cache_read": 0, "cache_write": 0}
+        self.usage = {"in": 0, "out": 0, "cache_read": 0, "cache_write": 0, "retries": 0}
 
     @property
     def client(self) -> Any:
         if self._client is None:
             import anthropic  # type: ignore
 
-            self._client = anthropic.AsyncAnthropic(default_headers=anthropic_default_headers())
+            self._client = anthropic.AsyncAnthropic(default_headers=anthropic_default_headers(), max_retries=4)
         return self._client
 
     # -------------------------------------------------------------- api
@@ -113,8 +114,24 @@ class TeacherPolicy:
         self.scale = scale
         return {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": _b64png(small)}}
 
+    #: Prune only once this many screenshots beyond ``keep_images`` have accumulated, so the
+    #: cached prefix survives several turns between prunes instead of changing on every call.
+    prune_hysteresis = 4
+
     def _prune_images(self) -> None:
-        """Keep only the last ``keep_images`` screenshots in history (docs recommend ≤ 20)."""
+        """Keep only the last ``keep_images`` screenshots in history (docs recommend ≤ 20).
+
+        Pruning rewrites blocks deep in the prefix, which invalidates the prompt cache from
+        that point on; with hysteresis the rewrite happens every ``prune_hysteresis`` turns
+        rather than every turn, so most calls read the whole history from cache.
+        """
+        total = sum(1 for m in self.messages if m["role"] == "user" and isinstance(m["content"], list)
+                    for b in m["content"] if b.get("type") == "image")
+        total += sum(1 for m in self.messages if m["role"] == "user" and isinstance(m["content"], list)
+                     for b in m["content"] if b.get("type") == "tool_result" and isinstance(b.get("content"), list)
+                     for i in b["content"] if i.get("type") == "image")
+        if total <= self.keep_images + self.prune_hysteresis:
+            return
         seen = 0
         for msg in reversed(self.messages):
             if msg["role"] != "user" or not isinstance(msg["content"], list):
@@ -134,7 +151,43 @@ class TeacherPolicy:
                         if seen > self.keep_images:
                             block["content"][j] = {"type": "text", "text": "(earlier screenshot omitted)"}
 
+    #: Transient API failures are retried here (with backoff, on top of the SDK's own retries)
+    #: instead of surfacing as an invalid step: a 529 that costs a budgeted action is a
+    #: property of the harness, not of the policy being measured.
+    transient_status = (408, 409, 429, 500, 502, 503, 504, 529)
+    transient_names = ("APIConnectionError", "APITimeoutError", "OverloadedError", "RateLimitError",
+                       "InternalServerError")
+    retry_delays_s = (2.0, 4.0, 8.0, 16.0, 30.0, 60.0)
+
+    def _is_transient(self, e: BaseException) -> bool:
+        return (getattr(e, "status_code", None) in self.transient_status
+                or type(e).__name__ in self.transient_names)
+
     async def _call_model(self, obs: Observation) -> Any:
+        for attempt, delay in enumerate(self.retry_delays_s + (None,)):
+            try:
+                return await self._call_model_once(obs)
+            except Exception as e:  # noqa: BLE001
+                if delay is None or not self._is_transient(e):
+                    raise
+                self.usage["retries"] += 1
+                await asyncio.sleep(delay)
+        raise RuntimeError("unreachable")
+
+    def _mark_cache_breakpoint(self) -> None:
+        """One moving breakpoint on the last block of the newest user message (the system prompt
+        carries the other): every call then reads the previous turns from cache."""
+        for m in self.messages:
+            if isinstance(m.get("content"), list):
+                for b in m["content"]:
+                    b.pop("cache_control", None)
+        for m in reversed(self.messages):
+            if m["role"] == "user" and isinstance(m.get("content"), list) and m["content"]:
+                m["content"][-1]["cache_control"] = {"type": "ephemeral"}
+                return
+
+    async def _call_model_once(self, obs: Observation) -> Any:
+        self._mark_cache_breakpoint()
         kwargs: dict[str, Any] = dict(
             model=self.model, max_tokens=self.max_tokens, system=self._system(obs), messages=self.messages,
             tools=self._tools(), output_config={"effort": self.effort},

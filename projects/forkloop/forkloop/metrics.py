@@ -37,6 +37,10 @@ MODEL_PRICES_PER_M: dict[str, tuple[float, float]] = {
     "claude-sonnet-5": (2.0, 10.0),
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-haiku-4-5": (1.0, 5.0),
+    # OpenAI GPT-5.6 family, developers.openai.com/api/docs/pricing read 2026-09-03 (short context)
+    "gpt-5.6-luna": (0.2, 1.2),
+    "gpt-5.6-terra": (2.0, 12.0),
+    "gpt-5.6-sol": (4.0, 20.0),
 }
 CACHE_READ_MULT, CACHE_WRITE_MULT = 0.1, 1.25
 

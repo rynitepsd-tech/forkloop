@@ -63,9 +63,13 @@ class Env:
                  pool: Optional[WorkerPool] = None, recorder: Optional[Recorder] = None,
                  history_k: int = 8, settle_s: float = 0.6, stable_after_action: bool = False,
                  max_invalid: int = 10, reset_controller: Optional[ResetController] = None,
-                 record_extra: Optional[dict[str, Any]] = None) -> None:
+                 record_extra: Optional[dict[str, Any]] = None, budget_override: Optional[dict[str, Any]] = None) -> None:
         self.world = world
         self.backend = backend
+        #: Per-run budget knobs (max_steps / max_seconds) laid over every task's own budget.
+        #: A teacher that needs more clicks than the task budget allows is still a valid data
+        #: source; the run records the override so results are never compared blindly.
+        self.budget_override = dict(budget_override or {})
         self.family = family or (world.config.families[0] if world.config.families else None)
         self.split = split
         self.pool = pool or WorkerPool(backend, world, size=1)
@@ -175,7 +179,7 @@ class Env:
                                     tokens=meta.get("tokens"), policy_note=str(meta.get("note", "") or ""),
                                     search=meta.get("search"), error=error)
         # termination
-        budget = ep.task.budget
+        budget = {**ep.task.budget, **self.budget_override}
         reward = 0.0
         if parsed is not None and parsed.is_terminal:
             ep.terminated = True

@@ -60,6 +60,19 @@ directory should be read as *design intent*, not result.
   the `--disable-gpu` fix), and `env.checkpoint()` — the branch point of
   `best_of_n` in both `revert` and `fork` modes — cannot run on this account.
   `collect --best-of 1` is the only mode that works today.
+- **`cpu` and `mem_mb` are ignored on `from_snapshot` creates** (measured
+  2026-09-03, `runs/teacher-f3-s10-14-8gb`): `create_desktop(from_snapshot=…,
+  cpu=4, mem_mb=8192)` returns a machine with 2 vCPUs and 4031 MB (`sys.txt`).
+  The shape is fixed by the snapshot, like the disk. A bigger-desktop
+  experiment therefore needs a golden rebuilt at the bigger shape
+  (`forkloop build-world --cpu 4 --mem-mb 8192`), one more 7–9 GB snapshot,
+  and a second env var; it has not been done.
+- **Forks can vanish mid-episode** (2026-09-03, five of eight probe forks
+  within 2.5 min of creation, one host): the SDK raises `Not connected`, the
+  reconnect gets 404, the machine is gone. `SolariMachine._call` re-dials and
+  retries once; a dead VM surfaces as `BackendError` and the episode is lost.
+  `collect --reset-retries` only covers resets, not mid-episode deaths — a
+  seed whose machine dies is recorded as an error and must be re-run by hand.
 - Attachment upload through the GTK file chooser has not been exercised.
 - An OpenEMR page reload (F5) on the tabs UI drops the session; agents that
   reload will have to log in again (credentials are in the instruction).
@@ -73,7 +86,7 @@ directory should be read as *design intent*, not result.
   a live snapshot are still *unverified*.
   The reviewer's claim that recording is rejected with snapshot-restored
   machines is likewise untested; forkloop never depends on native recording.
-- **The teacher has run on family 3 only** (8/12 verified over seeds 0–9 plus pilot 4, `runs/teacher-*`; every failure is the 60-action budget after Chrome tab crashes or PDF-viewer confusion — see `docs/spikes.md`);
+- **The teacher has run on family 3 only** (11/17 verified over seeds 0–14 plus pilot 4, `runs/teacher-*`; every failure is the 60-action budget after Chrome tab crashes or PDF-viewer confusion — see `docs/spikes.md`);
   families 1 and 2 have not been driven by it yet. `forkloop metrics` now prices
   model tokens (`MODEL_PRICES_PER_M`, model read from `run.json`) on top of VM
   time: pilot 4 is $2.10 per verified episode, of which $2.08 is Opus tokens

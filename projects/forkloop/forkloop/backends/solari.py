@@ -131,17 +131,59 @@ class SolariMachine:
             except Exception:  # noqa: BLE001
                 raise _wrap_error(e)
 
+    # ---------------------------------------------------------- channel resilience
+    #: Times the control channel dropped mid-episode and was re-dialled.
+    reconnects = 0
+    reconnect_timeout_s = 30.0
+
+    @staticmethod
+    def _is_connection_error(e: BaseException) -> bool:
+        name = type(e).__name__
+        return (name in ("ConnectionError", "ConnectionClosed", "ConnectionClosedError", "ConnectionClosedOK",
+                         "WebSocketException", "InvalidState")
+                or "Not connected" in str(e) or "connection is closed" in str(e).lower())
+
+    async def _reconnect(self) -> None:
+        """The control WebSocket drops now and then (close code 1000/1006, measured 2026-09-02/03).
+        Close it and dial again until health answers, then let the caller retry once."""
+        t0 = time.monotonic()
+        while True:
+            try:
+                await self._d.close()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                await self._d.connect()
+                await self.wait_ready(5.0)
+                self.reconnects += 1
+                return
+            except Exception as e:  # noqa: BLE001
+                if time.monotonic() - t0 > self.reconnect_timeout_s:
+                    raise BackendError(f"machine {self.id}: control channel lost and not recovered "
+                                       f"after {self.reconnect_timeout_s:.0f}s: {e}") from e
+                await asyncio.sleep(0.5)
+
+    async def _call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+        """Run one channel operation; on a dropped channel reconnect and retry it once."""
+        try:
+            return await fn(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            if not self.alive or not self._is_connection_error(e):
+                raise
+            await self._reconnect()
+            return await fn(*args, **kwargs)
+
     # ---------------------------------------------------------- controller
     async def exec(self, cmd: str, args: Optional[list[str]] = None, *, timeout_ms: Optional[int] = None,
                    cwd: Optional[str] = None, env: Optional[dict[str, str]] = None) -> ExecResult:
-        r = await self._d.commands.run(cmd, args=list(args or []), cwd=cwd, env=env, timeout_ms=timeout_ms)
+        r = await self._call(self._d.commands.run, cmd, args=list(args or []), cwd=cwd, env=env, timeout_ms=timeout_ms)
         return ExecResult(int(r.exitCode), r.stdout, r.stderr)
 
     async def read_file(self, path: str) -> bytes:
-        return await self._d.files.read(path)
+        return await self._call(self._d.files.read, path)
 
     async def write_file(self, path: str, data: bytes | str, mode: Optional[int] = None) -> None:
-        await self._d.files.write(path, data, mode)
+        await self._call(self._d.files.write, path, data, mode)
 
     # ---------------------------------------------------------- agent side
     def _gui(self) -> None:
@@ -150,7 +192,7 @@ class SolariMachine:
 
     async def screenshot(self) -> bytes:
         self._gui()
-        return await self._d.screenshot(format="png")
+        return await self._call(self._d.screenshot, format="png")
 
     async def display_size(self) -> tuple[int, int]:
         try:
@@ -161,13 +203,13 @@ class SolariMachine:
 
     async def click(self, x: int, y: int, *, button: str = "left") -> None:
         self._gui()
-        await self._d.mouse.click(int(x), int(y), button=button)
+        await self._call(self._d.mouse.click, int(x), int(y), button=button)
 
     async def double_click(self, x: int, y: int) -> None:
-        await self._d.mouse.double_click(int(x), int(y))
+        await self._call(self._d.mouse.double_click, int(x), int(y))
 
     async def move(self, x: int, y: int) -> None:
-        await self._d.mouse.move(int(x), int(y))
+        await self._call(self._d.mouse.move, int(x), int(y))
 
     async def scroll(self, x: int, y: int, *, direction: str, amount: int) -> None:
         # The SDK's mouse.scroll takes a button code; xdotool wheel buttons are 4 (up) / 5 (down),
@@ -175,27 +217,27 @@ class SolariMachine:
         # the agent channel's key/mouse primitives: move, then repeated wheel clicks through exec is
         # NOT allowed (controller channel). We therefore use keyboard paging for vertical scroll and
         # horizontal arrows for horizontal scroll, which every browser honours.
-        await self._d.mouse.move(int(x), int(y))
+        await self._call(self._d.mouse.move, int(x), int(y))
         key = {"down": "Page_Down", "up": "Page_Up", "left": "Left", "right": "Right"}[direction]
         if direction in ("down", "up"):
             n = max(1, round(amount / 3))
         else:
             n = amount
         for _ in range(n):
-            await self._d.keyboard.press([key])
+            await self._call(self._d.keyboard.press, [key])
 
     async def drag(self, x1: int, y1: int, x2: int, y2: int) -> None:
-        await self._d.mouse.drag({"x": int(x1), "y": int(y1)}, {"x": int(x2), "y": int(y2)})
+        await self._call(self._d.mouse.drag, {"x": int(x1), "y": int(y1)}, {"x": int(x2), "y": int(y2)})
 
     async def type_text(self, text: str) -> None:
         self._gui()
-        await self._d.keyboard.type(text)
+        await self._call(self._d.keyboard.type, text)
 
     async def press(self, keys: list[str]) -> None:
         self._gui()
         # The guest presses a list of keys one after another; a chord must be one xdotool
         # string ("ctrl+l"). Verified on a live desktop: ["ctrl", "a"] typed the letter a.
-        await self._d.keyboard.press(["+".join(keys)] if len(keys) > 1 else list(keys))
+        await self._call(self._d.keyboard.press, ["+".join(keys)] if len(keys) > 1 else list(keys))
 
 
 class SolariBackend:
@@ -242,7 +284,16 @@ class SolariBackend:
             raise _wrap_error(e)
         self.counters["create"] += 1
         m = SolariMachine(d, self, parse_resolution(resolution), meta, kind=self.kind)
-        await m.connect(wait_ready_s=self.ready_timeout_s)
+        try:
+            await m.connect(wait_ready_s=self.ready_timeout_s)
+        except Exception:
+            # A machine that never became ready still counts against the concurrency cap
+            # (measured 2026-09-03: one such leak turned every later create into a 429).
+            try:
+                await m.kill()
+            except Exception:  # noqa: BLE001
+                pass
+            raise
         return m
 
     async def attach(self, machine_id: str, *, resolution: str = "1280x720") -> SolariMachine:
