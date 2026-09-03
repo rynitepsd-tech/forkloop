@@ -160,8 +160,11 @@ cannot run on this account in either mode. Use `--best-of 1`.
    Opus stays the reference for audits and hard families. v5 prompt
    (`hosted_gui_agent_v5.md`: one tab per app, exact transcription, keep
    the number in reasoning) + `detail: high` images is being retried on the
-   seeds v4 failed (`runs/luna-high-v5-retry`). Next: Luna on families 1–2,
-   then seeds 20–99 (≈ $8) for the SFT set.
+   seeds v4 failed (`runs/luna-high-v5-retry`): **7/9**, so Luna covers
+   18/20 seeds within two attempts. Clean v5 pass on seeds 0–19 =
+   `runs/luna-high-v5-s0-19` (single attempt, the fair number). Next: Luna
+   on families 1–2, then seeds 20–99 (≈ $8) for the SFT set; keep Opus for
+   audits.
    Cheaper lever already in: the teacher caches its prompt (moving breakpoint
    + pruning hysteresis), which should cut Opus input cost by more than half;
    check `cache_read` in the next run's `metrics`.
