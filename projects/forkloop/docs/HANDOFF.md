@@ -119,6 +119,8 @@ cannot run on this account in either mode. Use `--best-of 1`.
 
 ## Next steps, in order
 
+**Families 1–2, Luna v6, seeds 0–9 with `--retry-failed 2` (2026-09-03, `runs/luna-v6-fam12-s0-9`): 7/20 seeds verified within three attempts** (family 1 3/10, family 2 4/10 — all four the portal-only variant; `docs/spikes.md` has the full breakdown). Three fixes landed from the failures, all offline-green: (1) prompt v7 (`hosted_gui_agent_v7.md`) replaces v6's wrong "cancel the provider-unavailable dialog" rule with "click OK" and forbids recomputing the target from a typed date — **not yet run**; (2) family-2 seeding now copies the patient's sex and address onto the insurance policy (OpenEMR 8.3 refuses to save a policy without them; confirmed live), byte-identical manifests otherwise; (3) the `ui_path` tripwire also accepts an OpenEMR `log` row whose SQL names the changed table and pk (the seed-2 `DIRECT_DB_WRITE` false negative), live comment format still unconfirmed. `collect --retry-failed N` is in and works (`scripts/inspect_episode.py`, `scripts/audit_probe.py` are the new triage tools; `tests/conftest.py` scrubs golden ids so the suite is green with `~/.config/forkloop/env` sourced). Next for families 1–2: rebuild is not needed; run family 1 on v7 to test the OK-dialog fix, and re-run the family-2 two-system seeds now that the policy seeds address fields.
+
 1. **Chrome tab crashes** (see "What is blocked"): re-run
    `scripts/chrome_crash_probe.py --stress 6` for the baseline and
    `FORKLOOP_CHROME_FLAGS="--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"`

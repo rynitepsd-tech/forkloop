@@ -74,6 +74,11 @@ CREATE TABLE insurance_data (
   subscriber_lname        TEXT,
   subscriber_DOB          TEXT,
   subscriber_relationship TEXT,
+  subscriber_sex          TEXT,
+  subscriber_street       TEXT,
+  subscriber_city         TEXT,
+  subscriber_state        TEXT,
+  subscriber_postal_code  TEXT,
   pid                     INTEGER NOT NULL DEFAULT 0,
   date                    TEXT,
   UNIQUE (pid, type, date)

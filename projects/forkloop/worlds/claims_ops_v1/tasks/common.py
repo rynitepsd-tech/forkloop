@@ -191,15 +191,22 @@ class Person:
 
     def openemr_sql(self, rng: random.Random, log_id: int) -> str:
         company_id, _ = PAYERS[self.plan]
+        # Draw order is part of the generator contract (byte-identical manifests per seed): sex,
+        # street number, street name, ZIP, then the two phone draws, exactly as before.
+        sex = rng.choice(["Female", "Male"])
+        street = f"{rng.randint(100, 9999)} {rng.choice(['Oak', 'Elm', 'Cedar', 'Maple'])} St"
+        city, state, postal = "Austin", "TX", f"787{rng.randint(10, 59)}"
+        phone = f"512-555-{rng.randint(100, 999):03d}{rng.randint(0, 9)}"
         stmts = [
             osql.insert_patient(pid=self.pid, fname=self.first, lname=self.last, dob=self.dob,
-                                sex=rng.choice(["Female", "Male"]), street=f"{rng.randint(100, 9999)} {rng.choice(['Oak', 'Elm', 'Cedar', 'Maple'])} St",
-                                city="Austin", state="TX", postal_code=f"787{rng.randint(10, 59)}",
-                                phone_home=f"512-555-{rng.randint(100, 999):03d}{rng.randint(0, 9)}",
+                                sex=sex, street=street, city=city, state=state, postal_code=postal, phone_home=phone,
                                 provider_id=self.provider["openemr_id"], pubpid=str(self.pid)),
+            # The subscriber is the patient; OpenEMR's insurance editor requires these to save a policy.
             osql.insert_insurance(id=self.insurance_id, pid=self.pid, company_id=company_id, plan_name=self.plan,
                                   policy_number=self.member, group_number=self.group, subscriber_fname=self.first,
-                                  subscriber_lname=self.last, subscriber_dob=self.dob, date="2025-01-01"),
+                                  subscriber_lname=self.last, subscriber_dob=self.dob, date="2025-01-01",
+                                  subscriber_sex=sex, subscriber_street=street, subscriber_city=city,
+                                  subscriber_state=state, subscriber_postal_code=postal),
             osql.insert_log(id=log_id, event="patient-record-insert", category="Patient Demographics", user="admin",
                             patient_id=self.pid, comments=f"forkloop seed: patient_data pid={self.pid}", date=sql_ts(ANCHOR - dt.timedelta(days=30))),
         ]

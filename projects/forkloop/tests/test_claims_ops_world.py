@@ -266,3 +266,49 @@ async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
     calls.clear()
     assert await world.ensure_chrome_gpu_flag(machine(False)) is True
     assert len(calls) == 2 and "--disable-gpu" in calls[1] and "pkill -x chrome" in calls[1]
+
+
+def test_insurance_row_carries_subscriber_sex_and_address(world):
+    """OpenEMR 8.3's insurance editor refuses to save a policy with a blank subscriber sex,
+    street, city, state or ZIP (family-2 seed 0, 2026-09-03), so the seeded policy carries the
+    patient's own values; the patient row itself is unchanged."""
+    import re
+
+    t = generate("update_insurance_reconcile", 0, "train")
+    sql = t.seeding["openemr_sql"] if isinstance(t.seeding, dict) else t.seeding.openemr_sql
+    ins = [s for s in sql.splitlines() if s.startswith("INSERT INTO insurance_data")]
+    assert ins, sql[:300]
+    for col in ("subscriber_sex", "subscriber_street", "subscriber_city", "subscriber_state", "subscriber_postal_code"):
+        assert col in ins[0], col
+    pat = next(s for s in sql.splitlines() if s.startswith("INSERT INTO patient_data"))
+    street = re.search(r"'(\d+ (?:Oak|Elm|Cedar|Maple) St)'", pat).group(1)
+    assert street in ins[0] and "'Austin'" in ins[0] and "'TX'" in ins[0]
+
+
+async def test_reschedule_audit_row_logged_under_session_patient(world, backend):
+    """OpenEMR logs a calendar save under the *session's* active chart (patient_id 0 when the
+    appointment was opened from the Finder) with the SQL and its bound values in comments
+    (2026-09-03, family-1 seed 2 was a false DIRECT_DB_WRITE). The loose tripwire accepts a row
+    whose SQL names the changed table and primary key; a row that names neither is still caught."""
+    env = Env(world, backend, family="reschedule_constrained", settle_s=0)
+    await env.reset(3)
+    ex = env.ep.task.expected
+    move = osql.update_appointment(pc_eid=ex["event_id"], pc_eventDate=ex["target_date"], pc_endDate=ex["target_date"],
+                                   pc_startTime=ex["window"][0][:5] + ":00", pc_duration=900)
+    openemr_style = (f"UPDATE openemr_postcalendar_events SET pc_eventDate = ?, pc_startTime = ? WHERE pc_eid = ? "
+                     f"('{ex['target_date']}','10:00:00','{ex['event_id']}')")
+    await env.ep.dbs["openemr"].execute_script(
+        move + "\n" + osql.insert_log(id=990004, event="scheduling-update", category="Scheduling", user="admin",
+                                      patient_id=0, comments=openemr_style, date="2026-09-08 10:00:00"))
+    await env.step(Action.done())
+    v = await env.verify()
+    assert v.reward == 1.0, v.to_dict()
+    await env.reset(3)
+    ex = env.ep.task.expected
+    await env.ep.dbs["openemr"].execute_script(
+        move + "\n" + osql.insert_log(id=990005, event="scheduling-update", category="Scheduling", user="admin",
+                                      patient_id=0, comments="UPDATE something_else SET x = ? ('1')", date="2026-09-08 10:00:00"))
+    await env.step(Action.done())
+    v = await env.verify()
+    assert v.reward == 0.0 and v.reason_code == "DIRECT_DB_WRITE", v.to_dict()
+    await env.close()

@@ -331,8 +331,18 @@ def insert_insurance(
     subscriber_relationship: str = "self",
     type: str = "primary",
     date: str | _dt.date = "2025-01-01",
+    subscriber_sex: str | None = None,
+    subscriber_street: str | None = None,
+    subscriber_city: str | None = None,
+    subscriber_state: str | None = None,
+    subscriber_postal_code: str | None = None,
 ) -> str:
     """An ``insurance_data`` row.
+
+    OpenEMR 8.3's insurance editor refuses to save a policy whose subscriber sex,
+    street, city, state or ZIP is blank (measured 2026-09-03: family-2 seed 0 could
+    not be completed through the GUI), so seed them from the patient row. They are
+    optional here so older callers keep emitting byte-identical SQL.
 
     ``provider`` is OpenEMR's (string) foreign key to ``insurance_companies.id``.
     ``date`` is the policy effective date; OpenEMR treats the row with the
@@ -352,6 +362,9 @@ def insert_insurance(
         "subscriber_lname": subscriber_lname,
         "subscriber_DOB": _ymd(subscriber_dob),
         "subscriber_relationship": subscriber_relationship,
+        **{k: v for k, v in {"subscriber_sex": subscriber_sex, "subscriber_street": subscriber_street,
+                              "subscriber_city": subscriber_city, "subscriber_state": subscriber_state,
+                              "subscriber_postal_code": subscriber_postal_code}.items() if v is not None},
         "pid": int(pid),
         "date": _ymd(date),
     })

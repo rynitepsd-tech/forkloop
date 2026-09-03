@@ -367,12 +367,18 @@ class Oracle:
             rows = await self.ctx.dbs[db_name].query(sql, [wm, entity, audit_id])
             n = int(next(iter(rows[0].values()))) if rows else 0
             if n == 0:
-                # OpenEMR's log table keys by patient_id; fall back to "any audit row after watermark
-                # mentioning this pk in comments" for that dialect.
+                # OpenEMR's log table keys by patient_id — the *session's* active chart, not the
+                # patient the changed row belongs to (EventAuditLogger::auditSQLEvent; a calendar
+                # save made from the Finder with no chart open logs under patient_id 0). Its
+                # comments hold the SQL with the bound values appended, so fall back to "any audit
+                # row after the watermark for this patient id, or whose SQL names this row's
+                # primary key" for that dialect.
                 if audit.get("loose"):
+                    ccol = audit.get("comments_col", "comments")
                     sql2 = (f"SELECT COUNT(*) AS n FROM {audit['table']} WHERE {pk_col} > ? "
-                            f"AND ({audit['id_col']} = ? OR {audit.get('comments_col', 'comments')} LIKE ?)")
-                    rows2 = await self.ctx.dbs[db_name].query(sql2, [wm, audit_id, f"%{audit_id}%"])
+                            f"AND ({audit['id_col']} = ? OR {ccol} LIKE ? OR ({ccol} LIKE ? AND {ccol} LIKE ?))")
+                    rows2 = await self.ctx.dbs[db_name].query(
+                        sql2, [wm, audit_id, f"%{audit_id}%", f"%{table}%", f"%'{ch.pk}'%"])
                     n = int(next(iter(rows2[0].values()))) if rows2 else 0
             if n == 0:
                 missing.append({"table": ch.table, "pk": ch.pk, "kind": ch.kind})

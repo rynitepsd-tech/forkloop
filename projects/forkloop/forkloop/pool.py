@@ -12,7 +12,9 @@ Two reset modes:
 from __future__ import annotations
 
 import asyncio
+import os
 import random
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -20,6 +22,21 @@ from typing import Any, Optional
 
 from .backends.base import Backend, CapacityError, ConcurrencyError, Machine
 from .world import World
+
+
+def _log_and_append(events: list[dict[str, Any]], event: dict[str, Any]) -> None:
+    events.append(event)
+    _log(event)
+
+
+def _log(event: dict[str, Any]) -> None:
+    """Echo a pool event to stderr (``FORKLOOP_POOL_LOG=0`` silences it). The in-memory
+    ``events`` list dies with the process, and a collect log without these lines cannot tell a
+    slow Solari restore from a create that was retried after a 429 or a hang."""
+    if os.environ.get("FORKLOOP_POOL_LOG", "1") == "0":
+        return
+    fields = " ".join(f"{k}={v}" for k, v in event.items() if k not in ("t", "event"))
+    print(f"[pool {time.strftime('%H:%M:%S')}] {event.get('event')} {fields}", file=sys.stderr, flush=True)
 
 
 @dataclass
@@ -61,6 +78,8 @@ class Worker:
         self.generation += 1
         self.stats["restores"] += 1
         self.stats["restore_seconds"].append(time.monotonic() - t0)
+        _log({"event": "restored", "worker": self.index, "mode": self.pool.mode, "seconds": round(time.monotonic() - t0, 1),
+              "machine": (self.machine.id[:20] + "…") if self.machine is not None else None})
         return self.machine
 
     async def _revert_or_fall_back(self, snapshot_id: str) -> None:
@@ -106,7 +125,8 @@ class WorkerPool:
                  golden_snapshot: Optional[str] = None, run_id: Optional[str] = None,
                  cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
                  timeout_ms: int = 30 * 60_000, max_retries: int = 10, disk_gb: Optional[int] = None,
-                 fallback_to_fork: bool = True, create_timeout_s: float = 240.0) -> None:
+                 fallback_to_fork: bool = True, create_timeout_s: float = 240.0,
+                 concurrency_backoff_max_s: float = 15.0) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
         self.backend = backend
@@ -116,6 +136,11 @@ class WorkerPool:
         self.fallback_to_fork = fallback_to_fork
         #: Give up on a single create call after this long and retry (the SDK has no timeout of its own).
         self.create_timeout_s = create_timeout_s
+        #: In fork mode every restore kills a machine and creates another; the account keeps counting
+        #: the dying one against the cap for a while, so the create sees 429s. Doubling the wait up
+        #: to 60 s turned that into 130-240 s "restores" (luna-v6-fam12-s0-9, 2026-09-03); the 429
+        #: backoff is capped here so the wait tracks Solari's slot-release latency instead.
+        self.concurrency_backoff_max_s = concurrency_backoff_max_s
         #: None until a revert has been attempted; then True/False for this account.
         self.revert_supported: Optional[bool] = None
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
@@ -187,7 +212,7 @@ class WorkerPool:
                     timeout_ms=self.timeout_ms, disk_gb=self.disk_gb), timeout=self.create_timeout_s)
             except (ConcurrencyError, CapacityError, asyncio.TimeoutError) as e:
                 err = str(e) or f"create timed out after {self.create_timeout_s:.0f}s"
-                self.events.append({"t": time.time(), "event": "create_retry", "attempt": attempt, "error": err})
+                _log_and_append(self.events, {"t": time.time(), "event": "create_retry", "attempt": attempt, "error": err})
                 if attempt == self.max_retries:
                     raise
                 if isinstance(e, ConcurrencyError):
@@ -198,7 +223,7 @@ class WorkerPool:
                     if killed:
                         continue
                 await asyncio.sleep(delay + random.random() * 0.5)
-                delay = min(delay * 2, 60.0)
+                delay = min(delay * 2, self.concurrency_backoff_max_s if isinstance(e, ConcurrencyError) else 60.0)
         raise RuntimeError("unreachable")
 
     async def _ensure_golden(self, machine: Machine) -> tuple[str, bool]:
@@ -217,7 +242,7 @@ class WorkerPool:
                     "or run `forkloop build-world` first")
             sid = await self.world.build(machine, log=lambda s: None)
             self.golden = sid
-            self.events.append({"t": time.time(), "event": "golden_built", "snapshot": sid})
+            _log_and_append(self.events, {"t": time.time(), "event": "golden_built", "snapshot": sid})
             return sid, True
 
     async def reap_orphans(self, *, older_than_s: float = 0.0) -> list[str]:
@@ -227,7 +252,7 @@ class WorkerPool:
         try:
             infos = await self.backend.list_machines(metadata={"forkloop": "1"})
         except Exception as e:  # noqa: BLE001
-            self.events.append({"t": time.time(), "event": "reap_failed", "error": str(e)})
+            _log_and_append(self.events, {"t": time.time(), "event": "reap_failed", "error": str(e)})
             return killed
         for info in infos:
             if info.id in mine or info.state not in ("running", "starting", "paused"):
@@ -239,9 +264,9 @@ class WorkerPool:
                 await self.backend.kill_machine(info.id)
                 killed.append(info.id)
             except Exception as e:  # noqa: BLE001
-                self.events.append({"t": time.time(), "event": "reap_kill_failed", "id": info.id, "error": str(e)})
+                _log_and_append(self.events, {"t": time.time(), "event": "reap_kill_failed", "id": info.id, "error": str(e)})
         if killed:
-            self.events.append({"t": time.time(), "event": "reaped", "ids": killed})
+            _log_and_append(self.events, {"t": time.time(), "event": "reaped", "ids": killed})
         return killed
 
     def stats(self) -> dict[str, Any]:
