@@ -134,8 +134,26 @@ def summarize_run(run_dir: str | Path, **kw: Any) -> dict[str, Any]:
             kw["model"] = json.loads((run_dir / "run.json").read_text()).get("model")
         except (OSError, ValueError):
             pass
-    eps = [load_episode(p) for p in iter_episode_dirs(run_dir)]
+    selected = iter_episode_dirs(run_dir)
+    every = iter_episode_dirs(run_dir, include_superseded=True)
+    eps = [load_episode(p) for p in selected]
     s = summarize_episodes(eps, **kw)
+    # `collect --retry-failed` keeps one selected attempt per seed (the shortest verified one) and
+    # marks the rest superseded. Rates, steps and walls describe the selected attempts; cost and
+    # tokens count every attempt, because every attempt was paid for.
+    chosen = set(selected)
+    superseded = [load_episode(p) for p in every if p not in chosen]
+    s["n_attempts"] = len(every)
+    s["n_superseded"] = len(superseded)
+    if superseded:
+        extra = summarize_episodes(superseded, **{**kw, "model": s.get("model"),
+                                                  "token_prices_per_m": tuple(s["token_prices_per_m"])})
+        for k in ("cost_total_usd", "cost_vm_usd", "cost_tokens_usd"):
+            s[k] = round(s[k] + extra[k], 4)
+        s["tokens"] = {k: s["tokens"][k] + extra["tokens"][k] for k in s["tokens"]}
+        k_ok = s["success_rate"]["k"]
+        s["cost_per_success_usd"] = round(s["cost_total_usd"] / k_ok, 4) if k_ok else None
+        s["cost_per_episode_usd"] = round(s["cost_total_usd"] / len(every), 4)
     s["run_dir"] = str(run_dir)
     return s
 
@@ -147,7 +165,9 @@ def format_table(summary: dict[str, Any]) -> str:
         return f"{x['value'] * 100:.1f}% [{x['lo'] * 100:.1f}, {x['hi'] * 100:.1f}] (n={x['n']})"
 
     rows = [
-        ("episodes", str(summary["n_episodes"])),
+        ("episodes", str(summary["n_episodes"])
+         + (f" selected of {summary['n_attempts']} attempts ({summary['n_superseded']} superseded)"
+            if summary.get("n_superseded") else "")),
         ("success", r(summary["success_rate"])),
         ("milestones", f"{summary['milestone_score']:.3f}"),
         ("median steps", str(summary["median_steps"])),

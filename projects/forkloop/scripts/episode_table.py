@@ -35,6 +35,7 @@ def row(ep_dir: Path, model: str) -> dict:
     toks = episode_tokens(e)
     return {
         "episode": ep_dir.name.rsplit("-", 1)[0],
+        "attempt": e["manifest"].get("attempt", 1),
         "reward": v.get("reward"),
         "reason": v.get("reason_code", "NO_VERDICT"),
         "steps": len(steps),
@@ -55,14 +56,16 @@ def main() -> None:
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--model", default=None)
     ap.add_argument("--md", action="store_true")
+    ap.add_argument("--all-attempts", action="store_true",
+                    help="include attempts that collect --retry-failed superseded (default: selected attempt per seed)")
     a = ap.parse_args()
     rows = []
     for r in a.runs:
         meta = json.loads((Path(r) / "run.json").read_text()) if (Path(r) / "run.json").exists() else {}
         model = a.model or meta.get("model") or "claude-opus-5"
-        for d in iter_episode_dirs(r):
+        for d in iter_episode_dirs(r, include_superseded=a.all_attempts):
             rows.append({"run": Path(r).name, **row(d, model)})
-    cols = ["run", "episode", "reward", "reason", "steps", "waits", "wall_s", "crashes", "netsvc", "crashpad", "stall", "tok_in", "tok_out", "usd"]
+    cols = ["run", "episode", "attempt", "reward", "reason", "steps", "waits", "wall_s", "crashes", "netsvc", "crashpad", "stall", "tok_in", "tok_out", "usd"]
     if a.md:
         print("| " + " | ".join(cols) + " |")
         print("|" + "---|" * len(cols))

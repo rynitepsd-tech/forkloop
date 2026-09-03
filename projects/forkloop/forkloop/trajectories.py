@@ -7,6 +7,12 @@ Layout::
 
 Branch rollouts from search live under ``episodes/<id>/branches/<label>/`` with
 the same layout; ``adopt()`` copies a winning branch's steps into the parent.
+
+``collect --retry-failed`` re-runs failed seeds, so one run may hold several
+attempts of one task. ``select_attempts()`` marks exactly one per (family, seed)
+as ``selected`` and the rest ``superseded`` in their manifests; readers that go
+through ``iter_episode_dirs()`` (metrics, exporters, the scripts) see only the
+selected attempt unless they ask for ``include_superseded=True``.
 """
 
 from __future__ import annotations
@@ -178,8 +184,18 @@ class Recorder:
         eid = episode_id or f"{task.task_id}-{uuid.uuid4().hex[:6]}"
         return EpisodeRecorder(self.dir / "episodes" / eid, task, episode_id=eid, extra=extra)
 
-    def episodes(self) -> list[Path]:
-        return sorted(p for p in (self.dir / "episodes").iterdir() if (p / "manifest.json").exists())
+    def episodes(self, *, include_superseded: bool = False) -> list[Path]:
+        return iter_episode_dirs(self.dir, include_superseded=include_superseded)
+
+    def update_meta(self, **kw: Any) -> None:
+        """Merge keys into ``run.json`` (``collect`` records its attempts here after each pass)."""
+        p = self.dir / "run.json"
+        try:
+            meta = json.loads(p.read_text()) if p.exists() else {}
+        except ValueError:
+            meta = {}
+        meta.update(kw)
+        p.write_text(json.dumps(meta, indent=2, default=str))
 
 
 def _git_sha() -> Optional[str]:
@@ -190,12 +206,63 @@ def _git_sha() -> Optional[str]:
         return None
 
 
-def iter_episode_dirs(run_dir: str | Path) -> list[Path]:
+def _read_json(p: Path) -> Optional[dict[str, Any]]:
+    try:
+        return json.loads(p.read_text()) if p.exists() else None
+    except (OSError, ValueError):
+        return None
+
+
+def iter_episode_dirs(run_dir: str | Path, *, include_superseded: bool = False) -> list[Path]:
+    """Episode directories of a run, sorted by name. Attempts marked ``superseded`` by
+    :func:`select_attempts` are skipped unless ``include_superseded`` is set."""
     run_dir = Path(run_dir)
     ep = run_dir / "episodes"
     if not ep.exists():
         return []
-    return sorted(p for p in ep.iterdir() if (p / "manifest.json").exists())
+    dirs = sorted(p for p in ep.iterdir() if (p / "manifest.json").exists())
+    if include_superseded:
+        return dirs
+    return [d for d in dirs if not (_read_json(d / "manifest.json") or {}).get("superseded", False)]
+
+
+def select_attempts(run_dir: str | Path) -> dict[str, dict[str, Any]]:
+    """Group a run's episodes by (family, seed) and mark one attempt per group as selected.
+
+    The selected attempt is the *shortest verified* one (reward 1.0 with the fewest steps;
+    ties go to the earliest attempt) or, when no attempt verified, the last attempt. Every
+    other attempt gets ``superseded: true`` in its manifest and stays on disk for
+    inspection. Returns ``{"family:seed": {"family", "seed", "selected", "attempts": [...]}}``,
+    which ``collect`` writes into ``run.json`` and ``collect_summary.json``.
+    """
+    groups: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for d in iter_episode_dirs(run_dir, include_superseded=True):
+        m = _read_json(d / "manifest.json")
+        if not m:
+            continue
+        steps_file = d / "steps.jsonl"
+        n_steps = sum(1 for l in steps_file.read_text().splitlines() if l.strip()) if steps_file.exists() else 0
+        groups.setdefault((str(m.get("family")), int(m.get("seed", 0))), []).append(
+            {"dir": d, "manifest": m, "verdict": _read_json(d / "verdict.json"), "steps": n_steps})
+    out: dict[str, dict[str, Any]] = {}
+    for (fam, seed), eps in sorted(groups.items()):
+        eps.sort(key=lambda e: (int(e["manifest"].get("attempt", 1)), str(e["manifest"].get("generated_at", "")), e["dir"].name))
+        verified = [e for e in eps if e["verdict"] and float(e["verdict"].get("reward", 0) or 0) >= 1.0]
+        best = min(verified, key=lambda e: e["steps"]) if verified else eps[-1]
+        attempts = []
+        for e in eps:
+            sel = e is best
+            m = e["manifest"]
+            if m.get("selected") is not sel or m.get("superseded") is not (not sel):
+                m["selected"], m["superseded"] = sel, not sel
+                (e["dir"] / "manifest.json").write_text(json.dumps(m, indent=2, ensure_ascii=False, sort_keys=True))
+            v = e["verdict"] or {}
+            attempts.append({"attempt": int(m.get("attempt", 1)), "episode_id": m.get("episode_id", e["dir"].name),
+                             "reward": v.get("reward"), "reason": v.get("reason_code", "NO_VERDICT"),
+                             "steps": e["steps"], "selected": sel})
+        out[f"{fam}:{seed}"] = {"family": fam, "seed": seed,
+                                "selected": best["manifest"].get("episode_id", best["dir"].name), "attempts": attempts}
+    return out
 
 
 def load_episode(ep_dir: Path) -> dict[str, Any]:
@@ -206,4 +273,4 @@ def load_episode(ep_dir: Path) -> dict[str, Any]:
     return {"dir": ep_dir, "manifest": manifest, "steps": steps, "verdict": verdict, "reset": reset}
 
 
-__all__ = ["Recorder", "EpisodeRecorder", "StepRecord", "iter_episode_dirs", "load_episode"]
+__all__ = ["Recorder", "EpisodeRecorder", "StepRecord", "iter_episode_dirs", "load_episode", "select_attempts"]

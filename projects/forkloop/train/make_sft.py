@@ -71,6 +71,7 @@ class Stats:
     episodes_seen: int = 0
     episodes_missing_files: int = 0
     episodes_unverified: int = 0
+    episodes_superseded: int = 0  # attempts collect --retry-failed replaced with a better one
     episodes_filtered_family: int = 0
     episodes_filtered_split: int = 0
     episodes_failed: int = 0
@@ -136,6 +137,10 @@ def iter_episodes(run_dir: Path, stats: Stats | None = None) -> Iterator[Episode
         if manifest is None or not (ep_dir / "steps.jsonl").exists():
             if stats is not None:
                 stats.episodes_missing_files += 1
+            continue
+        if manifest.get("superseded"):  # contracts.md §10: only the selected attempt per seed is data
+            if stats is not None:
+                stats.episodes_superseded += 1
             continue
         verdict = _read_json(ep_dir / "verdict.json")
         if verdict is None:

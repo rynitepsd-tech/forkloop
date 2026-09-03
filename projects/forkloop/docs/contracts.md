@@ -435,6 +435,23 @@ Exporters read only this layout. `sft_pairs` emits one example per step of
 every episode with `verdict.reward == 1.0`:
 `{"images": ["shots/000_before.png"], "instruction": ..., "history": [...last k raw actions...], "target": "<raw_action>"}`.
 
+**Attempts.** `collect --retry-failed N` re-runs every seed whose reward is
+below 1.0 up to N more times, each on a fresh reset (a new fork in fork mode),
+and stops retrying a seed once it verifies. Every attempt is its own episode
+directory; the manifest carries `attempt` (1-based) and, once
+`trajectories.select_attempts()` has run (after every pass and at the end of
+`collect`), `selected` / `superseded`. Exactly one attempt per `(family, seed)`
+is selected: the shortest verified one (reward 1.0, fewest steps, ties to the
+earliest attempt) or, when none verified, the last attempt.
+`iter_episode_dirs()` — hence metrics, exporters, `train/make_sft.py` and the
+scripts — skips superseded attempts unless asked for `include_superseded=True`
+(`scripts/episode_table.py --all-attempts`). `run.json` gains `retry_failed`,
+`n_attempts` and `attempts` (`{"family:seed": {"selected": episode_id,
+"attempts": [{attempt, episode_id, reward, reason, steps, selected}]}}`);
+`collect_summary.json` has one row per seed (`reward`/`reason`/`episode_id` of
+the selected attempt, `n_attempts`, and the `attempts` list). Reset failures
+(`--reset-retries`) are retried inside an attempt and do not consume one.
+
 ---
 
 ## 11. Env (`forkloop/env.py`)
@@ -480,6 +497,11 @@ screen). Token cost prices the episode's usage with `MODEL_PRICES_PER_M[model]`
 `budget_override` — the per-run `max_steps`/`max_seconds` laid over every task budget by
 `collect --max-steps/--max-seconds`; compare runs with different overrides with care) or `metrics --model`. An
 unknown model prices tokens at zero and the table says so (`model priced as`).
+
+With `collect --retry-failed`, `summarize_run` reports rates, steps and walls
+over the *selected* attempt per seed, while `cost_*` and `tokens` count every
+attempt (`n_attempts`, `n_superseded`): `cost_per_success_usd` is the whole
+run's spend over verified seeds, `cost_per_episode_usd` is spend per attempt.
 
 The `tokens` field on a `steps.jsonl` line is the policy's **cumulative** usage
 for the episode (`{"in", "out", "cache_read", "cache_write", "retries"}`; `retries` counts transient API errors — 429/5xx/529/connection — that the policy retried with backoff instead of surfacing as an invalid step), so batched

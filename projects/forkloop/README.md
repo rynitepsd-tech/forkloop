@@ -56,6 +56,7 @@ forkloop reset-bench --world claims-ops-v1 --methods revert fork --trials 50
 # 4. teacher data with snapshot-native best-of-N, then the training ladder
 export ANTHROPIC_API_KEY=...
 forkloop collect --world claims-ops-v1 --policy teacher --seeds 0-99 --best-of 2 --search-mode revert
+forkloop collect --world claims-ops-v1 --policy teacher --seeds 0-99 --pool-mode fork --retry-failed 2   # re-run failed seeds on fresh forks; exports keep the shortest verified attempt
 forkloop metrics --run runs/<run_id>
 forkloop export --run runs/<run_id> --format sft --out sft.jsonl
 python -m train.train_lora --sft sft.jsonl --model microsoft/Fara1.5-4B --output-dir ckpt/r1   # on a GPU box

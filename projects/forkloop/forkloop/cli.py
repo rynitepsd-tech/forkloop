@@ -4,7 +4,7 @@
     forkloop task  --world W --family F --seed N      print a task (instruction + oracle ids; add --full for the manifest)
     forkloop build-world --world W [--backend fake]   build the golden snapshot, print its id
     forkloop run   --world W --family F --seed N --policy scripted|random|teacher|student  run one episode
-    forkloop collect --world W --families ... --seeds 0-199 --policy teacher [--best-of 2]  teacher data collection
+    forkloop collect --world W --families ... --seeds 0-199 --policy teacher [--retry-failed 2]  teacher data collection
     forkloop export --run RUN_DIR --format jsonl|sft|osworld --out PATH
     forkloop metrics --run RUN_DIR
     forkloop reset-bench ...                          see forkloop.bench.reset_benchmark
@@ -65,7 +65,9 @@ def _preflight(spec: str, args: Optional[argparse.Namespace] = None) -> None:
             raise SystemExit("teacher policy needs ANTHROPIC_API_KEY (source ~/.config/forkloop/env)")
 
 
-def _policy(spec: str, args: argparse.Namespace):
+def _policy(spec: str, args: argparse.Namespace, **context: Any):
+    """Build the policy for one episode. ``context`` (family, seed, attempt) is ignored here; it
+    exists so tests can monkeypatch an attempt-aware factory under ``collect --retry-failed``."""
     if spec == "random":
         from .policies.scripted import RandomPolicy
 
@@ -185,66 +187,119 @@ async def _collect(args: argparse.Namespace) -> int:
     from .pool import WorkerPool
     from .reset import ResetError
     from .search import best_of_n
-    from .trajectories import Recorder
+    from .trajectories import Recorder, select_attempts
     from .world import load_world
 
     _preflight(args.policy, args)
     w = load_world(args.world)
     backend = _backend(args.backend, w)
+    retry_failed = max(0, int(getattr(args, "retry_failed", 0) or 0))
     rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name,
                                                        "best_of": args.best_of, "model": _policy_model(args.policy, args),
                                                        "effort": args.effort if args.policy == "teacher" else None,
                                                        "pool_mode": args.pool_mode, "concurrency": args.concurrency,
                                                        "cpu": args.cpu, "mem_mb": args.mem_mb,
-                                                       "budget_override": _budget_override(args)})
+                                                       "budget_override": _budget_override(args),
+                                                       "retry_failed": retry_failed})
     pool = WorkerPool(backend, w, size=args.concurrency, mode=args.pool_mode, cpu=args.cpu, mem_mb=args.mem_mb)
     await pool.start()
     seeds = _seed_list(args.seeds)
     families = args.families or w.config.families
     jobs = [(f, s) for f in families for s in seeds]
     sem = asyncio.Semaphore(args.concurrency)
-    results: list[dict[str, Any]] = []
+    attempts: list[dict[str, Any]] = []  # every attempt, in the order it landed
 
-    async def one(fam: str, seed: int) -> None:
-        for attempt in range(1, args.reset_retries + 2):
+    def _episode_info(env: Env) -> dict[str, Any]:
+        ep = env.ep
+        if ep is None or ep.recorder is None:
+            return {}
+        return {"episode_id": ep.recorder.episode_id, "steps": len(ep.recorder.steps)}
+
+    async def one(fam: str, seed: int, attempt: int) -> None:
+        tag = f"{fam} seed={seed}" + (f" attempt={attempt}" if retry_failed else "")
+        for reset_try in range(1, args.reset_retries + 2):
             async with sem:
+                # Every attempt is a fresh reset: in fork mode that is a new fork of the golden.
                 env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec,
-                          budget_override=_budget_override(args))
-                pol = _policy(args.policy, args)
+                          budget_override=_budget_override(args), record_extra={"attempt": attempt})
+                pol = _policy(args.policy, args, family=fam, seed=seed, attempt=attempt)
+                row: dict[str, Any] = {"family": fam, "seed": seed, "attempt": attempt}
                 try:
                     if args.best_of > 1:
                         v = await best_of_n(env, pol, args.best_of, seed, family=fam, mode=args.search_mode)
                     else:
                         v = await run_episode(env, pol, seed, family=fam)
-                    results.append({"family": fam, "seed": seed, "reward": v.reward, "reason": v.reason_code})
-                    print(f"{fam} seed={seed} reward={v.reward} reason={v.reason_code}", flush=True)
+                    row.update({"reward": v.reward, "reason": v.reason_code, **_episode_info(env)})
+                    attempts.append(row)
+                    print(f"{tag} reward={v.reward} reason={v.reason_code} steps={row.get('steps')}", flush=True)
                     return
                 except ResetError as e:
                     # The machine never came up (capacity, concurrency cap, health): nothing was
                     # spent on the policy, so the seed is retried after a pause rather than lost.
-                    if attempt <= args.reset_retries:
-                        print(f"{fam} seed={seed} reset failed (attempt {attempt}): {e}; retrying in "
+                    if reset_try <= args.reset_retries:
+                        print(f"{tag} reset failed (try {reset_try}): {e}; retrying in "
                               f"{args.reset_retry_wait_s:.0f}s", flush=True)
                     else:
-                        results.append({"family": fam, "seed": seed, "error": f"ResetError: {e}"})
-                        print(f"{fam} seed={seed} ERROR ResetError: {e}", flush=True)
+                        row["error"] = f"ResetError: {e}"
+                        attempts.append(row)
+                        print(f"{tag} ERROR ResetError: {e}", flush=True)
                         return
                 except Exception as e:  # noqa: BLE001
-                    results.append({"family": fam, "seed": seed, "error": f"{type(e).__name__}: {e}"})
-                    print(f"{fam} seed={seed} ERROR {type(e).__name__}: {e}", flush=True)
+                    row.update({"error": f"{type(e).__name__}: {e}", **_episode_info(env)})
+                    attempts.append(row)
+                    print(f"{tag} ERROR {type(e).__name__}: {e}", flush=True)
                     return
                 finally:
                     await env.close()
             await asyncio.sleep(args.reset_retry_wait_s)
 
+    def unverified() -> list[tuple[str, int]]:
+        best: dict[tuple[str, int], float] = {}
+        for r in attempts:
+            key = (r["family"], r["seed"])
+            best[key] = max(best.get(key, 0.0), float(r.get("reward") or 0.0))
+        return [(f, s) for f, s in jobs if best.get((f, s), 0.0) < 1.0]
+
+    def record_selection() -> dict[str, dict[str, Any]]:
+        selection = select_attempts(rec.dir)
+        rec.update_meta(attempts=selection, n_attempts=len(attempts))
+        return selection
+
+    selection: dict[str, dict[str, Any]] = {}
     try:
-        await asyncio.gather(*(one(f, s) for f, s in jobs))
+        await asyncio.gather(*(one(f, s, 1) for f, s in jobs))
+        for k in range(1, retry_failed + 1):
+            record_selection()
+            todo = unverified()
+            if not todo:
+                break
+            print(f"\nretry pass {k}/{retry_failed}: {len(todo)} seed(s) below 1.0: "
+                  + ", ".join(f"{f}:{s}" for f, s in todo), flush=True)
+            await asyncio.gather(*(one(f, s, k + 1) for f, s in todo))
     finally:
-        await pool.close()
-        await backend.close()
-    ok = sum(1 for r in results if r.get("reward") == 1.0)
-    print(f"\n{ok}/{len(results)} verified. run dir: {rec.dir}")
-    (rec.dir / "collect_summary.json").write_text(json.dumps(results, indent=2))
+        try:
+            await pool.close()
+        finally:
+            await backend.close()
+        try:
+            selection = record_selection()
+        except Exception as e:  # noqa: BLE001
+            print(f"could not record attempt selection: {type(e).__name__}: {e}", flush=True)
+    summary: list[dict[str, Any]] = []
+    for fam, seed in jobs:
+        sel = selection.get(f"{fam}:{seed}")
+        mine = [r for r in attempts if r["family"] == fam and r["seed"] == seed]
+        chosen = next((a for a in (sel or {}).get("attempts", []) if a["selected"]), None)
+        row = {"family": fam, "seed": seed,
+               "reward": chosen["reward"] if chosen else max((float(r.get("reward") or 0.0) for r in mine), default=None),
+               "reason": chosen["reason"] if chosen else (mine[-1].get("reason") or mine[-1].get("error") if mine else "NOT_RUN"),
+               "episode_id": chosen["episode_id"] if chosen else None,
+               "n_attempts": len(mine), "attempts": mine}
+        summary.append(row)
+    ok = sum(1 for r in summary if (r.get("reward") or 0) >= 1.0)
+    extra = f" ({len(attempts)} attempts, retry_failed={retry_failed})" if retry_failed else ""
+    print(f"\n{ok}/{len(summary)} verified{extra}. run dir: {rec.dir}")
+    (rec.dir / "collect_summary.json").write_text(json.dumps(summary, indent=2))
     return 0
 
 
@@ -336,6 +391,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--pool-mode", choices=["revert", "fork"], default="revert")
     p.add_argument("--reset-retries", type=int, default=2, help="re-queue a seed whose reset failed this many times")
     p.add_argument("--reset-retry-wait-s", type=float, default=60.0)
+    p.add_argument("--retry-failed", type=int, default=0,
+                   help="after the pass, re-run every seed with reward < 1 up to N more times on a fresh fork; "
+                        "exports/metrics keep the shortest verified attempt per seed")
     p.set_defaults(fn=lambda a: asyncio.run(_collect(a)))
     p = sub.add_parser("export", help="export a run"); p.add_argument("--run", required=True)
     p.add_argument("--format", choices=["jsonl", "sft", "osworld"], default="jsonl"); p.add_argument("--out", required=True)

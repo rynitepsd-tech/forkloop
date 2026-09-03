@@ -11,12 +11,11 @@ from run.json's `model` via forkloop.metrics.MODEL_PRICES_PER_M.
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 from pathlib import Path
 
 from forkloop.metrics import MODEL_PRICES_PER_M, episode_tokens, token_cost_usd, wilson
-from forkloop.trajectories import load_episode
+from forkloop.trajectories import iter_episode_dirs, load_episode
 
 
 def load(runs: list[str]) -> dict[int, dict]:
@@ -24,8 +23,8 @@ def load(runs: list[str]) -> dict[int, dict]:
     for run in runs:
         meta = json.loads((Path(run) / "run.json").read_text()) if (Path(run) / "run.json").exists() else {}
         price = MODEL_PRICES_PER_M.get(meta.get("model") or "", (0.0, 0.0))
-        for ep in sorted(glob.glob(f"{run}/episodes/*")):
-            e = load_episode(Path(ep))
+        for ep in iter_episode_dirs(run):  # selected attempts only (collect --retry-failed marks the rest superseded)
+            e = load_episode(ep)
             if not e["verdict"]:
                 continue
             out[int(e["manifest"]["seed"])] = {"reward": e["verdict"]["reward"], "reason": e["verdict"]["reason_code"],

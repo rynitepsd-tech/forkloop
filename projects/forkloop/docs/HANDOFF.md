@@ -169,7 +169,11 @@ cannot run on this account in either mode. Use `--best-of 1`.
    disambiguated in the generator and prompt v6 (`hosted_gui_agent_v6.md`)
    adds date-picker/calendar rules. Next: families 1–2 seeds 0–9 with v6
    (≈ $1.50), then seeds 20–99 on family 3 (≈ $7) for the SFT set; keep
-   Opus for audits.
+   Opus for audits. Both use `collect --retry-failed 2` (2026-09-03): failed
+   seeds are re-run on fresh forks, every attempt is kept on disk with
+   `attempt` in its manifest, and metrics/exports see only the shortest
+   verified attempt per seed (`docs/contracts.md` §10; superseded attempts
+   still count in `cost_*`).
    The v5 prompt was tuned on seeds 0–19, so treat 85 % as an upper estimate
    until fresh seeds confirm it.
    Cheaper lever already in: the teacher caches its prompt (moving breakpoint
