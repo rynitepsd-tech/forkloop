@@ -163,9 +163,13 @@ cannot run on this account in either mode. Use `--best-of 1`.
    seeds v4 failed (`runs/luna-high-v5-retry`): **7/9**. **Clean v5 pass on
    seeds 0–19 (`runs/luna-high-v5-s0-19`): 17/20 = 85 % [64, 95], $0.073
    per verified, 1,122 SFT examples; Opus 9/15 on the same family, 12 vs 9
-   on shared seeds.** Luna v5 is the volume teacher. Next: Luna v5 on
-   families 1–2 (`--families reschedule_constrained update_insurance_reconcile`),
-   then seeds 20–99 on family 3 (≈ $7) for the SFT set; keep Opus for audits.
+   on shared seeds.** Luna v5 is the volume teacher. **Families 1–2 pilot
+   (`runs/luna-v5-fam12-s0-2`): family 1 1/3, family 2 2/3 — first
+   end-to-end completions of both**; the family-1 instruction was
+   disambiguated in the generator and prompt v6 (`hosted_gui_agent_v6.md`)
+   adds date-picker/calendar rules. Next: families 1–2 seeds 0–9 with v6
+   (≈ $1.50), then seeds 20–99 on family 3 (≈ $7) for the SFT set; keep
+   Opus for audits.
    The v5 prompt was tuned on seeds 0–19, so treat 85 % as an upper estimate
    until fresh seeds confirm it.
    Cheaper lever already in: the teacher caches its prompt (moving breakpoint
