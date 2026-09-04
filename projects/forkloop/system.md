@@ -153,7 +153,11 @@ handle (table in contracts §2). Two behaviours worth knowing:
 - `revert()` calls the SDK, then `reconnect()`s the control channel and polls
   `health()` until `ready`, because the guest accepts only one control
   connection for a brief window after a restore (comment in
-  `solari_core/transport.py`).
+  `solari_core/transport.py`). The guest can take the slow restore mode
+  (70–160 s) to answer, so this wait has its own window,
+  `revert_ready_timeout_s` (240 s; the general `ready_timeout_s` is 90 s),
+  and raises `RevertTimeoutError` — a `BackendError` subclass the pool treats
+  as "replace this machine", not "revert is unsupported".
 - `scroll` is emulated with `Page_Down`/`Page_Up`/arrow keys after a
   `mouse.move`, because the SDK's `mouse.scroll` takes a button code and only
   names left/middle/right.
@@ -171,14 +175,18 @@ running machine, and `snapshot()` was refused on any `from_snapshot`
 machine, so every run used `fork` mode with `--best-of 1`. Re-verified
 2026-09-03 evening after Solari support's fix: `revert()` works (desktop
 21.5 s p50 end to end, state restored; a refused revert leaves the machine
-alive) and `snapshot()` works on forks (20.8 s). Reverting a fork to the
-8.5 GB golden returned one 503, so the pool still runs `fork` mode until
-`reset-bench` measures revert on the golden. Still ignored: `disk_gb`
+alive) and `snapshot()` works on forks (20.8 s). `reset-bench` on the
+golden the same night: `revert(golden)` 10/10 on one machine id, full reset
+p50 100.9 s; `create(from_snapshot)` 10/10, p50 92.0 s — so revert is the
+pool's reset mode (`--pool-mode revert` is the CLI default; fork stays the
+fallback), and best-of-N search runs for real. Still ignored: `disk_gb`
 (3.9 GB disk), `cpu`/`mem_mb` on forks (2 vCPU / 4 GB); `recordingUrl` never
-populates. Fork restores are bimodal (p50 ≈ 75–85 s in long runs, ~25 %
-over 120 s: the account keeps counting a just-killed fork against the cap,
-so the create sees 429s) and ~2–5 % of forks die mid-episode (control
-channel closed 1000).
+populates. Restores are bimodal — ≈ 22 s or 70–160 s (max 353 s) — and the
+two modes are identical for revert and fork, so the slow half is the host
+restoring the 8.5 GB snapshot, not the client's 429 backoff (the earlier
+hypothesis). One `revert(golden)` returned 503 "could not restore this
+snapshot in time" and left the machine alive; ~2–5 % of forks die
+mid-episode (control channel closed 1000).
 
 ### 4.4 `dbaccess.py`
 
@@ -282,11 +290,17 @@ report is what the reset benchmark measures.
 
 ### 4.11 `pool.py`
 
-`WorkerPool(backend, world, size, mode, golden_snapshot, run_id, ...)`.
-`size` is clamped to the backend's concurrency cap. Two modes:
+`WorkerPool(backend, world, size, mode, golden_snapshot, run_id, ...,
+reap_orphans_enabled=True)`. `size` is clamped to the backend's concurrency
+cap. Two modes:
 
 - `revert`: long-lived machines; `Worker.restore()` is `revert(golden)` on
   the same id (or a fresh `create(from_snapshot=golden)` if the machine died).
+  A revert that times out (`RevertTimeoutError`) or gets a 503
+  (`CapacityError`) replaces that one machine with a fresh fork and keeps
+  revert mode (`revert_failed_replaced_machine`); only a real refusal
+  switches the whole pool to fork mode
+  (`revert_unsupported_fell_back_to_fork`, at most once per run).
 - `fork`: `restore()` kills the old machine and creates a new one from the
   golden snapshot.
 
@@ -299,12 +313,18 @@ explicitly because it takes minutes. `create` retries 429/503/timeouts
 (`concurrency_backoff_max_s`), because a 1→60 s doubling turned Solari's
 slot-release lag after a kill into 130–240 s restores — and on a 429 it
 first re-lists and kills orphans (`reap_orphans`: `forkloop=1` machines no
-worker owns, including leaks from a timed-out create). Every event
-(`create_retry`, `reaped`, `restored` with seconds, `golden_built`,
-`revert_unsupported_fell_back_to_fork`) is kept in `events` and echoed to
-stderr as `[pool HH:MM:SS] …` unless `FORKLOOP_POOL_LOG=0`, so a collect
-log can tell a slow restore from a retried create. In practice every run
-through 2026-09-03 used `fork` mode.
+worker owns, including leaks from a timed-out create). Reaping kills
+*every* such machine on the account, so a pool that shares the account with
+a live parent pool — the per-branch pools of `best_of_n` — is created with
+`reap_orphans_enabled=False` (on 2026-09-03 a branch pool killed the
+episode's main worker at start-up). Every event (`create_retry`, `reaped`,
+`restored` with seconds, `golden_built`, `revert_failed_replaced_machine`,
+`revert_unsupported_fell_back_to_fork` with the error text) is kept in
+`events` and echoed to stderr as `[pool HH:MM:SS] …` unless
+`FORKLOOP_POOL_LOG=0`, so a collect log can tell a slow restore from a
+retried create. Runs through 2026-09-03 used `fork` mode; since the
+2026-09-03 night benchmark they run `revert` mode (the v8 family-1 run held
+it for all 16 attempts through one 503).
 
 ### 4.12 `env.py`
 
@@ -335,13 +355,21 @@ then either
 - `revert` mode: for each candidate, `env.restore(cp)`, roll out to the end
   with the child recorder, verify, snapshot the end state; or
 - `fork` mode: for each candidate, create a machine from the checkpoint
-  snapshot (bounded by `concurrency_cap - 1`), attach a sub-env directly to
-  the already-seeded state, roll out in parallel.
+  snapshot (bounded by `concurrency_cap - 1`) in a private one-worker pool
+  with orphan reaping off, attach a sub-env directly to the already-seeded
+  state, roll out, then close both the sub-env and its pool (the branch's
+  fork must not outlive the branch).
 
 The best verdict (reward, then milestones) wins; the main recorder adopts the
 winning branch's steps (copying screenshots) and finishes with its verdict;
-in revert mode the machine is reverted to the winner's end snapshot.
-`SearchStats` counts branch points, branches, wins, snapshots, reverts, forks.
+in revert mode the machine is reverted to the winner's end snapshot. The
+checkpoint and branch-end snapshots are then deleted best-effort (each is a
+full disk image on the account); `SearchStats` counts branch points,
+branches, wins, snapshots, reverts, forks, `snapshots_deleted` and records
+`snapshot_delete_errors`. First real run 2026-09-03: `collect --best-of 2
+--search-mode fork` verified 3/3 family-3 seeds through real branch points
+(`runs/luna-v5-f3-bo2-smoke`, $0.087 per verified); the three `cp-*`
+snapshots of that run were refused deletion right after use.
 
 ### 4.14 `trajectories.py`
 
@@ -414,15 +442,19 @@ cost is an upper bound.
   https://api.openai.com/v1 --model gpt-5.6-luna` switches on
   `reasoning_effort`, `detail: high` images, a 300 s timeout and 4096 output
   tokens; `--system-prompt-file` replaces the compact prompt with one of
-  `policies/prompts/hosted_gui_agent{,_v5,_v6,_v7}.md`, `--history-k 16` and
-  `--prev-shot` give it the last actions as text and the previous
+  `policies/prompts/hosted_gui_agent{,_v5,_v6,_v7,_v8,_v9}.md`, `--history-k
+  16` and `--prev-shot` give it the last actions as text and the previous
   screenshot, and a history-based loop warning (three near-identical pointer
-  actions, three waits, or an alternating pair) appends a "do not repeat"
-  line. The model's reasoning precedes the action inside `raw_action`
+  actions, three waits, an alternating pair, or five consecutive scrolls in
+  one direction whatever their coordinates) appends a "do not repeat" line. The model's reasoning precedes the action inside `raw_action`
   (`policy_note` stays empty), which is what `scripts/inspect_episode.py`
   prints. Luna v5 is the volume teacher (family 3: 94/100 at $0.061 per
-  verified); v7 carries the family-1/2 rules learned on 2026-09-03 and has
-  not been run.
+  verified); v7 carries the family-1/2 rules learned on 2026-09-03 (family 1
+  7/10, family-2 two-system seeds 6/6); v8 adds a fixed CURRENT-date rule
+  and `done()` right after the provider-warning OK (family 1 7/10 again,
+  shorter episodes, every failure a one-week drift after the blank
+  "Available Appointments Calendar" modal); v9 names that modal and drops
+  v8's dashboard-first hint — not yet run.
 - `action_parse.py`: parsers for compact text, JSON (fenced or not) and Fara
   `<tool_call>` blocks, `scale_coords`, `parse_tool_calls`; never raise.
 
@@ -431,11 +463,15 @@ cost is an upper bound.
 - `reset_benchmark.py`: runs `ResetController.reset` N times per method
   (`revert`, `fork`, `cold` = create + full world build), appends JSONL with
   stage timings, and summarises p50/p95/p99, failure rate, restore-stage p50,
-  cost per 1k resets (from `cost_model`) and a "state restored" column. The
-  fake backend is allowed with an explicit warning that the numbers are not
-  Solari numbers.
+  cost per 1k resets (from `cost_model`) and a "state restored" column.
+  `--no-fallback` makes a refused revert a failed trial instead of a silent
+  switch of the pool to fork mode, and the revert pool is warmed first so
+  every trial is a revert rather than the initial fork. The fake backend is
+  allowed with an explicit warning that the numbers are not Solari numbers.
 - `cost_model.py`: verified Solari prices (Sept 2026), `vm_hour_cost`,
-  `cost_per_1k_resets`, `episode_cost`, `budget_table`.
+  `cost_per_1k_resets`, `episode_cost`, `snapshot_storage_cost` (first
+  10 GB free, then $0.05 per GB-month, from the pricing page 2026-09-04),
+  `budget_table`.
 - `local_baseline/`: docker-compose (OpenEMR `8.3.0-2026-08-30`, MariaDB
   10.11, the portal), `snapshot.sh` / `restore.sh` / `bench_local.sh` that
   restore the *same* state (DB dump, uploads, documents, browser profile) and
@@ -460,7 +496,8 @@ seed below 1.0 up to N more times on a fresh fork; §4.14), and the student
 knobs `--student-url --system-prompt-file --history-k --prev-shot
 --image-detail --effort`. `_policy()` takes `family/seed/attempt` context so
 tests can swap in attempt-aware policies. `reap --dry-run` lists the
-account's forkloop machines.
+account's forkloop machines. `reset-bench` hands the benchmark its own argv
+(`argparse.REMAINDER` used to swallow the leading `--world`).
 
 ## 5. Worlds
 
@@ -577,17 +614,17 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-193 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
+197 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
 
 | File | Covers |
 | --- | --- |
 | `test_portal.py` (22) | schema/base counts, login, filters, appeal with upload + sha256 + same-transaction audit (trigger-based proof), duplicate appeal allowed, resubmit, messages, eligibility, page_views, `/admin`, determinism |
 | `test_openemr_layer.py` (15) | shim loads, base data deterministic and executes, every SQL helper executes on the shim, `quote`, portability |
-| `test_core_toy.py` (18) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson |
+| `test_core_toy.py` (21) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
 | `test_claims_ops_world.py` (10) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted) vs one naming neither table nor pk (caught), insurance rows carry subscriber sex/address, concurrent golden build |
 | `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
-| `test_student_policy.py`, `test_train.py` (92) | every parser style, coordinate scaling, mocked vLLM transport, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
-| `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, budget rows |
+| `test_student_policy.py`, `test_train.py` (93) | every parser style, coordinate scaling, mocked vLLM transport, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
+| `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, snapshot storage free tier, budget rows |
 
 ## 10. One episode, end to end
 
@@ -616,21 +653,21 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 | | Offline (this repo's tests) | Solari desktop | GPU box | Anthropic API |
 | --- | --- | --- | --- | --- |
-| Core loop, oracle, recorder, search | fake backend | real | — | — |
+| Core loop, oracle, recorder, search | fake backend | real (best-of-2 fork search verified 3/3 on 2026-09-03) | — | — |
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
 | OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
 | Student | mocked transport | drives the desktop | vLLM serves it | — |
 | LoRA training | `--smoke` needs torch | — | yes | — |
-| Reset benchmark | simulator numbers (labelled) | **fork bar measured** (n=10, p50 19.1 s) | — | — |
+| Reset benchmark | simulator numbers (labelled) | **revert and fork bars measured on the desktop golden** (n=10 each, p50 100.9 s / 92.0 s, 0 failures; earlier fork-only: sandbox 19.1 s, desktop 25.0 s) | — | — |
 
 ## 12. Verified external facts
 
 | Fact | Source |
 | --- | --- |
 | `SandboxClient.create_desktop(from_snapshot=...)`, `Desktop.snapshot/revert`, `commands.run` argv semantics, `kill` vs `close`, error classes, the post-restore single-connection window | solari-sandbox / solari-core 0.2.0 source (installed from PyPI) |
-| Plans: Free $0/1 concurrent, Starter $20/2, Pro $200/10; 2 vCPU/4 GB $0.114/h Starter + $0.02/h screen | docs.getsolari.com/pricing |
-| Snapshots keep the machine running; revert keeps the id; from_snapshot makes independent copies; both VMs and sandboxes | docs.getsolari.com/snapshots; re-verified live 2026-09-03 (`docs/spikes.md`): desktop revert 21.5 s p50 with state restored, fork snapshot 20.8 s |
+| Plans: Free $0/1 concurrent, Starter $20/2, Pro $200/10; 2 vCPU/4 GB $0.114/h Starter + $0.02/h screen; snapshot storage first 10 GB free, then $0.05 per GB-month | docs.getsolari.com/pricing (storage line read 2026-09-04) |
+| Snapshots keep the machine running; revert keeps the id; from_snapshot makes independent copies; both VMs and sandboxes | docs.getsolari.com/snapshots; re-verified live 2026-09-03 (`docs/spikes.md`): desktop revert 21.5 s p50 with state restored, fork snapshot 20.8 s; revert to the 8.5 GB golden 10/10 on one machine id, restores bimodal (≈ 22 s or 70–160 s) for revert and fork alike, one 503 that left the machine alive |
 | OpenEMR's SQL audit log (`EventAuditLogger::auditSQLEvent`) takes `patient_id` from the session's active chart and stores the statement plus quoted bound values in `comments`; `add_edit_event.php` itself logs nothing | github.com/openemr/openemr v8_3_0 `src/Common/Logging/EventAuditLogger.php`, `interface/main/calendar/add_edit_event.php` |
 | OpenEMR 8.3 insurance editor requires subscriber sex, street, city, state and ZIP (client-side `required`); `state` is a `list_options` list (`state_data_type` 26) with two-letter ids, `sex` is Female/Male/UNK | observed live 2026-09-03 (screenshot in `runs/luna-v6-fam12-s0-9`, `list_options` dump in `runs/logs/audit_probe_f1s2.log`) |
 | Templates: base / default / office / code; Image builder | docs.getsolari.com/templates |
