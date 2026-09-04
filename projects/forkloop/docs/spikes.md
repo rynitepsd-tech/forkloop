@@ -136,11 +136,32 @@ that times out (`RevertTimeoutError`) or gets a 503 replaces that one machine an
 (`revert_failed_replaced_machine`); only a real refusal switches the pool; the post-revert ready window is 240 s
 (`SolariBackend.revert_ready_timeout_s`).
 
+**Family 1 on prompt v8, seeds 0–9, same budget/retry, `--pool-mode revert` (`runs/luna-v8-fam1-s0-9`, 2026-09-04 00:40–01:47
+local, 16 attempts):** **7/10 verified within two attempts (first pass 4/10: seeds 1, 3, 5, 8; retries recovered 4, 6, 7)** —
+the same total as v7 with a worse first pass, but the verified episodes are far shorter: 34, 59, 72, 88, 141, 146, 154
+actions (median 103 vs 155), six of seven ending with `done()` (v7: none). $1.94 for the run, $0.28 per verified seed.
+Every one of the nine failed attempts is `WRONG_SLOT` by exactly one week (Sep 25 for 18, Sep 28 for 21, Sep 29 for 22…):
+Luna saved the right date, clicked OK, and then a blank modal titled **"Available Appointments Calendar"** appeared over
+the page (screenshot `…/000000-6fd6eb/shots/056_after.png`); v8's "done() on the next turn" lost to the visible modal —
+Luna closed it, went looking for the appointment again, and after ~16 actions its own CURRENT/TARGET line had scrolled
+out of the 16-action history window, so it re-derived "next Friday" from the saved date and saved again. v8's other
+hint made that worse: "read the Appointments card on the dashboard" sends it below the fold, and mouse-wheel scrolls
+at the dashboard's right edge do not scroll the iframe — 5–6-action scroll runs in every failure (seed 7: four of
+them), invisible to the loop detector because the coordinates varied. Fixes: (1) the loop detector now also fires on
+five consecutive scrolls in one direction regardless of coordinates (`loop_warning`, tested); (2) prompt v9
+(`hosted_gui_agent_v9.md`, **not yet run**) is v7's navigation plus the fixed-CURRENT rule, and names the modal:
+"a blank 'Available Appointments Calendar' window appears after OK, needs no action, and your next action must be
+done()". Pool: **revert mode held for all 16 attempts** — one revert got a 503 at 01:07 (`revert_failed_replaced_machine
+worker=1 … CapacityError … could not restore this snapshot in time`), that one machine was replaced with a fresh
+fork (183 s) and the pool stayed in revert mode; restores n = 16, p50 52 s, 6/16 under 30 s, 1/16 over 120 s. No fork
+deaths.
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |
 | --- | --- | --- | --- | --- |
 | 1 reschedule_constrained, seeds 0–9 | 3/10 (first pass 0/10) | **7/10** | 6/10 | $0.34 |
+| 1 reschedule_constrained, seeds 0–9, **v8** (2026-09-04) | — | **7/10** | 4/10 | $0.28 (median 103 actions, 6/7 end with done()) |
 | 2 update_insurance_reconcile, portal-only (seeds 1, 2, 8, 9) | 4/4 | not re-run | — | — |
 | 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
 

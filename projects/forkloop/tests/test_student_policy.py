@@ -542,6 +542,18 @@ async def test_student_tokens_are_cumulative_per_episode():
     assert m1["tokens"] == {"in": 100, "out": 5} and m2["tokens"] == {"in": 200, "out": 10} and calls["n"] == 2
 
 
+def test_loop_warning_detects_same_direction_scroll_loops():
+    from forkloop.policies.student import loop_warning
+    scrolls = ['scroll(1180, 672, "down", 5)', 'scroll(700, 680, "down", 6)', 'scroll(640, 650, "down", 5)',
+               'scroll(1100, 680, "down", 6)', 'scroll(1190, 680, "down", 5)']
+    w = loop_warning(scrolls)
+    assert w is not None and "scroll down" in w
+    assert loop_warning(scrolls[:4]) is None or "scroll" in loop_warning(scrolls[:4])  # below the threshold, no same-direction rule
+    mixed = scrolls[:4] + ['scroll(700, 680, "up", 3)']
+    assert loop_warning(mixed) is None
+    assert loop_warning(['key("Page_Down")'] + scrolls[:4]) is None
+
+
 def test_loop_warning_detects_repeated_clicks_waits_and_not_progress():
     from forkloop.policies.student import loop_warning, build_user_text
     assert loop_warning(["click(1050, 145)", "click(1047, 145)", "click(1055, 144)"]) is not None

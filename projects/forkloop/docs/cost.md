@@ -26,9 +26,12 @@ Compute, USD per hour:
 | 2 vCPU / 4 GB | 0.114 | 0.080 | 0.171 |
 | 4 vCPU / 8 GB | 0.228 | 0.160 | 0.342 |
 
-VMs (desktops) add **$0.02/h** for the live screen. Snapshot storage is **not
-published**; the model carries it as `SNAPSHOT_STORAGE_USD_PER_GB_MONTH = 0`
-until a number exists. Desktops require a paid plan (402 on Free).
+VMs (desktops) add **$0.02/h** for the live screen. Snapshot storage (pricing
+page, read 2026-09-04): **the first 10 GB are free, then $0.05 per GB-month**
+(`SNAPSHOT_STORAGE_USD_PER_GB_MONTH = 0.05`, `SNAPSHOT_STORAGE_FREE_GB = 10`).
+The account's five goldens/ancestors (6–8.5 GB each) plus three checkpoint
+snapshots come to roughly 60 GB, about $2.50 a month. Desktops require a paid
+plan (402 on Free).
 
 ## Formulas (`forkloop/bench/cost_model.py`)
 
@@ -39,7 +42,7 @@ cost_per_1k_resets(method, plan, s, size, overhead)
                                           = 1000 · (s + overhead) / 3600 · vm_hour_cost   (0 for method="local")
 episode_cost(...)                         = seconds/3600 · vm_hour_cost
                                           + (tokens_in · $/M_in + tokens_out · $/M_out) / 1e6
-snapshot_storage_cost(gb, months, rate)   = gb · months · rate                              (rate defaults to 0)
+snapshot_storage_cost(gb, months, rate)   = max(0, gb − 10) · months · rate                 (rate 0.05, first 10 GB free)
 ```
 
 Derived (verified inputs, exact arithmetic):
@@ -63,7 +66,7 @@ Every row except the Solari plan price is an **estimate**.
 | Teacher API | $30 | $80 | teacher-policy tokens for SFT data + eval — estimate |
 | GPU rental | $30 | $80 | LoRA fine-tune of the student — estimate |
 | Local box | $0 | $10 | electricity / Docker baseline runs — estimate |
-| Snapshot storage | $0 | $0 | price not published; $0 until known |
+| Snapshot storage | $1.50 | $6 | 10 GB free then $0.05/GB-month; 40 GB for one month to 70 GB for two |
 | **Total** | **≈ $80** | **≈ $350** | sum of the rows (with the $20 Starter month; $60 if the promo makes month 1 free) |
 
 VM-hour sanity check against the plan: 149 VM-hours on Starter is, at a

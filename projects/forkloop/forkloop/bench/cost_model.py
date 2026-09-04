@@ -29,9 +29,10 @@ COMPUTE_USD_PER_HOUR: dict[tuple[int, int], dict[str, float]] = {
 #: VMs (desktops) add this per hour for the live screen (VNC stream).
 SCREEN_USD_PER_HOUR = 0.02
 
-#: Snapshot storage is NOT published on the pricing page. Modelled as a
-#: parameter defaulting to 0 so it shows up in the ledger and can be filled in.
-SNAPSHOT_STORAGE_USD_PER_GB_MONTH = 0.0
+#: Snapshot storage, read off the Solari pricing page on 2026-09-04: the first 10 GB are free,
+#: every further GB is $0.05 per GB-month.
+SNAPSHOT_STORAGE_USD_PER_GB_MONTH = 0.05
+SNAPSHOT_STORAGE_FREE_GB = 10.0
 
 VM_SIZES: dict[str, tuple[int, int]] = {"small": (1, 2), "medium": (2, 4), "large": (4, 8)}
 
@@ -104,9 +105,10 @@ def episode_cost(plan: str, vm_size: str | tuple[int, int], seconds: float,
 
 
 def snapshot_storage_cost(gb: float, months: float = 1.0,
-                          usd_per_gb_month: float = SNAPSHOT_STORAGE_USD_PER_GB_MONTH) -> float:
-    """Snapshot storage. Price not published → defaults to 0; pass a rate once known."""
-    return gb * months * usd_per_gb_month
+                          usd_per_gb_month: float = SNAPSHOT_STORAGE_USD_PER_GB_MONTH,
+                          free_gb: float = SNAPSHOT_STORAGE_FREE_GB) -> float:
+    """Snapshot storage: the first ``free_gb`` are free, the rest is billed per GB-month."""
+    return max(0.0, gb - free_gb) * months * usd_per_gb_month
 
 
 def budget_table(solari_promo_month: bool = True) -> list[dict]:
@@ -126,8 +128,9 @@ def budget_table(solari_promo_month: bool = True) -> list[dict]:
          "basis": "LoRA fine-tune of the student — estimate"},
         {"item": "local box", "low_usd": 0.0, "high_usd": 10.0,
          "basis": "electricity / Docker baseline runs — estimate"},
-        {"item": "snapshot storage", "low_usd": 0.0, "high_usd": 0.0,
-         "basis": "price not published; modelled as $0/GB-month until known"},
+        {"item": "snapshot storage", "low_usd": round(snapshot_storage_cost(40.0, 1.0), 2),
+         "high_usd": round(snapshot_storage_cost(70.0, 2.0), 2),
+         "basis": "10 GB free then $0.05/GB-month (pricing page, 2026-09-04): 40 GB for a month to 70 GB for two"},
     ]
     rows.append({"item": "total", "low_usd": sum(r["low_usd"] for r in rows),
                  "high_usd": sum(r["high_usd"] for r in rows), "basis": "sum of the rows above — estimate"})

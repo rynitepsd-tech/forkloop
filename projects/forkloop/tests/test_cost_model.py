@@ -64,14 +64,16 @@ def test_budget_table_rows_and_totals():
     assert total["item"] == "total"
     assert total["low_usd"] == pytest.approx(sum(r["low_usd"] for r in rows[:-1]))
     assert total["high_usd"] == pytest.approx(sum(r["high_usd"] for r in rows[:-1]))
-    assert total["low_usd"] == pytest.approx(60.0)   # promo month: Solari $0
-    assert total["high_usd"] == pytest.approx(350.0)
-    assert cm.budget_table(solari_promo_month=False)[-1]["low_usd"] == pytest.approx(80.0)
+    assert total["low_usd"] == pytest.approx(61.5)   # promo month: Solari $0; $1.50 snapshot storage
+    assert total["high_usd"] == pytest.approx(356.0)
+    assert cm.budget_table(solari_promo_month=False)[-1]["low_usd"] == pytest.approx(81.5)
 
 
-def test_snapshot_storage_defaults_to_zero():
-    assert cm.snapshot_storage_cost(10.0) == 0.0
-    assert cm.snapshot_storage_cost(10.0, usd_per_gb_month=0.05) == pytest.approx(0.5)
+def test_snapshot_storage_has_a_free_tier():
+    assert cm.snapshot_storage_cost(10.0) == 0.0          # the first 10 GB are free
+    assert cm.snapshot_storage_cost(20.0) == pytest.approx(0.5)   # 10 billable GB at $0.05
+    assert cm.snapshot_storage_cost(20.0, months=2.0) == pytest.approx(1.0)
+    assert cm.snapshot_storage_cost(20.0, usd_per_gb_month=0.10, free_gb=0.0) == pytest.approx(2.0)
 
 
 def test_main_prints_markdown(capsys):

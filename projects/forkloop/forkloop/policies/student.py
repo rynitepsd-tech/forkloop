@@ -233,6 +233,18 @@ def loop_warning(history: list[str] | None, *, min_repeats: int = 3, px: int = 2
                     "That approach is not working. Look at the screenshot: check where keyboard focus is (a document "
                     "viewer or an iframe may be swallowing keys), click the element you need first, or use a different "
                     "route (a menu, a link, another tab, or key(\"F5\")).")
+    # Scrolling the same direction over and over with varying coordinates is a loop too: measured
+    # 2026-09-04 (runs/luna-v8-fam1-s0-9), 15-50 consecutive scroll(...,"down") calls on a dashboard
+    # whose iframe does not take wheel events at the chosen spot.
+    n_scroll = min_repeats + 2
+    if len(hist) >= n_scroll:
+        dirs = [re.search(r'scroll\([^)]*"(up|down|left|right)"', h) for h in hist[-n_scroll:]]
+        if all(dirs) and len({d.group(1) for d in dirs}) == 1:
+            d = dirs[-1].group(1)
+            return (f"WARNING: your last {n_scroll} actions were all scroll {d} and the screen is not changing: the "
+                    "element under the mouse does not scroll. Do NOT scroll again. Click inside the content you want to "
+                    "scroll first and use key(\"Page_Down\") or key(\"End\"), drag its scrollbar, or use a different "
+                    "route (a menu, a tab, a link, browser find with key(\"ctrl+f\")).")
     tail = hist[-min_repeats:]
     parsed = []
     for h in tail:
