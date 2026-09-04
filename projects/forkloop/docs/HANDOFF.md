@@ -1,4 +1,4 @@
-# Handoff — Forkloop, as of 2026-09-02 (late evening)
+# Handoff — Forkloop, as of 2026-09-03 (evening)
 
 Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
@@ -17,12 +17,12 @@ project under `projects/forkloop/`.
 
 ## First five minutes
 
-**The `venv` symlink is dead.** It points into the previous session's
-scratchpad. Recreate it before anything else:
+**Recreate the `venv` before anything else** (it is a real directory now,
+not a symlink, but it does not survive reliably between sessions):
 
 ```bash
 cd ~/Desktop/Solari/repo/projects/forkloop
-rm -f venv && python3.11 -m venv venv && ./venv/bin/pip install -q -e ".[dev,world,teacher]"
+rm -rf venv && python3.11 -m venv venv && ./venv/bin/pip install -q -e ".[dev,world,teacher]"
 ```
 
 Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`
@@ -33,8 +33,8 @@ Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`
 ```bash
 source ~/.config/forkloop/env
 export PYTHONPATH=. FORKLOOP_CONCURRENCY=2
-PYTHONPATH=. ./venv/bin/pytest -q          # 158 offline tests, ~2 min, no key needed
-./venv/bin/python -m forkloop.cli reap     # kill anything left running on the account
+PYTHONPATH=. ./venv/bin/pytest -q          # 193 offline tests, ~1 min, no key needed (safe with the env sourced: tests/conftest.py scrubs the golden ids)
+./venv/bin/python -m forkloop.cli reap --dry-run   # must list 0 machines; drop --dry-run to kill leftovers
 ```
 
 The Solari account is **Starter** with a hard $30 cap: two concurrent machines,
@@ -118,6 +118,8 @@ cannot run on this account in either mode. Use `--best-of 1`.
 ---
 
 ## Next steps, in order
+
+**Solari re-checked 2026-09-03 evening after support said "all set" (`docs/spikes.md` top section): `revert()` now works (desktop 21.5 s p50, state restored 3/3; a refused revert leaves the machine alive) and `snapshot()` works on forks — the two blockers behind fork-only resets and `--best-of 1` are gone, not yet exploited. `recordingUrl`, the 4 GB disk and ignored cpu/mem on forks are unchanged. Nothing in the harness has been switched to revert mode yet; measure with `reset-bench` first. **Never call `revert()` on the golden's ancestors or on a worker you need until that benchmark is in.**
 
 **Family 3 SFT set done (2026-09-03, `runs/luna-v5-f3-s20-99`): Luna v5 verified 77/80 seeds 20–99 = 96.2 % [89.5, 98.7]** (first pass 73/80; `--retry-failed 2` recovered 4 of 7), $0.08 per verified, **5,232 SFT examples** in `runs/exports/sft_luna_v5_f3_s20-99.jsonl`. Combined seeds 0–99: Luna v5 94/100 = 94 % at $0.061/verified vs Opus 5 9/15 = 60 % at $3.55 (`runs/exports/opus_vs_luna_v5_f3_full.md`). The three unrecovered seeds are transcription misreads/decoys/budget — the failure classes the oracle is built to reject; the fresh seeds beat the 85 % from the tuned 0–19 set. The run survived 2 fork deaths, 2 create timeouts and one ~3.5 h Mac-sleep stall unattended via `--reset-retries` and the pool's 429 reap. This closes the SFT-data goal; next is a GPU box for the student bake-off (still blocked). 
 

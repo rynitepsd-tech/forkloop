@@ -1,5 +1,7 @@
 # Reproducing the Solari issues from the 2026-09-02 support email
 
+**Status 2026-09-03 (evening), after support replied "all set":** items 1 and 2 are fixed (revert works on desktops and running sandboxes, ~21 s; snapshot() works on forks; a refused revert leaves the machine alive), items 3 and 4 are unchanged (recordingUrl empty, 4 GB disk, cpu/mem ignored on forks), item 5 not re-tested. Full table in `docs/spikes.md`; raw output in `runs/logs/solari_verify.log`; `scripts/solari_verify_fork.py` re-checks 1/2/4 on a fork of the golden in one go.
+
 One entry point per item in the email (`docs/solari-message.md`). Every
 script kills what it creates and deletes the snapshots it takes; nothing here
 touches the golden images. All of them need `SOLARI_API_KEY` and a paid plan

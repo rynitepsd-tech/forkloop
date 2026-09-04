@@ -14,6 +14,25 @@ crashed run: `python spikes/_common.py --reap` (kills everything tagged
 
 ---
 
+## Measured on 2026-09-03 (evening) — re-check after Solari support said the email items were "all set"
+
+Same scripts as `docs/solari-repro.md`, run back to back on throwaway machines (`runs/logs/solari_verify.log`);
+nothing touched the golden. Account still Starter.
+
+| Email item | Before (2026-09-01/02) | Now |
+| --- | --- | --- |
+| 1. `revert()` | 409 `Not revertable` everywhere; a failed revert on a running machine destroyed it | **Works.** Desktop (`spike_01`, n=3): API 17.6 s p50, guest back 2.5 s later, screen stable 1.6 s later, **21.5 s p50 total, state came back 3/3**. Running sandbox (`spike_00`): reachable 19.0 s after the call. Paused sandbox: a clear 409 "revert needs a running sandbox — resume first" and the machine survives. On a **fork of the 8.5 GB golden**, `revert(golden)` returned 503 "no desktop host has capacity right now … could not restore this snapshot in time" — **but the machine stayed alive and answered commands afterwards**, so a refused revert no longer destroys it. Whether reverting to the golden works on a good host is not yet measured (one attempt). |
+| 2. `snapshot()` on a `from_snapshot` machine | 409 `Not snapshottable` | **Works:** `snapshot()` on a fork of the golden succeeded in 20.8 s and the snapshot deleted cleanly (`scripts/solari_verify_fork.py`). Fresh-desktop snapshots still 18 s. This unblocks `best_of_n` checkpoints and patch-and-resnapshot golden builds — neither re-run yet. |
+| 3. `recordingUrl` | empty | **Unchanged:** `None` on a plain desktop, a `from_snapshot` desktop with `record=True`, and one without; in-VM mp4 still written (126–145 KB). New: `record.stop` **timed out (30 s)** after a revert on the plain desktop. |
+| 4. `disk_gb` | 4 GB | **Unchanged:** sandbox `/dev/root 3.9G` (42 % used on `base`), golden fork `3.9G` at 86 %. `cpu`/`mem_mb` also still ignored on forks (`nproc` 2, 4031 MB). |
+| 5. Snapshot lineage / storage | ancestors undeletable | **Not re-tested** (a successful delete would remove the live golden's ancestor). Listing unchanged: four snapshots, 7.7–8.5 GB, parent links intact, no flatten field. |
+| Forks slow / dying | bimodal restores, ~2–5 % deaths | The golden fork in this check took 246 s to be ready (the slow tail again); spike-2 fork 18.4 s. Two deaths in the 90-restore family-3 run earlier today. Unchanged. |
+
+Bottom line: the two blockers that shaped the harness (no revert, no fork snapshots) are lifted; the three
+resource/recording items are not. Next measurements, in order: `forkloop reset-bench --methods revert fork` on the
+golden for the Chart 2 revert bar (revert-mode pool: ~22 s vs fork p50 ~80 s), then `collect --best-of 2
+--search-mode fork` on a few family-3 seeds.
+
 ## Measured on 2026-09-02 (later) — Chrome crash, calendar providers, fork snapshots
 
 | Probe | Result |
