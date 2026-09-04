@@ -168,3 +168,71 @@ Seeds that failed both attempts in steps 1–2 (v10 runs): family 1 **11, 13, 15
 8 window, 1 add-event ×2 [23], 1 date arithmetic [34]); family 2 none. Run once with `--best-of 2 --search-mode fork
 --concurrency 1` under `luna-v10-bo2-hard`.
 
+## Step 4 — SFT export (`train/make_sft.py`, verified attempts only, shortest per seed)
+
+| file | runs | episodes | records |
+| --- | --- | --- | --- |
+| `runs/exports/sft_luna-v9-fam1-s0-9.jsonl` | luna-v9-fam1-s0-9 | 6 | 488 |
+| `runs/exports/sft_luna-v10-fam1-s0-9.jsonl` | luna-v10-fam1-s0-9 | 10 | 553 |
+| `runs/exports/sft_luna-v10-fam1-s10-34.jsonl` | luna-v10-fam1-s10-34 | 15 | 946 |
+| `runs/exports/sft_luna-v10-fam2-s10-34.jsonl` | luna-v10-fam2-s10-34 | 25 | 1,301 |
+| `runs/exports/sft_luna-v10-bo2-hard.jsonl` | luna-v10-bo2-hard (search winners) | 2 | 90 |
+| **`runs/exports/sft_luna-v10-fam12.jsonl`** (combined families 1–2) | the three v10 runs + the search run | **52** (27 + 25) | **2,890** (family 1: 1,589; family 2: 1,301) |
+
+The combined file takes the v10 runs only: the v9 episodes cover seeds 0–9 that v10 also verified with shorter,
+`done()`-terminated trajectories, so they are exported separately rather than duplicated. Rebuilt after step 3 with the two seeds the search recovered (17 and 34).
+
+## Solari changelog (Discord announcement the user relayed at ~07:30 local) mapped to our open items
+
+| changelog item | our item | status / next |
+| --- | --- | --- |
+| `disk_gb` up to 20 GB on fresh sandboxes/desktops (invalid values now fail loudly) | support email item 4 (4 GB disk, "table 'log' is full", lean golden) | needs a golden **v6 rebuild** with `disk_gb` set (fresh machines only; forks of v5 stay at 4 GB); not re-measured tonight |
+| Recording URLs in desktop API responses | item 3 (`recordingUrl` never populated) | re-run spike 3 (`docs/solari-repro.md`) on one throwaway desktop; not re-measured tonight (both slots busy) |
+| Revert starts a fresh machine and swaps it in when ready | item 1 (revert semantics) | matches tonight's ten 503 "could not restore this snapshot in time" reverts, all replaced in place by the pool; machine id stayed constant per worker all night, so whether the swap changes ids is **not yet measured** |
+| Sessions stuck as `running` fixed; idempotency keys; stricter create validation | the 429 "Too many concurrent sessions" with zero sessions listed; the orphan reaper | idempotency keys would let the pool retry creates safely; not adopted yet |
+| Ancestor snapshots deletable; snapshot storage billed from 2026-10-01 (10 GB free, $0.05/GB/month) | item 5 | account holds 8 snapshots ≈ 67 GB (4 golden lineage + 4 `cp-*` leftovers ≈ 34 GB) → ≈ $2.85/month from October unless cleaned; step 3 reports whether checkpoint deletes work now |
+| Chromium 151 pool, CDP isolation, proxies, cert errors after resume | — | not used by forkloop (we drive the desktop's own Chrome) |
+
+Not addressed by the changelog: bimodal 70–160 s restores, Chrome tab crashes / RCU stalls in the guest, `cpu`/`mem_mb`
+ignored on forks.
+
+Mid-run note (10:10 local): **the controller Mac slept from about 08:42 to 10:03** (`pmset -g log`: Deep Idle sleeps,
+wake at 10:03:11; the Mac is on battery, 100 %). The run stalled for the duration; on wake the pending revert POST
+died with a bare `ConnectionError` and the pool logged `revert_unsupported_fell_back_to_fork`, switching the rest of the
+search run to fork mode (functionally fine, but a misclassification: not a refusal). Fixed and committed (d07b0b4):
+only a real refusal (409 / "Not revertable" / paused) flips the mode; anything else replaces the machine and keeps
+revert mode; `--no-fallback` still raises. `caffeinate -i` is now bound to the collect process to block idle sleep
+(it cannot block a lid-close sleep). Search seeds 11, 13, 15 not recovered (both candidates failed the same check);
+seed 17 recovered through a branch at action 8 (search box vs "All Users"); checkpoint deletes 4/4 clean so far.
+
+### luna-v10-bo2-hard — best-of-2 fork search on the 10 double-failed family-1 seeds (08:02–10:40 local, incl. an ~80 min Mac sleep)
+
+```
+episodes                    10
+success                     20.0% [5.7, 51.0] (n=10)
+median steps                65.0
+cost / success (USD)        0.529
+cost / episode (USD)        0.1058
+  of which VM / tokens      0.2043 / 0.8537
+tokens in / out             3610123 / 109715
+reason codes: OK=2, WRONG_SLOT=8
+```
+
+- **Recovered 2/10** (seeds 17 and 34) = 20 % [5.7, 51.0]; **$0.53 per recovered seed** ($1.06 for the run:
+  $0.85 tokens, $0.20 VM). Running totals: OpenAI $7.23 / Solari $1.17.
+- Search mechanics: 16 branch points over 10 episodes (1–3 each, at actions 0–16), 20 branch forks, 2 wins. Seed 17 won
+  at action 8 (search box vs "All Users": 1.0 vs 0.0); seed 34 at action 16. The 8 losses branched but **both
+  candidates failed the same check** every time (window ×6, date ×2): a random branch at a click cannot fix a rule the
+  policy never applies, so search does not recover the window class. Seed 23 moved from the add-event class to the
+  window class (the branch steered it past the hour labels).
+- `search.snapshot_delete_errors`: **empty in all 10 verdicts; 10/16 checkpoints deleted.** The other 6 leaked without an
+  error: they are the branch points whose two candidates deduplicated to one (the checkpoint is taken before
+  `_dedupe`, and that path never reached the delete) — fixed below. Leftover `cp-*` ids at the end of the run:
+  `snap_dl6qbtykeeat` (…000011-6), `snap_dl6r10xbmbvb` (…000017-7), `snap_dl6tc770jljz` (…000023-3),
+  `snap_dl6tttw4b94m` (…000027-3), `snap_dl6u24ijedvw` (…000034-9), `snap_dl6u2hdx6sbq` (…000034-11), plus the four
+  from 2026-09-04 01:xx. **All ten deleted with `backend.delete_snapshot` at 10:45 local (10/10 succeeded)**; the
+  account now holds only the four golden-lineage snapshots (`snap_dl4driq97904`, `snap_dl4cngznmvr7`,
+  `snap_dl4e90g095y2`, `snap_dl4e05ciyt1p`).
+- Pool: after the Mac-sleep `ConnectionError` the run finished in fork mode (restores n = 30, p50 33 s — fork restores
+  of the small branch forks are fast); no fork deaths; `reap --dry-run` = 0 afterwards.
+

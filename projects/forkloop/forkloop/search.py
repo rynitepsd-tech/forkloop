@@ -114,6 +114,10 @@ async def best_of_n(env: Env, policy: Policy, n: int, seed: int, *, family: Opti
             candidates = [(action, meta)] + await propose_or_repeat(policy, obs, n - 1)
             candidates = _dedupe(candidates)
             if len(candidates) < 2:
+                # Nothing to branch on: the checkpoint is still a full disk image on the account.
+                # Measured 2026-09-04 (runs/luna-v10-bo2-hard): 6 of 16 checkpoints leaked this way,
+                # with no error recorded, because this path never reached the delete below.
+                await _delete_snapshots(env, [cp.snapshot_id], stats)
                 obs, reward, term, trunc, info = await env.step(action, meta=meta)
                 if term or trunc:
                     return await env.verify()

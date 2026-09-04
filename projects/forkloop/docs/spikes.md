@@ -235,6 +235,22 @@ waits for the old Chrome to exit, clears the profile's Singleton files, verifies
 stage fails and the seed is re-queued); the retry verified in 10 actions. Restores n = 26, p50 69 s, 9/26 under 30 s,
 7/26 over 120 s; two 503 reverts replaced in place; no fork deaths; crashpad median 0 per attempt.
 
+**Best-of-2 fork search on the 10 family-1 seeds that failed both v10 attempts (`runs/luna-v10-bo2-hard`, 2026-09-04
+08:02–10:40 local, `--best-of 2 --search-mode fork --concurrency 1`, one attempt each):** **2/10 recovered** (seeds 17
+and 34) = 20 % [5.7, 51.0], $1.06 for the run ($0.85 tokens, $0.20 VM), **$0.53 per recovered seed** — 2.7× the
+$0.20 of a plain retry-verified seed, and the plain retry pass had already recovered 3/13 on this family. 16 branch
+points (random, no confidence signal from the hosted model), 20 branch forks, 2 wins: seed 17 branched at action 8 between
+the patient search box and "All Users" (1.0 vs 0.0) and seed 34 at action 16. Every loss branched and **both candidates
+failed the same check** (window ×6, date ×2): a random fork at a click does not change a rule the policy never applies,
+so search cannot substitute for the missing half-day rule. **Checkpoint deletes work now**: `snapshot_delete_errors`
+empty in all ten verdicts, 10/16 deleted; the other six leaked silently through the path where the two candidates
+deduplicate to one (checkpoint taken before `_dedupe`, no delete on that path) — fixed and tested (`backend.snapshots`
+empty after a deterministic-policy search). All ten leftover `cp-*` snapshots (four from the 2026-09-04 01:xx smoke,
+six from this run) were deleted with `backend.delete_snapshot` afterwards, 10/10 succeeded, leaving the four
+golden-lineage snapshots. Operational: the controller Mac slept ~80 min mid-run (battery); on wake the pending revert
+POST failed with a bare `ConnectionError`, which the pool classified as a refusal and switched the run to fork mode —
+fixed (only 409/"Not revertable"/paused flips the mode now; other errors replace the machine and keep revert mode).
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |

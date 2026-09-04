@@ -482,3 +482,23 @@ async def test_pool_keeps_revert_mode_on_a_transport_error(world, backend):
     assert any(e["event"] == "revert_failed_replaced_machine" for e in pool.events)
     assert not any(e["event"] == "revert_unsupported_fell_back_to_fork" for e in pool.events)
     await env.close()
+
+
+async def test_search_deletes_the_checkpoint_when_candidates_deduplicate(world, backend, tmp_path):
+    """A deterministic policy proposes the same action twice: no branch, but the checkpoint was already
+    taken. It must be deleted like every other one (2026-09-04, runs/luna-v10-bo2-hard leaked 6/16)."""
+    rec = Recorder(tmp_path / "runs", run_id="search-dedupe")
+    env = Env(world, backend, family="reach_target", recorder=rec, settle_s=0)
+    task = world.generate("reach_target", 21, "train")
+    delta = task.expected["a"] - task.expected["a0"]
+    step = A_PLUS if delta > 0 else A_MINUS
+
+    def plan(obs):  # a pure function of the observation: act() and the repeated act() of propose_or_repeat agree
+        return step if sum(1 for h in obs.history if h == step) < abs(delta) else "done()"
+
+    pol = CallbackPolicy(plan)
+    v = await best_of_n(env, pol, 2, 21, family="reach_target", mode="revert", branch_prob=1.0, max_branch_points=3)
+    assert v.reward == 1.0, v.to_dict()
+    leaked = [s.name for s in backend.snapshots.values() if (s.name or "").startswith("cp-")]
+    assert not leaked, f"checkpoint snapshots leaked: {leaked}"
+    await env.close()
