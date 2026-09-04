@@ -59,3 +59,32 @@ Running totals: OpenAI $1.49 / Solari $0.25.
 
 ### luna-v10-fam1-s0-9 — prompt v10 + `--history-notes`, family 1, seeds 0–9 (launched 03:27 local)
 
+Ran 03:18–03:58 local (11 attempts: 10 + 1 retry). `forkloop metrics --run runs/luna-v10-fam1-s0-9 --model gpt-5.6-luna`:
+
+```
+episodes                    10 selected of 11 attempts (1 superseded)
+success                     100.0% [72.2, 100.0] (n=10)
+median steps                48.5
+median reset (s)            108.636
+cost / success (USD)        0.0885
+cost / episode (USD)        0.0805
+  of which VM / tokens      0.1076 / 0.7779
+tokens in / out             3293417 / 99368
+reason codes: OK=10
+```
+
+- **Verified 10/10 within two attempts; first pass 9/10** (all but seed 5, a crash-budget loss: 9 crashpad reports,
+  9 re-logins, a wrong save; its retry verified in 81 actions). Verified episodes 31, 36, 40, 41, 45, 52, 61, 64, 81,
+  102 actions (**median 48.5**), 10/10 end with `done()`. **Gate met: v10 + `--history-notes` is the family-1 prompt
+  for the rest of the night.** Against v9 on the same seeds: first pass 5/10 → 9/10, verified median 72 → 48.5,
+  $0.29 → $0.089 per verified seed. Zero date drifts (seeds 4 and 9, drift ×3 on v9, verified in 45 and 102);
+  seed 7 verified without a dashboard visit and passed `ui_path` (the base64 fix confirmed live).
+- Cost: **$0.78 tokens (OpenAI), $0.11 VM (Solari)**. Running totals: OpenAI $2.27 / Solari $0.36.
+- Pool: revert mode held; two 503 reverts (`revert_failed_replaced_machine`, 03:32 and 03:53) each replaced one
+  machine with a fresh fork (238 s and 243 s to ready); restores n = 11, p50 105 s, 2/11 under 30 s, 3/11 over
+  120 s; no fork deaths; `reap --dry-run` = 0 after the run.
+
+## Step 2 — SFT volume, families 1–2, fresh seeds 10–34
+
+### luna-v10-fam1-s10-34 — family 1, seeds 10–34, v10 + notes (launched 03:59 local)
+

@@ -176,12 +176,41 @@ attempts with ≥ 4 crash reports all failed. Restores: n = 15, p50 109 s, 5/15 
 afterwards). The v9 gate (first pass ≥ 6/10) was missed by one seed, with two of the misses being oracle false negatives
 on otherwise perfect episodes; v10 (`hosted_gui_agent_v10.md` + `--history-notes`) runs next on the same seeds.
 
+**Family 1 on prompt v10 + `--history-notes`, seeds 0–9, same budget/retry (`runs/luna-v10-fam1-s0-9`, 2026-09-04
+03:18–03:58 local, 11 attempts):** **10/10 verified within two attempts, first pass 9/10** — the gate (first pass ≥ 6/10,
+verified median < 120) met with room. Verified episodes 31, 36, 40, 41, 45, 52, 61, 64, 81, 102 actions (**median 48.5**
+vs 72 on v9, 103 on v8, 155 on v7), 10/10 ending with `done()`; $0.89 for the run ($0.78 tokens, $0.11 VM), **$0.089 per
+verified seed** (v9 $0.29, v8 $0.28, v7 $0.34). What changed and what it did:
+
+- *The memory.* The history the model sees was compact actions only, so the "CURRENT → TARGET" line never survived a
+  turn; `--history-notes` renders the model's own reasoning line next to each previous action and v10 says those notes
+  are its only memory. **Date drift went from 3 attempts on v9 to 0**: seed 4 (drifted twice on v9) typed Sep 18,
+  scrolled, and still saved Sep 18 at action 42 — the note "CURRENT 2026-09-11 → TARGET 2026-09-18" was in front of it;
+  seed 9 (drifted at action 29 on v9) verified in 102. Also fixed on the way: `collect` never passed `--history-k` to
+  the `Env`, so every earlier hosted run showed 8 previous actions, not 16.
+- *The oracle.* Seed 7 verified in 36 actions through the calendar with no dashboard visit and `ui_path` passed — the
+  path that was a false `DIRECT_DB_WRITE` on v9 — because the tripwire now base64-decodes OpenEMR's `log.comments`
+  (measured in `runs/probe-audit-s7`: a scripted replay of the v9 seed-7 episode reproduced the false negative and
+  captured row 508006, `scheduling-update`, patient_id 0, comment = base64 of the UPDATE with `'507000'` bound).
+- *The one failure* (seed 5, attempt 1): crash budget — 9 crashpad reports, 9 re-logins, 43 scrolls, and a wrong save
+  (Sep 17 instead of 18, wrong window) after the third re-login; the retry verified in 81 actions on 2 crash reports.
+  Crashes remain the only failure class left on this family: 4/11 attempts had ≥ 3 crash reports, and the two with the
+  most (9 and 6) were the longest (161 and 102 actions).
+
+Pool: revert mode held for the run; **two 503 reverts** (`revert_failed_replaced_machine`, 03:32 and 03:53, "no warm
+desktop hosts … could not restore this snapshot in time") each replaced that machine with a fresh fork (238 s and 243 s
+to ready) without leaving revert mode — the 2026-09-03 fix working as designed twice. Restores n = 11, p50 105 s, 2/11
+under 30 s, 3/11 over 120 s; no fork deaths; `reap --dry-run` = 0 afterwards. v10 + notes is the family-1 prompt from
+here; seeds 10–34 of families 1–2 follow for SFT volume.
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |
 | --- | --- | --- | --- | --- |
 | 1 reschedule_constrained, seeds 0–9 | 3/10 (first pass 0/10) | **7/10** | 6/10 | $0.34 |
 | 1 reschedule_constrained, seeds 0–9, **v8** (2026-09-04) | — | **7/10** | 4/10 | $0.28 (median 103 actions, 6/7 end with done()) |
+| 1 reschedule_constrained, seeds 0–9, **v9** (2026-09-04) | — | **6/10** | 5/10 | $0.29 (median 72, 6/6 done(); 2 of the misses were oracle false negatives, fixed) |
+| 1 reschedule_constrained, seeds 0–9, **v10 + history notes** (2026-09-04) | — | **10/10** | 9/10 | $0.089 (median 48.5, 10/10 done()) |
 | 2 update_insurance_reconcile, portal-only (seeds 1, 2, 8, 9) | 4/4 | not re-run | — | — |
 | 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
 
