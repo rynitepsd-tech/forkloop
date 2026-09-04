@@ -303,6 +303,19 @@ async def test_reschedule_audit_row_logged_under_session_patient(world, backend)
     await env.step(Action.done())
     v = await env.verify()
     assert v.reward == 1.0, v.to_dict()
+    # OpenEMR 8.3 stores the comment base64-encoded (measured 2026-09-04, runs/probe-audit-s7:
+    # `scheduling-update`, patient_id 0); before this the loose match ran as a SQL LIKE on the
+    # encoded text and two perfect family-1 episodes scored DIRECT_DB_WRITE.
+    import base64 as _b64
+    await env.reset(3)
+    ex = env.ep.task.expected
+    encoded = _b64.b64encode(openemr_style.encode()).decode()
+    await env.ep.dbs["openemr"].execute_script(
+        move + "\n" + osql.insert_log(id=990006, event="scheduling-update", category="Scheduling", user="admin",
+                                      patient_id=0, comments=encoded, date="2026-09-08 10:00:00"))
+    await env.step(Action.done())
+    v = await env.verify()
+    assert v.reward == 1.0, v.to_dict()
     await env.reset(3)
     ex = env.ep.task.expected
     await env.ep.dbs["openemr"].execute_script(

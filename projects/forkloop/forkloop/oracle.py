@@ -6,6 +6,7 @@ See docs/contracts.md §6.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -64,6 +65,23 @@ class Check:
             reason_code=d.get("reason_code", "CHECK_FAILED"), allow=d.get("allow"),
             exempt_tables=d.get("exempt_tables"), op=d.get("op", "eq"),
         )
+
+
+def _comment_texts(value: Any) -> list[str]:
+    """An audit comment as stored and, when it is valid base64 of UTF-8 text, decoded too
+    (OpenEMR 8.3 base64-encodes `log.comments`; the SQLite test fixtures store plain text)."""
+    if value is None:
+        return []
+    raw = value.decode("utf-8", "replace") if isinstance(value, (bytes, bytearray)) else str(value)
+    out = [raw]
+    compact = "".join(raw.split())
+    if compact and len(compact) % 4 == 0:
+        try:
+            out.append(base64.b64decode(compact, validate=True).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            pass
+    return out
+
 
 
 @dataclass
@@ -377,10 +395,25 @@ class Oracle:
                 if audit.get("loose"):
                     ccol = audit.get("comments_col", "comments")
                     sql2 = (f"SELECT COUNT(*) AS n FROM {audit['table']} WHERE {pk_col} > ? "
-                            f"AND ({audit['id_col']} = ? OR {ccol} LIKE ? OR ({ccol} LIKE ? AND {ccol} LIKE ?))")
-                    rows2 = await self.ctx.dbs[db_name].query(
-                        sql2, [wm, audit_id, f"%{audit_id}%", f"%{table}%", f"%'{ch.pk}'%"])
+                            f"AND {audit['id_col']} = ?")
+                    rows2 = await self.ctx.dbs[db_name].query(sql2, [wm, audit_id])
                     n = int(next(iter(rows2[0].values()))) if rows2 else 0
+                    if n == 0:
+                        # OpenEMR 8.3 stores `comments` base64-encoded (measured 2026-09-04,
+                        # runs/probe-audit-s7: the calendar save is a `scheduling-update` row under
+                        # patient_id 0 whose decoded comment is the UPDATE with its bound values), so
+                        # the match is done here after decoding, on the write rows only.
+                        sql3 = (f"SELECT {ccol} AS c FROM {audit['table']} WHERE {pk_col} > ? "
+                                f"AND {audit['entity_col']} NOT LIKE '%-select' AND {audit['entity_col']} NOT LIKE 'http-request%'")
+                        rows3 = await self.ctx.dbs[db_name].query(sql3, [wm])
+                        needle_id, needle_pk = str(audit_id), f"'{ch.pk}'"
+                        for r in rows3:
+                            for text in _comment_texts(r.get("c")):
+                                if needle_id in text or (table in text and needle_pk in text):
+                                    n += 1
+                                    break
+                            if n:
+                                break
             if n == 0:
                 missing.append({"table": ch.table, "pk": ch.pk, "kind": ch.kind})
                 # Keep the evidence: what the audit table actually holds after the watermark, so a

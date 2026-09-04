@@ -46,3 +46,16 @@ reason codes: OK=6, WRONG_SLOT=4
   post-watermark audit rows (`audit_rows_after_watermark`) — the live OpenEMR log format is being captured by
   a scripted replay of seed 7 (`runs/probe-audit-s7`, no tokens).
 
+### probe-audit-s7 — scripted replay of seed 7's 37 actions on a fresh fork (03:11–03:20 local, no tokens)
+
+Reproduced the false negative exactly (all effect checks passed, `DIRECT_DB_WRITE`, 71 scripted actions incl. 1 s
+settles) and captured the live audit rows: **OpenEMR 8.3 stores `log.comments` base64-encoded**. The calendar save
+is row 508006, `scheduling-update`, `patient_id 0`, comment = base64 of `UPDATE openemr_postcalendar_events SET … WHERE
+pc_eid = ? (… '507000' …)`, so the 2026-09-03 plain-text LIKE fallback could never match it; the verified episodes only
+passed because opening the dashboard writes rows under the patient's id. Fix: the tripwire decodes comments before
+matching (write rows only), tested with a base64 fixture. Cost: one revert restore (134 s) ≈ **$0.01 VM**.
+The two v9 false negatives (seeds 3 and 7, attempt 1) cannot be re-scored (VMs gone); they stay 0 in the v9 numbers.
+Running totals: OpenAI $1.49 / Solari $0.25.
+
+### luna-v10-fam1-s0-9 — prompt v10 + `--history-notes`, family 1, seeds 0–9 (launched 03:27 local)
+

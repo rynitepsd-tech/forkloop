@@ -256,7 +256,9 @@ an `audit_log` row (portal) or `log` row (OpenEMR) for that entity written
 after seeding. Missing audit → `DIRECT_DB_WRITE`. (Inside the VM only the UI
 can write, so this is a tripwire, not the only defence.) OpenEMR's `log` is
 matched loosely (`audit.loose`): the row's patient id, or a `comments` SQL that
-names the changed table and primary key. When a change goes unmatched the
+names the changed table and primary key — matched after base64-decoding, because
+OpenEMR 8.3 stores `log.comments` base64-encoded (measured 2026-09-04), on the
+write rows only (`event` not `*-select` / `http-request*`). When a change goes unmatched the
 check's `details` also carry `audit_rows_after_watermark` — up to 20 of the
 newest audit rows per database (`pk`, `entity`, `entity_id`, first 300 chars of
 `comments`) — so a false `DIRECT_DB_WRITE` can be diagnosed after the VM is gone.
