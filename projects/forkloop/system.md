@@ -231,9 +231,14 @@ Kinds:
   entity value; `audit_id_lookup` maps table → a column on the changed row
   whose value is the audit key (OpenEMR's `log` keys by `patient_id`, so
   `insurance_data` changes are looked up through `pid`). With `loose: true`
-  a match on the id column, a `comments LIKE %id%`, *or* a comments column
-  whose SQL names both the changed table and the row's primary key also
-  counts — OpenEMR's `EventAuditLogger::auditSQLEvent` writes `patient_id`
+  a match on the id column, or a `comments` text that contains the audit id
+  *or* names both the changed table and the row's primary key, also counts;
+  the comments are matched **after base64-decoding** (OpenEMR 8.3 stores
+  `log.comments` base64-encoded — measured 2026-09-04 by replaying a false
+  `DIRECT_DB_WRITE` episode, `runs/probe-audit-s7`), on the write rows only
+  (`event` not `*-select` / `http-request*`). When a change goes unmatched the
+  check's details carry `audit_rows_after_watermark` (up to 20 newest audit
+  rows per db) so the verdict alone explains a false negative — OpenEMR's `EventAuditLogger::auditSQLEvent` writes `patient_id`
   from the *session's* active chart (0 when an appointment is edited from
   the Finder with no chart open) and stores the statement with its bound
   values in `comments`, which made a correct calendar save score
@@ -264,7 +269,13 @@ matches on the public `name:` or the directory name. `World` provides:
 `checksum_tables/watermark_tables/primary_keys`, and the hooks
 `build`, `health` (DB pings, HTTP health when the machine has the `http`
 capability), `open_initial_screen` (ctrl+l, URL, Return), `before_episode`,
-`gui_factory`.
+`gui_factory`. `ClaimsOpsWorld.before_episode` clears the downloads dir and
+runs `ensure_chrome_gpu_flag`: on goldens whose Chrome lacks `--disable-gpu` it
+kills Chrome, **waits until the old processes are gone**, removes the profile's
+`Singleton*` files, launches with `chrome_base_flags`, **verifies** a
+`forkloop-chrome` Chrome is running (one retry) and raises otherwise, so the
+reset stage fails instead of starting a browser-less episode (2026-09-04: a
+fixed sleep let the new Chrome attach to the dying one and exit with it).
 
 ### 4.8 `seed.py`
 
@@ -298,9 +309,12 @@ cap. Two modes:
   the same id (or a fresh `create(from_snapshot=golden)` if the machine died).
   A revert that times out (`RevertTimeoutError`) or gets a 503
   (`CapacityError`) replaces that one machine with a fresh fork and keeps
-  revert mode (`revert_failed_replaced_machine`); only a real refusal
-  switches the whole pool to fork mode
-  (`revert_unsupported_fell_back_to_fork`, at most once per run).
+  revert mode (`revert_failed_replaced_machine`); so does any other error
+  that is not a refusal (a bare `ConnectionError` after the controller Mac
+  slept, 2026-09-04). Only a real refusal — `_is_revert_refusal`: a
+  `BackendError` saying 409 / "Not revertable" / "needs a running" — switches
+  the whole pool to fork mode (`revert_unsupported_fell_back_to_fork`, at
+  most once per run); with `fallback_to_fork=False` every error raises.
 - `fork`: `restore()` kills the old machine and creates a new one from the
   golden snapshot.
 
@@ -368,8 +382,12 @@ full disk image on the account); `SearchStats` counts branch points,
 branches, wins, snapshots, reverts, forks, `snapshots_deleted` and records
 `snapshot_delete_errors`. First real run 2026-09-03: `collect --best-of 2
 --search-mode fork` verified 3/3 family-3 seeds through real branch points
-(`runs/luna-v5-f3-bo2-smoke`, $0.087 per verified); the three `cp-*`
-snapshots of that run were refused deletion right after use.
+(`runs/luna-v5-f3-bo2-smoke`, $0.087 per verified). The checkpoint is taken
+before the candidates are deduplicated, so the no-branch path (both candidates
+identical) deletes it too — 6/16 leaked silently there on 2026-09-04
+(`runs/luna-v10-bo2-hard`, where the other 10 deletes succeeded with no
+`snapshot_delete_errors`); that run recovered 2/10 double-failed family-1
+seeds at $0.53 each, and every loss had both candidates fail the same check.
 
 ### 4.14 `trajectories.py`
 
@@ -618,16 +636,16 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-197 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
+0 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
 
 | File | Covers |
 | --- | --- |
 | `test_portal.py` (22) | schema/base counts, login, filters, appeal with upload + sha256 + same-transaction audit (trigger-based proof), duplicate appeal allowed, resubmit, messages, eligibility, page_views, `/admin`, determinism |
 | `test_openemr_layer.py` (15) | shim loads, base data deterministic and executes, every SQL helper executes on the shim, `quote`, portability |
-| `test_core_toy.py` (21) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
-| `test_claims_ops_world.py` (10) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted) vs one naming neither table nor pk (caught), insurance rows carry subscriber sex/address, concurrent golden build |
+| `test_core_toy.py` (23) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
+| `test_claims_ops_world.py` (11) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build |
 | `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
-| `test_student_policy.py`, `test_train.py` (93) | every parser style, coordinate scaling, mocked vLLM transport, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
+| `test_student_policy.py`, `test_train.py` (0) | every parser style, coordinate scaling, mocked vLLM transport, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
 | `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, snapshot storage free tier, budget rows |
 
 ## 10. One episode, end to end
@@ -672,7 +690,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | `SandboxClient.create_desktop(from_snapshot=...)`, `Desktop.snapshot/revert`, `commands.run` argv semantics, `kill` vs `close`, error classes, the post-restore single-connection window | solari-sandbox / solari-core 0.2.0 source (installed from PyPI) |
 | Plans: Free $0/1 concurrent, Starter $20/2, Pro $200/10; 2 vCPU/4 GB $0.114/h Starter + $0.02/h screen; snapshot storage first 10 GB free, then $0.05 per GB-month | docs.getsolari.com/pricing (storage line read 2026-09-04) |
 | Snapshots keep the machine running; revert keeps the id; from_snapshot makes independent copies; both VMs and sandboxes | docs.getsolari.com/snapshots; re-verified live 2026-09-03 (`docs/spikes.md`): desktop revert 21.5 s p50 with state restored, fork snapshot 20.8 s; revert to the 8.5 GB golden 10/10 on one machine id, restores bimodal (≈ 22 s or 70–160 s) for revert and fork alike, one 503 that left the machine alive |
-| OpenEMR's SQL audit log (`EventAuditLogger::auditSQLEvent`) takes `patient_id` from the session's active chart and stores the statement plus quoted bound values in `comments`; `add_edit_event.php` itself logs nothing | github.com/openemr/openemr v8_3_0 `src/Common/Logging/EventAuditLogger.php`, `interface/main/calendar/add_edit_event.php` |
+| OpenEMR's SQL audit log (`EventAuditLogger::auditSQLEvent`) takes `patient_id` from the session's active chart and stores the statement plus quoted bound values in `comments`, **base64-encoded** on this install (row `scheduling-update`, patient_id 0, decoded to the UPDATE with `'507000'` bound — `runs/probe-audit-s7`, 2026-09-04); `add_edit_event.php` itself logs nothing | github.com/openemr/openemr v8_3_0 `src/Common/Logging/EventAuditLogger.php`, `interface/main/calendar/add_edit_event.php` |
 | OpenEMR 8.3 insurance editor requires subscriber sex, street, city, state and ZIP (client-side `required`); `state` is a `list_options` list (`state_data_type` 26) with two-letter ids, `sex` is Female/Male/UNK | observed live 2026-09-03 (screenshot in `runs/luna-v6-fam12-s0-9`, `list_options` dump in `runs/logs/audit_probe_f1s2.log`) |
 | Templates: base / default / office / code; Image builder | docs.getsolari.com/templates |
 | OpenEMR 8.3.0 released 2026-08-18, PHP 8.3+, MariaDB 10.6+; tarball asset and sha256; `InstallerAuto.php` args; `OPENEMR_ENABLE_INSTALLER_AUTO=1` | github.com/openemr/openemr v8_3_0 |
