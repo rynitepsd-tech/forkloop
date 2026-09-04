@@ -203,6 +203,25 @@ to ready) without leaving revert mode — the 2026-09-03 fix working as designed
 under 30 s, 3/11 over 120 s; no fork deaths; `reap --dry-run` = 0 afterwards. v10 + notes is the family-1 prompt from
 here; seeds 10–34 of families 1–2 follow for SFT volume.
 
+**Family 1 on v10 + `--history-notes`, fresh seeds 10–34, same budget/retry (`runs/luna-v10-fam1-s10-34`, 2026-09-04
+03:59–06:12 local, 38 attempts):** **15/25 verified = 60.0 % [40.7, 76.6] within two attempts; first pass 12/25 = 48 %**;
+$2.98 for the run ($2.60 tokens, $0.38 VM), $0.20 per verified seed; verified median 55 actions, 15/15 `done()`. This is
+the honest family-1 number — the 9/10 on seeds 0–9 was partly luck of the draw: the requested half-day is sampled
+independently of the appointment's time, and **on seeds 0–9 the appointment already sat in the requested window for 8/10
+seeds, on seeds 10–34 for only 11/25** (computed offline from the pure generator). The 23 failed attempts:
+
+| class | attempts | what happened |
+| --- | --- | --- |
+| **window** | 13 (8 first pass + 5 retries; seeds 11, 15, 17, 18, 19, 25, 27, 29) | Right date, `done()`, but the appointment kept its old time when the task asked for the other half of the day (`event_time_window`). v10's "change the time only if the requested window needs it" is never acted on: the notes carry CURRENT/TARGET dates but no window, and the reasoning never mentions the half-day. Of the 14 fresh seeds that needed a time change, 3 verified first pass (10, 20, 26). Retries do not recover it (0/5). |
+| **add-event** | 7 (4 first pass + 3 retries; seeds 13, 14, 21, 23, 15, 27) | v10's "click the TIME to open the appointment editor" lands on the hour labels at the left of OpenEMR's calendar grid, which open the *Add New Event* form for that slot. Luna fills the target date, the Save at y≈680 is refused (duration 0, field marked invalid), it sets 30 min and saves a **second** appointment (`single_event` 2, `no_collateral` add), original untouched. Same signature every time (Save at 680 vs 632 in the edit form). |
+| **date arithmetic** | 3 (seed 34 ×2, seed 13 retry) | Clean execution of a wrong date: "next Tuesday after Monday 2026-09-14" → Sep 22 (both attempts, 40 and 22 actions); seed 13 retry a week late. |
+
+No crash-budget loss this run (the retry pass had 0 attempts with ≥ 4 crash reports failing for that reason); crashpad
+median 2 per attempt (max 9). Pool: revert mode held for all 38 restores (p50 112 s, 8/38 under 30 s, 15/38 over 120 s)
+through **six 503 reverts**, each replaced in place in 203–242 s; no fork deaths. Prompt frozen at v10 for the night as
+planned; the v11 candidates are (a) a window rule with an explicit "CURRENT time → TARGET time" note, (b) "click the
+appointment's own text, never the hour labels; Cancel any form titled Add New Event".
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |
@@ -211,6 +230,7 @@ here; seeds 10–34 of families 1–2 follow for SFT volume.
 | 1 reschedule_constrained, seeds 0–9, **v8** (2026-09-04) | — | **7/10** | 4/10 | $0.28 (median 103 actions, 6/7 end with done()) |
 | 1 reschedule_constrained, seeds 0–9, **v9** (2026-09-04) | — | **6/10** | 5/10 | $0.29 (median 72, 6/6 done(); 2 of the misses were oracle false negatives, fixed) |
 | 1 reschedule_constrained, seeds 0–9, **v10 + history notes** (2026-09-04) | — | **10/10** | 9/10 | $0.089 (median 48.5, 10/10 done()) |
+| 1 reschedule_constrained, **fresh seeds 10–34, v10 + history notes** (2026-09-04) | — | **15/25 = 60 % [40.7, 76.6]** | 12/25 | $0.20 (median 55; window 13, add-event 7, date 3 of 23 failed attempts) |
 | 2 update_insurance_reconcile, portal-only (seeds 1, 2, 8, 9) | 4/4 | not re-run | — | — |
 | 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
 

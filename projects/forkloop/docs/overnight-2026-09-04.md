@@ -88,3 +88,43 @@ reason codes: OK=10
 
 ### luna-v10-fam1-s10-34 — family 1, seeds 10–34, v10 + notes (launched 03:59 local)
 
+Mid-run note (04:35 local, 11 first-pass verdicts in): first pass 3/11 so far — a very different picture from
+seeds 0–9 (9/10). Explained offline with the pure generator: the requested window (morning/afternoon) is sampled
+independently of the appointment's current time, and **on seeds 0–9 the current time already lay inside the target
+window for 8/10 seeds** (only seeds 3 and 5 needed a time change), while **on seeds 10–34 it does for only 11/25**.
+Of the fresh seeds that needed a time change so far (10, 11, 13, 14, 15, 17, 18, 19), one verified (seed 10) and
+five failed with the right date and the old time (`event_time_window`, seeds 11, 15, 17, 18, 19); two (13, 14)
+clicked an empty calendar slot and saved a *new* appointment through the add-event form (duration 0 → Save refused
+at y=680 until fixed, then `no_collateral` + `single_event` fail). So v10's "change the time only if the requested
+window needs it" is the one rule left that Luna does not follow; the prompt stays frozen at v10 for this step as
+planned, and this is next action #1.
+
+Ran 03:59–06:12 local (38 attempts: 25 + 13 retries). `forkloop metrics --run runs/luna-v10-fam1-s10-34 --model gpt-5.6-luna`:
+
+```
+episodes                    25 selected of 38 attempts (13 superseded)
+success                     60.0% [40.7, 76.6] (n=25)
+median steps                55
+median reset (s)            142.535
+cost / success (USD)        0.1989
+cost / episode (USD)        0.0785
+  of which VM / tokens      0.3827 / 2.6008
+tokens in / out             10978010 / 337661
+reason codes: OK=15, WRONG_SLOT=10
+```
+
+- **Honest fresh-seed family-1 estimate: 15/25 verified = 60.0 % [40.7, 76.6]; first pass 12/25 = 48 %**
+  (retries recovered 3/13: seeds 14, 21, 29). Verified episodes 35–141 actions (**median 55**), 15/15 end with `done()`.
+- Cost: **$2.60 tokens (OpenAI), $0.38 VM (Solari)**; $0.199 per verified seed. Running totals: OpenAI $4.87 / Solari $0.74.
+- Failure classes over the 23 failed attempts (every one read): **window 13** (right date, the appointment's old time
+  kept when the requested half-day differs — seeds 11, 15, 17, 18, 19, 25, 27, 29 first pass, and 11, 17, 18, 19, 25
+  retries), **add-event 7** (the "click the TIME" rule from v10 lands on the calendar's hour labels, which open the
+  *Add New Event* form; a second appointment is saved after fixing the form's duration=0 — seeds 13, 14, 21, 23 first
+  pass, 15, 23, 27 retries), **date arithmetic 3** (seed 34 ×2: "next Tuesday after Monday Sep 14" → Sep 22; seed 13
+  retry: a week late). No crash-budget losses this run (crashpad median 2, max 9; the 141-action verified seed 26 had 9).
+- Pool: revert mode held across 38 restores (p50 112 s, 8/38 under 30 s, 15/38 over 120 s, max 242 s); **six 503
+  reverts** (`revert_failed_replaced_machine`) each replaced one machine (203–242 s to ready); no fork deaths;
+  `reap --dry-run` = 0 afterwards.
+
+### luna-v10-fam2-s10-34 — family 2 (both variants by seed), seeds 10–34, v10 + notes (launched 06:14 local)
+
