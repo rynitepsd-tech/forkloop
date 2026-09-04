@@ -56,6 +56,13 @@ class BackendError(RuntimeError):
     pass
 
 
+class RevertTimeoutError(BackendError):
+    """``revert()`` was accepted but the guest did not answer within the ready window.
+
+    Not a refusal: the restore is in its slow mode (70–160 s on Solari, 2026-09-03). The pool replaces
+    the machine and keeps revert mode instead of switching the whole run to fork mode."""
+
+
 class ConcurrencyError(BackendError):
     """The plan's concurrent-machine cap was hit (HTTP 429 on Solari)."""
 

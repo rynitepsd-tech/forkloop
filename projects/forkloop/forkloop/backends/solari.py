@@ -14,7 +14,7 @@ import time
 from typing import Any, Optional
 
 from ..types import ExecResult, MachineInfo, SnapshotInfo
-from .base import BackendError, CapacityError, ConcurrencyError, PlanGateError, parse_resolution
+from .base import BackendError, CapacityError, ConcurrencyError, PlanGateError, parse_resolution, RevertTimeoutError
 
 DEFAULT_BASE_URL = "https://api.getsolari.com"
 PLAN_CAPS = {"free": 1, "starter": 2, "pro": 10, "professional": 10, "enterprise": 50}
@@ -114,8 +114,9 @@ class SolariMachine:
                 await self.wait_ready(5.0)
                 return
             except Exception as e:  # noqa: BLE001
-                if time.monotonic() - t0 > self.backend.ready_timeout_s:
-                    raise BackendError(f"machine {self.id} not reachable after revert: {e}") from e
+                if time.monotonic() - t0 > self.backend.revert_ready_timeout_s:
+                    raise RevertTimeoutError(
+                        f"machine {self.id} not reachable {self.backend.revert_ready_timeout_s:.0f}s after revert: {e}") from e
                 await asyncio.sleep(0.3)
 
     async def kill(self) -> None:
@@ -245,7 +246,8 @@ class SolariBackend:
 
     def __init__(self, *, api_key: Optional[str] = None, base_url: Optional[str] = None,
                  plan: Optional[str] = None, concurrency_cap: Optional[int] = None,
-                 ready_timeout_s: float = 90.0, call_timeout_ms: Optional[int] = None,
+                 ready_timeout_s: float = 90.0, revert_ready_timeout_s: float = 240.0,
+                 call_timeout_ms: Optional[int] = None,
                  kind: Optional[str] = None) -> None:
         #: "desktop" (GUI, paid plans) or "sandbox" (headless; Free plan). Env FORKLOOP_SOLARI_KIND.
         self.kind = (kind or os.environ.get("FORKLOOP_SOLARI_KIND", "desktop")).lower()
@@ -258,6 +260,9 @@ class SolariBackend:
         self.plan = (plan or os.environ.get("SOLARI_PLAN", "starter")).lower()
         self.concurrency_cap = concurrency_cap or int(os.environ.get("FORKLOOP_CONCURRENCY", 0)) or PLAN_CAPS.get(self.plan, 2)
         self.ready_timeout_s = ready_timeout_s
+        #: After ``revert()`` the guest can take the slow restore mode (70–160 s measured 2026-09-03);
+        #: 90 s discarded a healthy machine and flipped a whole run to fork mode (runs/luna-v7-fam1-s0-9).
+        self.revert_ready_timeout_s = revert_ready_timeout_s
         from solari_sandbox import SandboxClient  # type: ignore
 
         self._client = SandboxClient(api_key=self.api_key, base_url=self.base_url, call_timeout_ms=call_timeout_ms)

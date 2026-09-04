@@ -361,6 +361,40 @@ async def test_pool_reaps_an_orphan_when_the_cap_bites(world, backend):
     await pool.close()
 
 
+async def test_slow_revert_replaces_the_machine_but_keeps_revert_mode(world, backend):
+    """A revert that is accepted but whose guest does not come back in time (RevertTimeoutError), or a
+    503 from the host, is not a refusal: replace the machine, keep revert mode (2026-09-03: a 90 s
+    ready window flipped runs/luna-v7-fam1-s0-9 to fork mode for its remaining 12 attempts)."""
+    from forkloop.backends.base import RevertTimeoutError
+
+    calls = []
+
+    async def slow(snapshot_id):
+        calls.append(snapshot_id)
+        raise RevertTimeoutError("machine x not reachable 240s after revert")
+
+    pool = WorkerPool(backend, world, size=1, mode="revert")
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
+    obs, _ = await env.reset(1)
+    m = env.ep.machine
+    first_id = m.id
+    m.revert = slow  # type: ignore[method-assign]
+    await env.step(Action.done())
+
+    obs, info = await env.reset(2)
+    assert len(calls) == 1
+    assert pool.mode == "revert" and pool.revert_supported is not False
+    assert env.ep.machine.id != first_id  # replaced with a fresh fork
+    assert info["reset"]["ok"] and info["reset"]["method"] == "revert"
+    assert any(e["event"] == "revert_failed_replaced_machine" for e in pool.events)
+    assert not any(e["event"] == "revert_unsupported_fell_back_to_fork" for e in pool.events)
+
+    obs, info = await env.reset(3)  # the fresh machine reverts normally
+    assert info["reset"]["ok"] and info["reset"]["method"] == "revert" and len(calls) == 1
+    await env.close()
+    await pool.close()
+
+
 async def test_pool_reaps_a_leaked_machine_from_its_own_run(world, backend):
     """A create that failed after the machine existed leaves one tagged with our run_id and owned
     by no worker; reap_orphans must kill it, or it holds a cap slot for the rest of the run."""

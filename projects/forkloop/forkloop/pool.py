@@ -20,7 +20,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .backends.base import Backend, CapacityError, ConcurrencyError, Machine
+from .backends.base import Backend, CapacityError, ConcurrencyError, Machine, RevertTimeoutError
 from .world import World
 
 
@@ -94,13 +94,19 @@ class Worker:
             await self.machine.revert(snapshot_id)  # type: ignore[union-attr]
             self.pool.revert_supported = True
             return
+        except (RevertTimeoutError, CapacityError) as e:
+            # The revert was accepted (or the host had no capacity for it) — not a refusal. Replace this
+            # machine with a fresh fork and keep revert mode: the next revert usually succeeds
+            # (2026-09-03: 10/10 in the benchmark, one 240 s+ straggler in the family-1 run).
+            _log_and_append(self.pool.events, {"t": time.time(), "event": "revert_failed_replaced_machine",
+                                               "worker": self.index, "error": f"{type(e).__name__}: {str(e)[:300]}"})
         except Exception as e:  # noqa: BLE001
             if not self.pool.fallback_to_fork:
                 raise
             self.pool.revert_supported = False
             self.pool.mode = "fork"
-            self.pool.events.append({"t": time.time(), "event": "revert_unsupported_fell_back_to_fork",
-                                     "error": f"{type(e).__name__}: {e}"})
+            _log_and_append(self.pool.events, {"t": time.time(), "event": "revert_unsupported_fell_back_to_fork",
+                                               "worker": self.index, "error": f"{type(e).__name__}: {str(e)[:300]}"})
         # The machine may have been destroyed by the failed revert; replace it either way.
         if self.machine is not None:
             try:

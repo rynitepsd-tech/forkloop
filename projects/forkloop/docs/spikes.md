@@ -92,6 +92,58 @@ cap). One leftover fork from the last branch was killed with `forkloop reap` aft
 the SDK says a snapshot with live children is refused and the branch fork was still listed at that moment) — the
 next run records the error text in `search.snapshot_delete_errors`; delete them from the console meanwhile.
 
+**Family 1 on prompt v7, seeds 0–9, `--max-steps 150 --max-seconds 1200 --retry-failed 1 --pool-mode revert --concurrency 2`
+(`runs/luna-v7-fam1-s0-9`, 15:54–17:25 local, 14 attempts):** **7/10 seeds verified = 70 % [39.7, 89.2]; first pass 6/10**
+(seeds 0, 1, 3, 4, 6, 9), seed 2 recovered on its retry, seeds 5 and 8 failed twice (`WRONG_SLOT`), seed 7's retry died
+with its fork after 23 actions (control channel closed 1000, the run's only fork death). Against v6 on the same seeds:
+first pass 0/10, 3/10 within three attempts. Priced by `forkloop metrics`: $2.40 for the run ($2.07 tokens, upper bound,
+$0.33 VM), **$0.34 per verified seed**, median 155 steps / 644 s. The v7 rules did what they were written for — every
+verified episode clicked OK on the provider warning and saved the right date early (seed 0 at action 71, seed 1 at 39) —
+and then exposed the next problem: **no verified episode called `done()`**; all seven ran to the 150-action ceiling
+re-opening the appointment and re-saving the same date, because OpenEMR's appointment-search panel keeps showing the
+old date and the prompt asked Luna to "confirm the new date" there. Both `WRONG_SLOT` seeds are the same loop gone
+wrong: after the correct save Luna took the *new* date as "current" and recomputed "next Friday" from it (seed 5: saved
+Sep 18 at action 114, re-saved Sep 25 at 130; seed 8 attempt 2 walked Sep 11 → 18 → 25 → Oct 2 → 9 → 16 → 23 in the
+form without saving); seed 2 attempt 1 and seed 7 lost the appointment after Chrome crashes (4 and 11 crashpad reports)
+in the Calendar Finder — malformed end-date field, then a 50-action scroll loop the loop detector does not catch (the
+scroll coordinates vary). Prompt v8 (`hosted_gui_agent_v8.md`, **not yet run**): the CURRENT date is the date before
+the first edit and is never recomputed from the form, the list, a reload or a crash; clicking OK completes the task —
+`done()` on the next turn, no re-open, no second save; find the appointment from the patient dashboard's Appointments
+card rather than the Calendar search form; "All Users" in the Providers box if the calendar is used. Crashes: median 6
+crashpad reports per attempt (range 2–11), 1–3 RCU stalls; still the dominant source of lost context. Restores: n = 14, p50 78 s, 5/14 under 30 s, 5/14 over 120 s, max 210 s;
+**the pool fell back from revert to fork mode at the third reset of each worker** (16:05 → 16:18, both workers' next
+restores were `mode=fork` at 137 s and 127 s) — the refusal's error text was not persisted (`pool.events` only, fixed:
+the fallback now logs to stderr with the error), so which of the two refusals (503 capacity, or something new) it was
+is not known; the family-2 run that follows records it.
+
+**Family 2, two-system variant (OpenEMR insurance edit + portal resubmission), prompt v7, seeds 0, 3, 4, 5, 6, 7 — the six
+seeds that were 0/6 over 18 attempts on v6 before the seeding fix (`runs/luna-v7-fam2-2sys`, 17:26–17:59 local, 7
+attempts):** **6/6 verified = 100 % [61, 100]; first pass 5/6**, seed 3 on its retry. Every verified episode ended with
+`done()` in 60–87 actions (median 66) and 205–289 s — the same shape as the portal-only variant — and passed all eight
+checks (policy number and plan in OpenEMR, claim `RESUBMITTED` with the new member id, one resubmission, no appeal, the
+other claim and both distractors untouched). Priced by `forkloop metrics`: $0.58 for the run ($0.51 tokens, $0.07 VM),
+**$0.097 per verified seed**. The one failure (seed 3 attempt 1, `WRONG_VALUE` = nothing changed): Luna had the
+Insurance section's pencil under the cursor at action 55 when the tab crashed; after logging in again it never found the
+Insurance section on the dashboard and spent the last 100 actions on `scroll`/`End`/`ctrl+f` with varying coordinates,
+which the loop detector (same kind within 20 px) does not catch. So the family-2 seeding fix (subscriber sex + address on
+the policy) and v7's insurance-edit navigation are confirmed live; what remains for both families is crash recovery.
+Restores: n = 7, p50 85 s, 1/7 under 30 s, 2/7 over 120 s, max 174 s. **Pool: the same revert→fork flip as the family-1
+run, now with the reason captured** — `revert_unsupported_fell_back_to_fork worker=0 error=BackendError: machine
+…vm_000028… not reachable after revert: desktop … not ready` at 17:32:59, i.e. the revert API call was accepted and the
+guest simply did not answer within the backend's 90 s post-revert window (the slow restore mode), after which the pool
+discarded the machine and ran the remaining 5 attempts in fork mode. Fix (offline-tested, not yet run live): a revert
+that times out (`RevertTimeoutError`) or gets a 503 replaces that one machine and keeps revert mode
+(`revert_failed_replaced_machine`); only a real refusal switches the pool; the post-revert ready window is 240 s
+(`SolariBackend.revert_ready_timeout_s`).
+
+**Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
+
+| family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |
+| --- | --- | --- | --- | --- |
+| 1 reschedule_constrained, seeds 0–9 | 3/10 (first pass 0/10) | **7/10** | 6/10 | $0.34 |
+| 2 update_insurance_reconcile, portal-only (seeds 1, 2, 8, 9) | 4/4 | not re-run | — | — |
+| 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
+
 ## Measured on 2026-09-02 (later) — Chrome crash, calendar providers, fork snapshots
 
 | Probe | Result |
