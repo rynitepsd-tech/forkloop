@@ -180,12 +180,31 @@ class ClaimsOpsWorld(World):
             if r.stdout.strip() == "1":
                 return False
         flags = [f for f in self.chrome_base_flags if f not in drop] + extra
+        # Measured 2026-09-04 (runs/luna-v10-fam2-s10-34 seed 31): with a fixed 1.5 s sleep the new
+        # Chrome sometimes attached to the dying one ("Opening in existing browser session") and
+        # exited with it, leaving no browser; the agent then launched a plain Chrome from the dock
+        # (no profile, no portal session) and spent 150 actions guessing credentials. So: wait for
+        # the old processes to be gone, drop the profile's singleton files, launch, verify, retry
+        # once, and fail the reset stage rather than start a doomed episode.
+        profile = "/home/desktop/.config/forkloop-chrome"
+        marker = "[g]oogle-chrome.*forkloop-chrome"
+        launch = ("runuser -u desktop -- env DISPLAY=:0 HOME=/home/desktop XDG_RUNTIME_DIR=/run/desktop "
+                  "setsid -f google-chrome " + " ".join(flags) + " 'http://localhost:8080/claims' "
+                  ">/home/desktop/chrome.log 2>&1")
         script = (
-            "pkill -x chrome; sleep 1.5; runuser -u desktop -- env DISPLAY=:0 HOME=/home/desktop XDG_RUNTIME_DIR=/run/desktop "
-            "setsid -f google-chrome " + " ".join(flags) + " 'http://localhost:8080/claims' "
-            ">/home/desktop/chrome.log 2>&1; sleep 6"
+            "for i in $(seq 1 20); do pkill -x chrome 2>/dev/null; pgrep -x chrome >/dev/null || break; sleep 0.5; done; "
+            "pkill -9 -x chrome 2>/dev/null; sleep 0.5; "
+            f"rm -f {profile}/SingletonLock {profile}/SingletonSocket {profile}/SingletonCookie; "
+            f"{launch}; "
+            f"for i in $(seq 1 24); do sleep 0.5; ps -eo args | grep -q '{marker}' && break; done; "
+            f"if ! ps -eo args | grep -q '{marker}'; then echo RELAUNCH_RETRY; sleep 1; {launch}; sleep 6; fi; "
+            "sleep 4; "
+            f"if ps -eo args | grep -q '{marker}'; then echo CHROME_OK; else echo CHROME_MISSING; fi"
         )
-        await machine.exec("bash", ["-c", script], timeout_ms=60_000)
+        r = await machine.exec("bash", ["-c", script], timeout_ms=90_000)
+        out = (r.stdout or "") if r is not None else ""
+        if "CHROME_OK" not in out:
+            raise RuntimeError(f"Chrome did not come up after relaunch (output: {out.strip()[:200]!r})")
         return True
 
 

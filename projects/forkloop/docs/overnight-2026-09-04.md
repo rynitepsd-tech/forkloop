@@ -128,3 +128,13 @@ reason codes: OK=15, WRONG_SLOT=10
 
 ### luna-v10-fam2-s10-34 — family 2 (both variants by seed), seeds 10–34, v10 + notes (launched 06:14 local)
 
+Mid-run note (07:55 local): 23/24 first-pass verdicts in, one failure — **seed 31 (portal-only variant) started with
+no Chrome on screen** (first screenshot: a file-manager window on the bare desktop). `chrome.log` shows the
+`before_episode` relaunch printed "Opening in existing browser session" at 17:46:30 VM time: the new Chrome attached
+to the one `pkill` was still killing and died with it. Luna launched Chrome from the dock (default profile, no
+`--disable-gpu`, no portal session) and spent 151 actions guessing portal credentials (14 logins tried). Harness fix,
+offline-tested: the relaunch now waits for the old processes to exit (≤ 10 s), removes the profile's Singleton*
+files, launches, verifies a `forkloop-chrome` Chrome is running (≤ 12 s), retries once, and raises (failing the
+reset stage, so `--reset-retries` re-queues the seed) instead of starting a doomed episode. Applies from the next
+run; the current process has the old code.
+

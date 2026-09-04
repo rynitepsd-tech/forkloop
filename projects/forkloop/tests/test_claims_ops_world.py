@@ -253,11 +253,13 @@ async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
     world = load_world("claims-ops-v1")
     calls: list[str] = []
 
-    def machine(flag_present: bool):
+    def machine(flag_present: bool, comes_up: bool = True):
         async def exec_(cmd, args=None, **kw):
             calls.append(" ".join(args or []))
             if "grep -c -- '--disable-gpu'" in (args or [""])[-1]:
                 return SimpleNamespace(exit_code=0, stdout="1\n" if flag_present else "0\n", stderr="")
+            if "CHROME_OK" in (args or [""])[-1]:
+                return SimpleNamespace(exit_code=0, stdout="CHROME_OK\n" if comes_up else "RELAUNCH_RETRY\nCHROME_MISSING\n", stderr="")
             return SimpleNamespace(exit_code=0, stdout="", stderr="")
         return SimpleNamespace(exec=exec_, capabilities={"gui"}, backend_name="solari")
 
@@ -266,6 +268,13 @@ async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
     calls.clear()
     assert await world.ensure_chrome_gpu_flag(machine(False)) is True
     assert len(calls) == 2 and "--disable-gpu" in calls[1] and "pkill -x chrome" in calls[1]
+    # the relaunch waits for the old Chrome to be gone, clears the profile lock and verifies the new one
+    # (2026-09-04: a fixed sleep let the new Chrome attach to the dying one and exit with it)
+    assert "pgrep -x chrome" in calls[1] and "SingletonLock" in calls[1] and "CHROME_OK" in calls[1]
+    # no browser after the retry -> the reset stage fails instead of starting a doomed episode
+    import pytest
+    with pytest.raises(RuntimeError, match="Chrome did not come up"):
+        await world.ensure_chrome_gpu_flag(machine(False, comes_up=False))
 
 
 def test_insurance_row_carries_subscriber_sex_and_address(world):
