@@ -1,4 +1,4 @@
-# Handoff — Forkloop, as of 2026-09-03 (evening)
+# Handoff — Forkloop, as of 2026-09-03 (night)
 
 Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
@@ -7,9 +7,9 @@ measurement), `docs/limitations.md` (everything unproven or broken).
 **One line:** a snapshot-native training loop for vision-only GUI agents on
 Solari desktops — build a payer-portal + OpenEMR world once, snapshot it, and
 every episode reset is one API call. The library, the world, the oracle and the
-training scripts are built and tested; the world runs for real on Solari; the teacher verifies 8/12 family-3 episodes; the student has never run.
+training scripts are built and tested; the world runs for real on Solari; Luna v5 verifies 94/100 family-3 seeds at $0.061 each; revert() and best-of-N search now run for real on Solari; the student has never run.
 
-Last commit on `main`: `6283430`. **Uncommitted in the working tree** (late 2026-09-02): priced metrics (`forkloop/metrics.py`, `tests/test_metrics_cost.py`), pool orphan-reaping on 429 and `collect --reset-retries`, the teacher pre-flight, cache-token accounting in `teacher.py`, wider episode diagnostics (`worlds/claims_ops_v1/world.py`), `scripts/episode_table.py`, `docs/solari-repro.md`, and the doc updates below. `runs/` is git-ignored; the trajectories live only on this Mac. Repo: `rynitepsd-tech/forkloop`
+Eleven local commits are unpushed (the latest is the reset-bench / best-of-2 commit of 2026-09-03 night, on top of `21642a7`); push only when asked. `runs/` is git-ignored; the trajectories live only on this Mac. Repo: `rynitepsd-tech/forkloop`
 (fork of `solari-sdk/solari-cookbook`), cloned at `~/Desktop/Solari/repo`,
 project under `projects/forkloop/`.
 
@@ -63,7 +63,8 @@ verdicts are in `docs/demo_episode/`.
 
 | Measurement | Result |
 | --- | --- |
-| `revert()` | 409 "Not revertable" on sandboxes **and** desktops |
+| `revert()` to golden, desktop, n=10 (2026-09-03) | **works**, same machine id; p50 100.9 s, p95 151.7 s, 0 failures; restore bimodal ≈ 22 s or 70–160 s |
+| Reset via fork, desktop, n=10 (2026-09-03, same session) | p50 92.0 s, p95 169.4 s, 0 failures; same bimodal restore |
 | Reset via fork, desktop, n=10 | p50 25.0 s, p95 26.6 s, 1 failure (disk-full, since fixed) |
 | Reset via fork, sandbox, n=10 | p50 19.1 s, p95 21.8 s, 0 failures |
 | Observe-act-observe loop | 0.45 s p50 → about 2.2 agent steps per second |
@@ -71,8 +72,8 @@ verdicts are in `docs/demo_episode/`.
 | Parallel forks | two desktops from one snapshot, ~31 s each |
 | Session recording | works on forked desktops in-VM; `recordingUrl` never populates |
 
-Chart 2 has two real bars (`bench/chart2_solari.png`). Chart 1 does not exist:
-it needs the teacher and a student.
+Chart 2 has its revert and fork bars from the live golden (`bench/chart2_solari_0903.png`; the older fork-only chart is `bench/chart2_solari.png`). Chart 1 does not exist:
+it needs a student.
 
 ---
 
@@ -107,7 +108,7 @@ authenticated OpenEMR page (no GPU process on the template — fixed with
 filter, which one click on "All Users" widens. A reschedule
 has still not been driven through the GUI.
 
-**Forks cannot be snapshotted.** `snapshot()` on a `from_snapshot` desktop is
+**(Superseded 2026-09-03 — forks snapshot fine now and `collect --best-of 2 --search-mode fork` verified 3/3 family-3 seeds through real branch points, `runs/luna-v5-f3-bo2-smoke`, $0.087 per verified; `docs/spikes.md`.)** ~~**Forks cannot be snapshotted.**~~ `snapshot()` on a `from_snapshot` desktop was
 409 `Not snapshottable`; fresh desktops snapshot fine. Golden images are
 therefore rebuilt from scratch (`forkloop build-world`, ~10 min, resumable
 with `--attach`), and `best_of_n` search — which checkpoints a forked worker —
@@ -119,7 +120,7 @@ cannot run on this account in either mode. Use `--best-of 1`.
 
 ## Next steps, in order
 
-**Solari re-checked 2026-09-03 evening after support said "all set" (`docs/spikes.md` top section): `revert()` now works (desktop 21.5 s p50, state restored 3/3; a refused revert leaves the machine alive) and `snapshot()` works on forks — the two blockers behind fork-only resets and `--best-of 1` are gone, not yet exploited. `recordingUrl`, the 4 GB disk and ignored cpu/mem on forks are unchanged. Nothing in the harness has been switched to revert mode yet; measure with `reset-bench` first. **Never call `revert()` on the golden's ancestors or on a worker you need until that benchmark is in.**
+**Solari re-checked 2026-09-03 evening after support said "all set" (`docs/spikes.md` top section): `revert()` now works (desktop 21.5 s p50, state restored 3/3; a refused revert leaves the machine alive) and `snapshot()` works on forks — the two blockers behind fork-only resets and `--best-of 1` are gone, not yet exploited. `recordingUrl`, the 4 GB disk and ignored cpu/mem on forks are unchanged. **Benchmarked 2026-09-03 night (`docs/spikes.md` "night" section): `reset-bench --methods revert fork --trials 10 --no-fallback` on the golden — revert 10/10 on one machine id, p50 100.9 s; fork 10/10, p50 92.0 s; both bimodal (≈ 22 s or 70–160 s) so the slow half is Solari's host-side restore, not our 429 backoff. Revert is the pool's reset mode from here (CLI default `--pool-mode revert`, fork fallback kept). The first best-of-2 search verified 3/3 family-3 seeds and surfaced two pool bugs, both fixed and tested: branch pools reaped the parent's worker, and finished branch forks were never closed. Checkpoint snapshots (`cp-*`) were not deleted (three left on the account; delete from the console); the next search run records why in `search.snapshot_delete_errors`.**
 
 **Family 3 SFT set done (2026-09-03, `runs/luna-v5-f3-s20-99`): Luna v5 verified 77/80 seeds 20–99 = 96.2 % [89.5, 98.7]** (first pass 73/80; `--retry-failed 2` recovered 4 of 7), $0.08 per verified, **5,232 SFT examples** in `runs/exports/sft_luna_v5_f3_s20-99.jsonl`. Combined seeds 0–99: Luna v5 94/100 = 94 % at $0.061/verified vs Opus 5 9/15 = 60 % at $3.55 (`runs/exports/opus_vs_luna_v5_f3_full.md`). The three unrecovered seeds are transcription misreads/decoys/budget — the failure classes the oracle is built to reject; the fresh seeds beat the 85 % from the tuned 0–19 set. The run survived 2 fork deaths, 2 create timeouts and one ~3.5 h Mac-sleep stall unattended via `--reset-retries` and the pool's 429 reap. This closes the SFT-data goal; next is a GPU box for the student bake-off (still blocked). 
 
@@ -213,8 +214,7 @@ cannot run on this account in either mode. Use `--best-of 1`.
 These are all fixed in the scripts, but they will bite again if you touch the
 same areas.
 
-- **`revert()` destroyed a running machine** on this account, twice. Treat it as
-  destructive until Solari says otherwise. The pool now catches a refused revert,
+- **`revert()` destroyed a running machine** on this account, twice, before Solari's 2026-09-03 fix; since then a refused revert leaves the machine alive and a successful one is a real in-place restore (10/10 on the golden). The pool now catches a refused revert,
   logs `revert_unsupported_fell_back_to_fork`, replaces the machine and switches
   to fork mode for the rest of the run (verified live), so a wrong `--pool-mode`
   costs time rather than the run.

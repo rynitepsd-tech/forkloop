@@ -408,6 +408,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     p = sub.add_parser("reap", help="kill leftover forkloop machines"); p.add_argument("--dry-run", action="store_true")
     p.set_defaults(fn=lambda a: asyncio.run(_reap(a)))
 
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "reset-bench":
+        # argparse.REMAINDER swallows leading options into the parent parser ("unrecognized arguments: --world"),
+        # so hand the benchmark its own argv untouched.
+        return int(__import__("forkloop.bench.reset_benchmark", fromlist=["main"]).main(argv[1:]) or 0)
     args = ap.parse_args(argv)
     return int(args.fn(args) or 0)
 

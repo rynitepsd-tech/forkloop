@@ -372,6 +372,39 @@ async def test_pool_reaps_a_leaked_machine_from_its_own_run(world, backend):
     await pool.close()
 
 
+async def test_branch_pool_never_reaps_its_parents_machine(world, backend):
+    """best_of_n runs each fork branch in a private pool on the same account. That pool must leave
+    the parent's live worker (and sibling branches) alone: on 2026-09-03 a branch pool reaped the
+    episode's main machine at start-up (`reaped ids=[...]` in runs/luna-v5-f3-bo2-smoke)."""
+    parent = WorkerPool(backend, world, size=1, mode="fork")
+    await parent.start()
+    w = await parent.acquire()
+    main = await w.restore()
+    branch = WorkerPool(backend, world, size=1, mode="fork", golden_snapshot=parent.golden,
+                        run_id=parent.run_id, reap_orphans_enabled=False)
+    await branch.start()                       # start(reap=True) is the default path acquire() takes
+    assert await branch.reap_orphans() == []   # and an explicit reap is a no-op too
+    assert main.alive
+    await branch.close()
+    await parent.release(w)
+    await parent.close()
+
+
+async def test_fork_search_leaves_the_main_worker_alive(world, backend):
+    """End to end on the fake backend: a fork-mode best_of_n episode must not lose the pool's machine."""
+    from forkloop.search import best_of_n, SearchStats
+
+    pool = WorkerPool(backend, world, size=1, mode="fork")
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
+    stats = SearchStats()
+    await best_of_n(env, RandomPolicy(seed=3), 2, 1, family="reach_target", mode="fork", branch_prob=1.0, stats=stats)
+    assert stats.branch_points >= 1 and stats.forks >= 2
+    assert env.ep is not None and env.ep.machine.alive
+    assert stats.snapshots_deleted == stats.snapshots + stats.reverts * 0 or stats.snapshot_delete_errors == []
+    await env.close()
+    await pool.close()
+
+
 async def test_budget_override_caps_steps_per_run(world, backend):
     pool = WorkerPool(backend, world, size=1, mode="fork")
     env = Env(world, backend, family="reach_target", pool=pool, settle_s=0, budget_override={"max_steps": 2})

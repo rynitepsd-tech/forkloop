@@ -36,8 +36,14 @@ def percentile(xs: list[float], p: float) -> float:
 
 
 async def run_method(backend: Backend, world: World, *, method: str, trials: int, golden: Optional[str],
-                     out: Path, family: str, plan: str, vm_size: str, log=print) -> list[dict[str, Any]]:
-    """method ∈ revert | fork | cold. cold = create from template + full world build (expensive!)."""
+                     out: Path, family: str, plan: str, vm_size: str, log=print,
+                     fallback_to_fork: bool = True) -> list[dict[str, Any]]:
+    """method ∈ revert | fork | cold. cold = create from template + full world build (expensive!).
+
+    ``fallback_to_fork=False`` makes a refused ``revert()`` count as a failed trial instead of
+    silently switching the pool (and every later row) to fork mode. In revert mode the pool is
+    warmed first so trial 0 measures a revert rather than the initial ``create(from_snapshot)``.
+    """
     results: list[dict[str, Any]] = []
     if method == "cold":
         for i in range(trials):
@@ -57,8 +63,9 @@ async def run_method(backend: Backend, world: World, *, method: str, trials: int
             log(f"cold #{i}: {rec['total_seconds']:.2f}s ok={rec['ok']}")
         return results
 
-    pool = WorkerPool(backend, world, size=1, mode=method, golden_snapshot=golden, run_id=f"bench-{method}")
-    await pool.start()
+    pool = WorkerPool(backend, world, size=1, mode=method, golden_snapshot=golden, run_id=f"bench-{method}",
+                      fallback_to_fork=fallback_to_fork)
+    await pool.start(warm=(method == "revert"))
     ctrl = ResetController(world)
     try:
         worker = await pool.acquire()
@@ -80,8 +87,11 @@ async def run_method(backend: Backend, world: World, *, method: str, trials: int
             results.append(rec)
             _append(out, rec)
             restore = next((s["seconds"] for s in rec.get("stages", []) if s["name"] == "restore"), None)
-            log(f"{method} #{i}: total {rec['total_seconds']:.2f}s restore {restore if restore is None else f'{restore:.2f}'}s ok={rec['ok']}")
+            log(f"{method} #{i}: total {rec['total_seconds']:.2f}s restore {restore if restore is None else f'{restore:.2f}'}s ok={rec['ok']}"
+                + ("" if rec.get("ok") else f" error={rec.get('error')}"))
     finally:
+        for ev in pool.events:
+            log(f"pool event: {json.dumps(ev)}")
         await pool.close()
     return results
 
@@ -152,7 +162,7 @@ async def amain(args: argparse.Namespace) -> int:
     for method in args.methods:
         await run_method(backend, world, method=method, trials=args.trials, golden=args.golden, out=out,
                          family=args.family or (world.config.families[0] if world.config.families else ""),
-                         plan=args.plan, vm_size=args.vm_size)
+                         plan=args.plan, vm_size=args.vm_size, fallback_to_fork=not args.no_fallback)
     await backend.close()
     summary = summarize(load_rows([out]), plan=args.plan, vm_size=args.vm_size)
     print(format_summary(summary))
@@ -191,6 +201,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--vm-size", default="2x4", help="vcpu x memGB, e.g. 2x4")
     ap.add_argument("--fake-latency", type=float, default=0.0)
     ap.add_argument("--title", default=None)
+    ap.add_argument("--no-fallback", action="store_true",
+                    help="a refused revert() is a failed trial, not a silent switch of the pool to fork mode")
     args = ap.parse_args(argv)
     return asyncio.run(amain(args))
 

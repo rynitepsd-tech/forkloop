@@ -126,7 +126,7 @@ class WorkerPool:
                  cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
                  timeout_ms: int = 30 * 60_000, max_retries: int = 10, disk_gb: Optional[int] = None,
                  fallback_to_fork: bool = True, create_timeout_s: float = 240.0,
-                 concurrency_backoff_max_s: float = 15.0) -> None:
+                 concurrency_backoff_max_s: float = 15.0, reap_orphans_enabled: bool = True) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
         self.backend = backend
@@ -143,6 +143,10 @@ class WorkerPool:
         self.concurrency_backoff_max_s = concurrency_backoff_max_s
         #: None until a revert has been attempted; then True/False for this account.
         self.revert_supported: Optional[bool] = None
+        #: Orphan reaping kills every forkloop-tagged machine this pool does not own. A pool that
+        #: shares the account with a live parent pool (best_of_n branch pools) must not reap: on
+        #: 2026-09-03 a branch pool killed the episode's main worker at start-up.
+        self.reap_orphans_enabled = reap_orphans_enabled
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
         self.golden = golden_snapshot or world.golden_snapshot_id()
         self.run_id = run_id or ("run-" + uuid.uuid4().hex[:8])
@@ -162,7 +166,7 @@ class WorkerPool:
     async def start(self, *, reap: bool = True, warm: bool = False) -> None:
         if self._started:
             return
-        if reap:
+        if reap and self.reap_orphans_enabled:
             await self.reap_orphans()
         for w in self.workers:
             self._free.put_nowait(w)
@@ -249,6 +253,8 @@ class WorkerPool:
         """Kill machines tagged forkloop=1 that are not owned by this pool."""
         mine = {w.machine.id for w in self.workers if w.machine is not None}
         killed: list[str] = []
+        if not self.reap_orphans_enabled:
+            return killed
         try:
             infos = await self.backend.list_machines(metadata={"forkloop": "1"})
         except Exception as e:  # noqa: BLE001

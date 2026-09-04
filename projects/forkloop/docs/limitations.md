@@ -9,6 +9,7 @@ directory should be read as *design intent*, not result.
 - **Desktops are plan-gated**: `create_desktop` → 402. Every number below is
   from headless `base` sandboxes (same snapshot API, no screen). The agent
   channel (screenshots, mouse, keyboard) remains unexercised.
+- *(Superseded 2026-09-03: `revert()` and fork snapshots now work — `docs/spikes.md` top sections. Kept for the record.)*
 - **`revert()` is not available on this account**: 409 `Not revertable` on a
   running sandbox *and* on a paused one, for the newest snapshot and an older
   one. A failed revert on a *running* sandbox left it `Not found` — treat
@@ -27,8 +28,7 @@ directory should be read as *design intent*, not result.
 
 ## Measured on 2026-09-02 (Starter, desktops)
 
-- `revert()` is refused on desktops too (409). Fork mode is the reset on this
-  account: ~17–20 s restore + ~4 s seed/health/baseline/screen ≈ 21 s.
+- `revert()` was refused on desktops too (409) until 2026-09-03; it now works (10/10 on the golden, p50 100.9 s, same machine id) but is no faster than a fork because restores of the 8.5 GB golden are bimodal on the host side (≈ 22 s or 70–160 s, both methods). Fork p50 the same day: 92.0 s.
 - The desktop's 4 GB disk cannot be enlarged; the build purges VS Code and
   LibreOffice to fit OpenEMR (golden image ends ~95% full — episodes have
   ~200 MB of headroom; the uploads and documents they write are small).
@@ -61,8 +61,12 @@ directory should be read as *design intent*, not result.
   `running`); a fresh desktop snapshots fine. So golden images can only be
   produced on the original build machine (hence the from-scratch rebuild for
   the `--disable-gpu` fix), and `env.checkpoint()` — the branch point of
-  `best_of_n` in both `revert` and `fork` modes — cannot run on this account.
-  `collect --best-of 1` is the only mode that works today.
+  `best_of_n` in both `revert` and `fork` modes — could not run on this account
+  until 2026-09-03. Now it can: `collect --best-of 2 --search-mode fork` verified
+  family-3 seed 0 through a real branch point (`runs/luna-v5-f3-bo2-smoke`).
+  Still open: checkpoint snapshots (`cp-*`) are not always deleted afterwards
+  (`search.snapshot_delete_errors` in the verdict records why); each is a full
+  disk image on the account until deleted by hand.
 - **`cpu` and `mem_mb` are ignored on `from_snapshot` creates** (measured
   2026-09-03, `runs/teacher-f3-s10-14-8gb`): `create_desktop(from_snapshot=…,
   cpu=4, mem_mb=8192)` returns a machine with 2 vCPUs and 4031 MB (`sys.txt`).

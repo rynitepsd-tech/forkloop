@@ -33,6 +33,65 @@ resource/recording items are not. Next measurements, in order: `forkloop reset-b
 golden for the Chart 2 revert bar (revert-mode pool: ~22 s vs fork p50 ~80 s), then `collect --best-of 2
 --search-mode fork` on a few family-3 seeds.
 
+## Measured on 2026-09-03 (night) — `reset-bench --methods revert fork` on the live golden, and the first best-of-2 search
+
+`forkloop reset-bench --world claims-ops-v1 --methods revert fork --trials 10 --no-fallback` (new flag: a refused
+`revert()` is a failed trial, not a silent switch to fork mode; the revert pool is warmed first so every trial is a
+revert, not the initial fork). One worker, golden `snap_dl4e90g095y2` (v5, 8.5 GB), 14:50–15:20 local.
+Rows in `bench/reset_results_desktop_0903.jsonl`, summary `bench/reset_summary_desktop_0903.json`, chart
+`bench/chart2_solari_0903.png`.
+
+| method | n | fail | p50 s | p95 s | p99 s | restore p50 s | $/1k resets | state restored |
+|---|---|---|---|---|---|---|---|---|
+| revert() to golden | 10 | 0/10 | 100.9 | 151.7 | 163.4 | 87.9 | 3.76 | RAM + disk + windows |
+| create(from_snapshot) fork | 10 | 0/10 | 92.0 | 169.4 | 172.6 | 80.1 | 3.43 | disk + DBs, new machine id |
+
+- **`revert(golden)` on a fork of the golden works, 10/10**, and it is a real revert: the worker kept one machine id
+  (`…vm_001996…`, listed by `forkloop reap --dry-run` before, during and after) for all ten trials. The 503 seen on
+  2026-09-03 evening ("no desktop host has capacity") did not recur. **This is the Chart 2 revert bar** and revert is
+  now the pool's reset mode (the CLI default was already `--pool-mode revert`, with the fork fallback kept).
+- **Both methods are bimodal and the modes are the same**: restore is either ≈ 22 s (revert 4/10 at 21.7–22.3 s,
+  fork 3/10 at 21.1–22.3 s) or 70–160 s (revert 37, 73, 103, 105, 112, 122; fork 72, 78, 82, 84, 105, 126, 161).
+  Revert never kills or creates a machine, so the slow mode is **not** the pool's 429 backoff after a kill (the
+  hypothesis from the v6 run); it is the host restoring the 8.5 GB snapshot. `bench/restore_bimodality_0903.png`
+  overlays these 20 restores on the 90 fork restores of the SFT run (p50 81 s, 33/90 under 30 s, 6 over 190 s).
+  Reverting is therefore not faster than forking on this account; its value is the stable machine id (no create
+  churn, no orphan accounting against the Starter cap, no 429 tail) and RAM/window fidelity.
+- Two trials (one per method) had a 48–52 s `seed` stage against a normal 0.3 s (MariaDB slow right after a restore,
+  not yet diagnosed); the totals above include them.
+- The `before_episode` Chrome relaunch (`--disable-gpu` on the v5 golden) is 7.8–8.0 s of every reset in both modes.
+- Cost model: $3.4–3.8 per 1k resets at these latencies (Starter desktop $0.134/h), 4× the $0.93 of the 25 s resets
+  measured on 2026-09-02 — the slow mode is what the reset costs now.
+- Fixed on the way: `forkloop reset-bench --world …` was rejected by the CLI (`argparse.REMAINDER` swallowed the
+  leading option); it now hands the benchmark its own argv. `best_of_n` now deletes its checkpoint and branch-end
+  snapshots after the branch point (`SearchStats.snapshots_deleted`); before this every branch point left a full
+  disk image on the account.
+
+**First real best-of-N search (`runs/luna-v5-f3-bo2-smoke`, 15:22–15:50 local):** `collect --policy student
+(gpt-5.6-luna, v5 prompt, history 16, prev-shot, 120 actions / 900 s) --best-of 2 --search-mode fork --pool-mode
+revert --concurrency 1 --families resolve_denial --seeds 0-2`. **3/3 verified at 1.0**, every episode branched once
+(the student reports no confidence, so branch points are random at 20 % per step, max 3): seed 0 at step 25 —
+candidates `click(101,617)` → 0.0 and `click(27,616)` → 1.0, winner adopted; seed 1 at step 8 and seed 2 at step 2
+— both candidates 1.0, first kept. Mechanics verified live: `env.checkpoint()` = `snapshot()` on the revert-mode
+worker, one `create(from_snapshot=checkpoint)` per candidate (restores 33, 83, 18, 19, 68, 18 s — the same bimodal
+distribution), the losing branch's trajectory stays on disk under `branches/`, the winner's steps are adopted into
+the main trajectory (59 / 64 / 64 steps, 444–479 s wall each). Priced by `forkloop metrics`: $0.26 for the run
+($0.21 tokens, $0.05 VM), $0.087 per verified episode — about 40 % over the single-rollout $0.061 because each
+branch point rolls two full continuations. Two bugs found and fixed from the pool log: (1) **every branch pool
+reaped the main worker at start-up** (`reaped ids=[…vm_002060…]` at 15:27:04, the machine that had just been
+reverted for seed 0) — `reap_orphans` kills every forkloop-tagged machine the calling pool does not own, and a
+branch pool owns nothing yet. The episode survived only because fork-mode search never returns to the main machine
+and the pool's revert-mode restore recreated it (`healthy()` false → fresh fork, 80 s) for the next seed; at
+`--concurrency 2` it would have killed the other worker's live episode. Branch pools now pass
+`reap_orphans_enabled=False` (test `test_branch_pool_never_reaps_its_parents_machine`). (2) **a finished branch's
+fork stayed alive** because the branch `Env` does not own its pool; the next branch's reap was what killed it (the
+second `reaped` line of every seed). Branch pools are now closed after each branch
+(`test_fork_search_leaves_the_main_worker_alive` on the fake backend, where the leak showed as a create hitting the
+cap). One leftover fork from the last branch was killed with `forkloop reap` after the run. Still open: the three
+`cp-*` checkpoint snapshots were not deleted (`snapshots_deleted: 0`, reason not captured by the code that ran;
+the SDK says a snapshot with live children is refused and the branch fork was still listed at that moment) — the
+next run records the error text in `search.snapshot_delete_errors`; delete them from the console meanwhile.
+
 ## Measured on 2026-09-02 (later) — Chrome crash, calendar providers, fork snapshots
 
 | Probe | Result |

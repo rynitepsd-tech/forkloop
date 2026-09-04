@@ -43,6 +43,9 @@ class SearchStats:
     snapshots: int = 0
     reverts: int = 0
     forks: int = 0
+    #: checkpoint / branch-end snapshots deleted after the branch point (each is a full disk image on the account)
+    snapshots_deleted: int = 0
+    snapshot_delete_errors: list[str] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -134,6 +137,8 @@ async def best_of_n(env: Env, policy: Policy, n: int, seed: int, *, family: Opti
                 if end_sid and env.ep is not None:
                     await env.ep.machine.revert(end_sid)
                     stats.reverts += 1
+            # The branch snapshots have served their purpose; each one is a full disk image billed on the account.
+            await _delete_snapshots(env, [cp.snapshot_id] + [getattr(r[1], "_end_snapshot", None) for r in results], stats)
             env.ep.terminated = True  # type: ignore[union-attr]
             env.ep.end_reason = "search_done"  # type: ignore[union-attr]
             env.ep.verdict = best_res.verdict  # type: ignore[union-attr]
@@ -144,6 +149,18 @@ async def best_of_n(env: Env, policy: Policy, n: int, seed: int, *, family: Opti
         obs, reward, term, trunc, info = await env.step(action, meta=meta)
         if term or trunc:
             return await env.verify()
+
+
+async def _delete_snapshots(env: Env, snapshot_ids: list, stats: SearchStats) -> None:
+    """Best-effort deletion of checkpoint snapshots once no branch needs them (never raises)."""
+    for sid in snapshot_ids:
+        if not sid:
+            continue
+        try:
+            await env.backend.delete_snapshot(sid)
+            stats.snapshots_deleted += 1
+        except Exception as e:  # noqa: BLE001
+            stats.snapshot_delete_errors.append(f"{sid}: {type(e).__name__}: {str(e)[:200]}")
 
 
 def _dedupe(cands: list[tuple[Optional[Action], dict[str, Any]]]) -> list[tuple[Optional[Action], dict[str, Any]]]:
@@ -207,8 +224,9 @@ async def _run_branches_fork(env: Env, policy: Policy, cp: EnvCheckpoint, candid
 
     async def one(i: int, a: Optional[Action], m: dict[str, Any]) -> None:
         async with sem:
+            # reap_orphans_enabled=False: the parent pool's worker (and sibling branches) are live and must survive.
             pool = WorkerPool(env.backend, env.world, size=1, mode="fork", golden_snapshot=cp.snapshot_id,
-                              run_id=env.pool.run_id)
+                              run_id=env.pool.run_id, reap_orphans_enabled=False)
             sub = _Env(env.world, env.backend, family=env.family, split=env.split, pool=pool, recorder=None,
                        history_k=env.history_k, settle_s=env.settle_s, reset_controller=env.resetter)
             # A fork already contains the seeded, post-checkpoint state: skip seeding/health by attaching directly.
@@ -232,6 +250,9 @@ async def _run_branches_fork(env: Env, policy: Policy, cp: EnvCheckpoint, candid
                 results.append((i, res, sub.ep.recorder))
             finally:
                 await sub.close()
+                # The branch env does not own its pool, so close the pool too: otherwise the branch's
+                # fork stays alive (holding a Starter slot) until some other pool reaps it as an orphan.
+                await pool.close()
 
     await asyncio.gather(*(one(i, a, m) for i, (a, m) in enumerate(candidates)))
     results.sort(key=lambda r: r[0])
