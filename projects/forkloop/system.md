@@ -70,9 +70,11 @@ projects/forkloop/
     claims_ops_v1/openemr/    install.sh, shim_schema.sql, base_data, openemr_sql helpers
     claims_ops_v1/tasks/      common.py + one module per family
   train/                    make_sft, train_lora, eval, plot, bakeoff, wilson, README, examples/
-  spikes/                   _common.py, spike_01..06, run_all.sh
-  tests/                    158 offline tests
-  docs/                     contracts, spikes, cost, limitations, buildlog
+  scripts/                  inspect_episode (failure triage), episode_table, compare_teachers, audit_probe (replay + OpenEMR log dump),
+                            chrome_crash_probe, solari_verify_fork (re-check revert/snapshot/disk on a golden fork), gui_episode
+  spikes/                   _common.py, spike_00..06, run_all.sh
+  tests/                    193 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
+  docs/                     HANDOFF (read first), contracts, spikes (results ledger), solari-repro, solari-message, cost, limitations, buildlog
 examples/desktop-snapshot-revert-py/   the cookbook example (outside the project dir)
 ```
 
@@ -163,10 +165,20 @@ channel is identical, `capabilities` lacks `gui`, and the env skips the
 screen stages — this is how the world was built and verified on a Free-plan
 key. `attach(id)` re-attaches to a running machine (`build-world --attach`).
 
-Measured behaviour on the test account (Free plan, 2026-09-01): `revert()`
-→ 409 `Not revertable` (and destructive on a running machine), so the pool
-runs in `fork` mode there; `create(from_snapshot)` ≈ 17–20 s; `snapshot()`
-14–20 s; `disk_gb` ignored. See `docs/spikes.md`.
+Measured behaviour on the account (Starter; history in `docs/spikes.md`):
+until 2026-09-02 `revert()` returned 409 `Not revertable` and destroyed a
+running machine, and `snapshot()` was refused on any `from_snapshot`
+machine, so every run used `fork` mode with `--best-of 1`. Re-verified
+2026-09-03 evening after Solari support's fix: `revert()` works (desktop
+21.5 s p50 end to end, state restored; a refused revert leaves the machine
+alive) and `snapshot()` works on forks (20.8 s). Reverting a fork to the
+8.5 GB golden returned one 503, so the pool still runs `fork` mode until
+`reset-bench` measures revert on the golden. Still ignored: `disk_gb`
+(3.9 GB disk), `cpu`/`mem_mb` on forks (2 vCPU / 4 GB); `recordingUrl` never
+populates. Fork restores are bimodal (p50 ≈ 75–85 s in long runs, ~25 %
+over 120 s: the account keeps counting a just-killed fork against the cap,
+so the create sees 429s) and ~2–5 % of forks die mid-episode (control
+channel closed 1000).
 
 ### 4.4 `dbaccess.py`
 
@@ -211,7 +223,14 @@ Kinds:
   entity value; `audit_id_lookup` maps table → a column on the changed row
   whose value is the audit key (OpenEMR's `log` keys by `patient_id`, so
   `insurance_data` changes are looked up through `pid`). With `loose: true`
-  a match on the id column *or* a `comments LIKE %id%` also counts.
+  a match on the id column, a `comments LIKE %id%`, *or* a comments column
+  whose SQL names both the changed table and the row's primary key also
+  counts — OpenEMR's `EventAuditLogger::auditSQLEvent` writes `patient_id`
+  from the *session's* active chart (0 when an appointment is edited from
+  the Finder with no chart open) and stores the statement with its bound
+  values in `comments`, which made a correct calendar save score
+  `DIRECT_DB_WRITE` (family 1 seed 2, 2026-09-03). The live comment format
+  of a scheduling update has not been observed yet.
 - `forbidden_screens`: page-view rows after the watermark whose path starts
   with any of `world.forbidden_paths`.
 
@@ -275,8 +294,17 @@ If no golden snapshot is configured, the first worker builds the world
 (`world.build`) under a lock and snapshots it; a second worker that raced on
 the same miss reverts (or re-forks) to the snapshot the first one built. On
 Solari this implicit build is refused — you run `forkloop build-world`
-explicitly because it takes minutes. `create` retries 429/503 with backoff;
-`reap_orphans` kills `forkloop=1` machines from other runs.
+explicitly because it takes minutes. `create` retries 429/503/timeouts
+(240 s per call) with backoff — capped at 15 s for 429s
+(`concurrency_backoff_max_s`), because a 1→60 s doubling turned Solari's
+slot-release lag after a kill into 130–240 s restores — and on a 429 it
+first re-lists and kills orphans (`reap_orphans`: `forkloop=1` machines no
+worker owns, including leaks from a timed-out create). Every event
+(`create_retry`, `reaped`, `restored` with seconds, `golden_built`,
+`revert_unsupported_fell_back_to_fork`) is kept in `events` and echoed to
+stderr as `[pool HH:MM:SS] …` unless `FORKLOOP_POOL_LOG=0`, so a collect
+log can tell a slow restore from a retried create. In practice every run
+through 2026-09-03 used `fork` mode.
 
 ### 4.12 `env.py`
 
@@ -326,7 +354,16 @@ counts, end reason), `shots/NNN_before.png` / `NNN_after.png`, and optionally
 `episode.mp4` via ffmpeg. `fork(label)` makes a child recorder under
 `branches/<label>/`; `adopt(child, from_step)` replaces the parent's tail.
 `iter_episode_dirs` / `load_episode` are the read side used by exporters,
-metrics and `train/`.
+metrics and `train/`. **Attempts:** `collect --retry-failed N` re-runs a
+seed on a fresh reset, so one run may hold several episodes of one task;
+each manifest carries `attempt` (via `Env(record_extra=…)`), and
+`select_attempts(run_dir)` marks exactly one per `(family, seed)` as
+`selected` — the shortest verified, else the last — and the rest
+`superseded`. `iter_episode_dirs()` skips superseded attempts unless
+`include_superseded=True`, so every reader sees one trajectory per seed.
+`Recorder.update_meta()` merges `retry_failed` / `n_attempts` / `attempts`
+into `run.json` after every pass; `collect_summary.json` has one row per
+seed with its attempt list (contracts §10).
 
 ### 4.15 exporters
 
@@ -343,7 +380,13 @@ expected values omitted unless asked).
 median steps/wall/reset, cost per success (VM hours × hourly rate + tokens ×
 prices), invalid-action rate, wrong-record / duplicate / collateral rates,
 reason-code histogram, per-family and per-split breakdowns, all rates with
-95% Wilson intervals. `format_table` prints it.
+95% Wilson intervals. `format_table` prints it. Rates, steps and walls are
+over the selected attempt per seed; `cost_*` and `tokens` count every
+attempt (`n_attempts`, `n_superseded`), so `cost_per_success_usd` is the
+whole run's spend over verified seeds. Token prices come from
+`MODEL_PRICES_PER_M` by the `model` in `run.json` (Anthropic and OpenAI
+GPT-5.6 entries); the hosted OpenAI path reports no cache reads, so its
+cost is an upper bound.
 
 ### 4.17 policies
 
@@ -367,6 +410,19 @@ reason-code histogram, per-family and per-split breakdowns, all rates with
   `compact`, `json`, `fara`; Fara's coordinates are in a fixed 1000×1000
   space and are rescaled accordingly (`coord_space`). `propose(obs, n)` uses
   the server's `n`. Network and parse failures return `(None, meta)`.
+  The same class is the **hosted teacher path**: `--student-url
+  https://api.openai.com/v1 --model gpt-5.6-luna` switches on
+  `reasoning_effort`, `detail: high` images, a 300 s timeout and 4096 output
+  tokens; `--system-prompt-file` replaces the compact prompt with one of
+  `policies/prompts/hosted_gui_agent{,_v5,_v6,_v7}.md`, `--history-k 16` and
+  `--prev-shot` give it the last actions as text and the previous
+  screenshot, and a history-based loop warning (three near-identical pointer
+  actions, three waits, or an alternating pair) appends a "do not repeat"
+  line. The model's reasoning precedes the action inside `raw_action`
+  (`policy_note` stays empty), which is what `scripts/inspect_episode.py`
+  prints. Luna v5 is the volume teacher (family 3: 94/100 at $0.061 per
+  verified); v7 carries the family-1/2 rules learned on 2026-09-03 and has
+  not been run.
 - `action_parse.py`: parsers for compact text, JSON (fenced or not) and Fara
   `<tool_call>` blocks, `scale_coords`, `parse_tool_calls`; never raise.
 
@@ -396,7 +452,15 @@ OpenEMR).
 `forkloop worlds | task | build-world | run | collect | export | metrics |
 reset-bench | reap`. `--backend fake|solari` (env `FORKLOOP_BACKEND`),
 `--policy scripted|random|teacher|student`, `--best-of N --search-mode
-revert|fork`, `--seeds 0-99,200`, `--concurrency`.
+revert|fork`, `--seeds 0-99,200`, `--concurrency`, `--pool-mode
+revert|fork`, `--max-steps/--max-seconds` (recorded as `budget_override` in
+`run.json`), `--reset-retries N` (re-queue a seed whose reset failed, after
+`--reset-retry-wait-s`), `--retry-failed N` (after the pass, re-run every
+seed below 1.0 up to N more times on a fresh fork; §4.14), and the student
+knobs `--student-url --system-prompt-file --history-k --prev-shot
+--image-detail --effort`. `_policy()` takes `family/seed/attempt` context so
+tests can swap in attempt-aware policies. `reap --dry-run` lists the
+account's forkloop machines.
 
 ## 5. Worlds
 
@@ -459,12 +523,22 @@ plus `assert_portable`), `docs_paths.py`, `providers.json`.
 **Task families** (`tasks/`): `common.py` holds the merged `BaseData` view,
 split-disjoint surname pools, payer/plan table, denial codes with several
 wordings each, `Person` (one synthetic patient inserted into *both* apps with
-aligned ids), `Claim`, near-miss member-id generation, inbox noise, and the
+aligned ids; its OpenEMR insurance row carries the patient's sex and
+address as subscriber fields because OpenEMR 8.3's insurance editor refuses
+to save a policy without them — added 2026-09-03 without changing the RNG
+draw order, so every existing seed's instruction, expected values and
+patient row are byte-identical), `Claim`, near-miss member-id generation, inbox noise, and the
 authorization-letter PDF builder (real number on a chosen page, decoy
 numbers around it). Each family module's `generate(family, seed, split)`
 returns a `TaskInstance` with seeding SQL for both databases, files for
 OpenEMR documents, controller-only `expected`, and an oracle spec using the
-shared reason-code vocabulary. `seed_world.py` dispatches by family and
+shared reason-code vocabulary. Family 1's instruction says "the next
+<weekday> <half> after its current date (the appointment is within the next
+two weeks)" so the target is anchored to the appointment, not to today;
+family 2 has a portal-only variant ("OpenEMR already reflects this") and a
+two-system variant. Measured on 2026-09-03: family 3 94/100 seeds, family 1
+3/10 and family 2 4/10 (portal-only 4/4, two-system 0/6) with the v6 prompt
+before the v7 and seeding fixes. `seed_world.py` dispatches by family and
 builds the held-out compositions (seeds ≥ 200000) that chain families 2 and
 3 on one patient with a third denial that must be left alone.
 
@@ -503,14 +577,15 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-158 tests, all offline, ~2 minutes:
+193 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
 
 | File | Covers |
 | --- | --- |
 | `test_portal.py` (22) | schema/base counts, login, filters, appeal with upload + sha256 + same-transaction audit (trigger-based proof), duplicate appeal allowed, resubmit, messages, eligibility, page_views, `/admin`, determinism |
 | `test_openemr_layer.py` (15) | shim loads, base data deterministic and executes, every SQL helper executes on the shim, `quote`, portability |
-| `test_core_toy.py` (11) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson |
-| `test_claims_ops_world.py` (8) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, concurrent golden build |
+| `test_core_toy.py` (18) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson |
+| `test_claims_ops_world.py` (10) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted) vs one naming neither table nor pk (caught), insurance rows carry subscriber sex/address, concurrent golden build |
+| `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
 | `test_student_policy.py`, `test_train.py` (92) | every parser style, coordinate scaling, mocked vLLM transport, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
 | `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, budget rows |
 
@@ -520,6 +595,9 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
    `WorkerPool(mode=revert)` sized to the plan cap, and a `Recorder`.
 2. `Env.reset(seed)` → `world.generate(family, seed, split)` (pure) →
    `pool.acquire()` → `ResetController.reset`: `revert(golden)` + reconnect +
+   … (in `--pool-mode fork`, the mode every real run has used so far, this is
+   `kill` + `create(from_snapshot=golden)` instead; `--retry-failed` repeats
+   the whole episode on a fresh fork for seeds that end below 1.0) +
    health poll; seeding SQL and PDF files over the controller channel;
    HTTP/DB health; baseline hashes and watermarks; ctrl+l/URL/Return; wait
    for two identical screenshots. `reset.json` records every stage.
@@ -552,7 +630,9 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | --- | --- |
 | `SandboxClient.create_desktop(from_snapshot=...)`, `Desktop.snapshot/revert`, `commands.run` argv semantics, `kill` vs `close`, error classes, the post-restore single-connection window | solari-sandbox / solari-core 0.2.0 source (installed from PyPI) |
 | Plans: Free $0/1 concurrent, Starter $20/2, Pro $200/10; 2 vCPU/4 GB $0.114/h Starter + $0.02/h screen | docs.getsolari.com/pricing |
-| Snapshots keep the machine running; revert keeps the id; from_snapshot makes independent copies; both VMs and sandboxes | docs.getsolari.com/snapshots |
+| Snapshots keep the machine running; revert keeps the id; from_snapshot makes independent copies; both VMs and sandboxes | docs.getsolari.com/snapshots; re-verified live 2026-09-03 (`docs/spikes.md`): desktop revert 21.5 s p50 with state restored, fork snapshot 20.8 s |
+| OpenEMR's SQL audit log (`EventAuditLogger::auditSQLEvent`) takes `patient_id` from the session's active chart and stores the statement plus quoted bound values in `comments`; `add_edit_event.php` itself logs nothing | github.com/openemr/openemr v8_3_0 `src/Common/Logging/EventAuditLogger.php`, `interface/main/calendar/add_edit_event.php` |
+| OpenEMR 8.3 insurance editor requires subscriber sex, street, city, state and ZIP (client-side `required`); `state` is a `list_options` list (`state_data_type` 26) with two-letter ids, `sex` is Female/Male/UNK | observed live 2026-09-03 (screenshot in `runs/luna-v6-fam12-s0-9`, `list_options` dump in `runs/logs/audit_probe_f1s2.log`) |
 | Templates: base / default / office / code; Image builder | docs.getsolari.com/templates |
 | OpenEMR 8.3.0 released 2026-08-18, PHP 8.3+, MariaDB 10.6+; tarball asset and sha256; `InstallerAuto.php` args; `OPENEMR_ENABLE_INSTALLER_AUTO=1` | github.com/openemr/openemr v8_3_0 |
 | Docker tag `openemr/openemr:8.3.0-2026-08-30` (no `7.0.3` tag exists) | hub.docker.com |
