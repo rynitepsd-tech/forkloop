@@ -1,3 +1,81 @@
+# Follow-up to Solari — thanks for items 1–2, re-asking 3–5 and two new ones
+
+Draft, 2026-09-03 (night). Same thread as the 2026-09-02 email (kept below). Everything is measured; ids and
+error bodies are verbatim from `runs/logs/solari_verify.log`, `bench/reset_results_desktop_0903.jsonl` and the
+run logs. DO NOT SEND until reviewed.
+
+---
+
+Hi Solari team,
+
+Thank you — that was fast. I re-ran the same scripts the evening you said "all set" and again tonight on the
+live golden, and both fixes hold:
+
+**1. `revert()` works, and a refused revert no longer destroys the machine.**
+- Desktop, snapshot of its own state, n=3: API call 17.6 s p50, guest reachable 2.5 s later, screen stable
+  1.6 s after that — **21.5 s p50 end to end, state restored 3/3**. Running sandbox: reachable 19.0 s after the
+  call. Paused sandbox: a clear 409 "revert needs a running sandbox — resume it first" and the machine survives.
+- On our real workload — a fork of the 8.5 GB golden `snap_dl4e90g095y2`, `revert(golden)` between episodes —
+  **10/10 reverts succeeded on one machine id** (`…vm_001996…`, 14:50–15:06 UTC-7 tonight). Full reset (revert +
+  seed + health + baseline + first screen) p50 100.9 s, p95 151.7 s; the same reset via `create(from_snapshot)`
+  the same half hour: p50 92.0 s, p95 169.4 s, also 10/10.
+- The machine we reverted stayed alive after every call; the one refusal we saw (below) left it answering
+  commands.
+- One thing on our side, for context: in two longer runs tonight a revert was accepted but the guest took more than
+  90 s to answer again (our client's post-revert window), so we treated it as failed and replaced the machine. That
+  is the slow restore mode from the next paragraph; we have raised the window to 240 s.
+
+**2. `snapshot()` on a `from_snapshot` machine works.** 20.8 s on a fork of the golden, and it deleted cleanly.
+We used it tonight for the first time in anger: best-of-2 search checkpoints a running episode, forks each
+candidate from the checkpoint, and adopts the winner — 3/3 episodes verified through a real branch point.
+
+One thing we noticed while measuring, in case it is useful: **restores of the 8.5 GB snapshot are bimodal, and
+the two modes are the same for `revert()` and for `create(from_snapshot)`** — either ≈ 22 s (7 of 20 tonight) or
+70–160 s (13 of 20; 37, 72, 73, 78, 82, 84, 103, 105, 105, 112, 122, 126, 161 s). Over 90 forks in a longer run
+the split was 33 under 30 s, 50 over 60 s, 6 over 190 s (max 353 s). Since the revert path never creates a
+machine, this is not our client backing off; is it snapshot locality (warm vs cold host), and is there anything
+we can do on our side — pin a host, pre-warm, or a smaller snapshot — to stay in the fast mode?
+
+The three items that are unchanged, re-measured 2026-09-03 with the same scripts:
+
+**3. `recordingUrl` still never populates.** `record.start()`/`record.stop()` succeed on a plain desktop, on a
+`from_snapshot` desktop created with `record=True`, and on one created without it; each leaves an in-VM mp4
+(126–145 KB for a few seconds; `/tmp/solari-rec-<ts>.mp4`) and `recordingUrl` is `None` in all three cases. New
+since the fix: on the plain desktop, `record.stop` after a `revert()` **timed out after 30 000 ms** (the
+`record.start` right after the revert had succeeded). Is the presigned upload expected on `POST /sandboxes` with
+`kind: "desktop"`, and is a recorder that was running across a revert expected to survive it?
+
+**4. `disk_gb` is still ignored, and so are `cpu`/`mem_mb` on `from_snapshot` creates.** Sandbox `/dev/root 3.9G`
+(42 % used on `base`); a fork of the golden `3.9G` at 86 % with 535 MB free. A fork requested at
+`cpu=4, mem_mb=8192` reports `nproc` 2 and 4031 MB in `free -m`. We understand the shape may be fixed by the
+snapshot; is there a template or a create-time option that gives a larger disk or RAM, and would a golden built
+on such a template keep its shape when forked?
+
+**5. Ancestor snapshots.** `snap_dl4driq97904` → `snap_dl4e05ciyt1p` → `snap_dl4e90g095y2` (the live golden) are
+still on the account and `delete_snapshot` refuses while a descendant exists. Is there a way to flatten a
+lineage, or to delete ancestors of a snapshot we keep? And what does snapshot storage cost per GB-month (five to
+eight of these, 6–8.5 GB each)?
+
+**6. (new) 503 on `revert()` to the golden from a fork.** One call, 2026-09-03 evening, on a fresh fork of
+`snap_dl4e90g095y2`:
+`503 — no desktop host has capacity right now; retry in a minute: Revert failed: the host could not restore this
+snapshot in time`. The machine stayed alive and answered commands afterwards (good). Tonight the same call
+succeeded 10/10, so this looks like the slow mode from the bimodality note hitting a timeout on your side. Is
+there a `retry-after` we should honour, and does the host-side timeout scale with snapshot size?
+
+**7. (new) checkpoint snapshots that could not be deleted right after use.** Three snapshots named
+`cp-resolve_denial-train-00000{0,1,2}-…` were taken on a running fork tonight, each forked once, and the
+`DELETE /snapshots/:id` right after the branch fork was killed was refused (we did not capture the body; the
+next run will). If a snapshot counts a just-killed child as live for a while, how long is that window?
+
+Happy to run anything else on the account; the scripts for each item are in our public fork of your cookbook
+(`projects/forkloop/docs/solari-repro.md`).
+
+Thanks again,
+Ryder
+
+---
+
 # Message to Solari — revert() and fork snapshots refused, recordingUrl, disk size, snapshot pricing
 
 Draft, 2026-09-02. Post in the Solari Discord (#support) or email support. Everything below is measured; ids and bodies are verbatim from our logs.
