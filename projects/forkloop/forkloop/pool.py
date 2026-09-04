@@ -20,7 +20,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .backends.base import Backend, CapacityError, ConcurrencyError, Machine, RevertTimeoutError
+from .backends.base import Backend, BackendError, CapacityError, ConcurrencyError, Machine, RevertTimeoutError
 from .world import World
 
 
@@ -37,6 +37,15 @@ def _log(event: dict[str, Any]) -> None:
         return
     fields = " ".join(f"{k}={v}" for k, v in event.items() if k not in ("t", "event"))
     print(f"[pool {time.strftime('%H:%M:%S')}] {event.get('event')} {fields}", file=sys.stderr, flush=True)
+
+
+def _is_revert_refusal(e: BaseException) -> bool:
+    """The account/API refusing revert() as such (HTTP 409 "Not revertable", a paused machine), as
+    opposed to a revert that failed on the way (timeouts, capacity, transport errors)."""
+    if not isinstance(e, BackendError):
+        return False
+    text = str(e).lower()
+    return any(k in text for k in ("not revertable", "409", "needs a running", "not supported", "unsupported"))
 
 
 @dataclass
@@ -103,10 +112,18 @@ class Worker:
         except Exception as e:  # noqa: BLE001
             if not self.pool.fallback_to_fork:
                 raise
-            self.pool.revert_supported = False
-            self.pool.mode = "fork"
-            _log_and_append(self.pool.events, {"t": time.time(), "event": "revert_unsupported_fell_back_to_fork",
-                                               "worker": self.index, "error": f"{type(e).__name__}: {str(e)[:300]}"})
+            if _is_revert_refusal(e):
+                self.pool.revert_supported = False
+                self.pool.mode = "fork"
+                _log_and_append(self.pool.events, {"t": time.time(), "event": "revert_unsupported_fell_back_to_fork",
+                                                   "worker": self.index, "error": f"{type(e).__name__}: {str(e)[:300]}"})
+            else:
+                # Not a refusal: a transport error, a dropped connection, anything else. Measured
+                # 2026-09-04 (runs/luna-v10-bo2-hard): a bare ConnectionError on the revert POST after
+                # the controller Mac had slept flipped the whole run to fork mode. Replace the machine
+                # and keep revert mode instead.
+                _log_and_append(self.pool.events, {"t": time.time(), "event": "revert_failed_replaced_machine",
+                                                   "worker": self.index, "error": f"{type(e).__name__}: {str(e)[:300]}"})
         # The machine may have been destroyed by the failed revert; replace it either way.
         if self.machine is not None:
             try:

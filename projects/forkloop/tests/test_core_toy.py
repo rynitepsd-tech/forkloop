@@ -454,3 +454,31 @@ async def test_budget_override_caps_steps_per_run(world, backend):
     assert trunc and env.ep.end_reason == "max_steps" and env.ep.budget_steps == 2
     await env.close()
     await pool.close()
+
+
+async def test_pool_keeps_revert_mode_on_a_transport_error(world, backend):
+    """A ConnectionError on the revert call is not a refusal (2026-09-04, runs/luna-v10-bo2-hard: one such
+    error after the controller machine slept switched a whole run to fork mode). Replace the machine,
+    keep revert mode; only a real refusal flips the pool."""
+    calls = []
+
+    async def dropped(snapshot_id):
+        calls.append(snapshot_id)
+        raise ConnectionError("POST /sandboxes/x/revert failed: ")
+
+    pool = WorkerPool(backend, world, size=1, mode="revert")
+    env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
+    obs, _ = await env.reset(1)
+    m = env.ep.machine
+    first_id = m.id
+    m.revert = dropped  # type: ignore[method-assign]
+    await env.step(Action.done())
+
+    obs, info = await env.reset(2)
+    assert len(calls) == 1
+    assert pool.mode == "revert" and pool.revert_supported is not False
+    assert env.ep.machine.id != first_id
+    assert info["reset"]["ok"] and info["reset"]["method"] == "revert"
+    assert any(e["event"] == "revert_failed_replaced_machine" for e in pool.events)
+    assert not any(e["event"] == "revert_unsupported_fell_back_to_fork" for e in pool.events)
+    await env.close()
