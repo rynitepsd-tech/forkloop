@@ -251,6 +251,21 @@ golden-lineage snapshots. Operational: the controller Mac slept ~80 min mid-run 
 POST failed with a bare `ConnectionError`, which the pool classified as a refusal and switched the run to fork mode —
 fixed (only 409/"Not revertable"/paused flips the mode now; other errors replace the machine and keep revert mode).
 
+**Family 3 on prompt v5, fresh seeds 100–139, `--max-steps 120 --max-seconds 900 --retry-failed 1 --pool-mode revert
+--concurrency 2` (`runs/luna-v5-f3-s100-139`, 2026-09-04 11:05–13:40 local, 45 attempts):** **38/40 verified = 95.0 %
+[83.5, 98.6]; first pass 35/40**, verified median 59 actions (43–128), $3.08 for the run ($2.69 tokens, $0.39 VM),
+**$0.081 per verified seed** — the same picture as seeds 20–99 (96.2 %, $0.08). Combined seeds 0–139: 132/140. The seven
+failed attempts are the oracle's own target classes: transcription ×2 (an extra digit; `Q` read as `9`), a decoy letter's
+number ×1, the 120-action budget spent among decoy documents ×2, one crash-budget loss (16 crash reports, 13 re-logins), and one
+budget exhausted while attaching the letter. Restores n = 45, p50 82 s, 9/45 under 30 s, 11/45 over 120 s (max 418 s);
+three 503 reverts replaced in place; one replacement create timed out (240 s), its retry hit the 429 cap and the
+pool's reaper removed the orphan; no fork deaths. Export: 2,377 SFT records from 38 episodes.
+
+**Overnight totals (2026-09-04, seven runs, `docs/overnight-2026-09-04.md`):** 121 seed-runs, 146 attempts, 96 verified,
+$9.92 tokens + $1.56 VM; 5,267 new SFT records (families 1–2: 2,890 from 52 episodes; family 3: 2,377 from 38). Revert
+mode held through 166 restores and thirteen 503 reverts; 0 fork deaths; the account ends with four snapshots and 0
+machines.
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |
@@ -263,6 +278,7 @@ fixed (only 409/"Not revertable"/paused flips the mode now; other errors replace
 | 2 update_insurance_reconcile, portal-only (seeds 1, 2, 8, 9) | 4/4 | not re-run | — | — |
 | 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
 | 2 update_insurance_reconcile, **fresh seeds 10–34, both variants, v10 + history notes** (2026-09-04) | — | **25/25 = 100 % [86.7, 100]** | 24/25 | $0.07 (median 48; the one miss was a Chrome relaunch race, fixed) |
+| 3 resolve_denial, **fresh seeds 100–139, v5** (2026-09-04) | — | **38/40 = 95 % [83.5, 98.6]** | 35/40 | $0.081 (median 59; transcription 2, decoy 1, budget 4 of 7 failed attempts) |
 
 ## Measured on 2026-09-02 (later) — Chrome crash, calendar providers, fork snapshots
 

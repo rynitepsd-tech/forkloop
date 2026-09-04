@@ -236,3 +236,93 @@ reason codes: OK=2, WRONG_SLOT=8
 - Pool: after the Mac-sleep `ConnectionError` the run finished in fork mode (restores n = 30, p50 33 s — fork restores
   of the small branch forks are fast); no fork deaths; `reap --dry-run` = 0 afterwards.
 
+## Step 5 — family 3, seeds 100–139, prompt v5 (`runs/luna-v5-f3-s100-139`, 11:05–13:40 local, 45 attempts)
+
+`forkloop metrics --run runs/luna-v5-f3-s100-139 --model gpt-5.6-luna`:
+
+```
+episodes                    40 selected of 45 attempts (5 superseded)
+success                     95.0% [83.5, 98.6] (n=40)
+median steps                59.0
+median reset (s)            91.931
+cost / success (USD)        0.081
+cost / episode (USD)        0.0684
+  of which VM / tokens      0.3923 / 2.6873
+tokens in / out             11334871 / 350277
+reason codes: NOT_DONE=2, OK=38
+```
+
+- **38/40 verified = 95.0 % [83.5, 98.6] within two attempts; first pass 35/40** (retries recovered 132, 136, 137;
+  119 and 130 failed twice). Verified median 59 actions (43–128), all `done()`. Consistent with seeds 20–99 (96.2 %).
+  Configuration as measured before (v5 prompt, `--history-k 16 --prev-shot`, 120 actions / 900 s, no
+  `--history-notes`), except that the env now really keeps 16 actions of history (it kept 8 before the fix).
+- Cost: **$2.69 tokens (OpenAI), $0.39 VM (Solari)**; $0.081 per verified seed. Running totals: OpenAI $9.92 / Solari $1.56.
+- SFT export: `runs/exports/sft_luna-v5-f3-s100-139.jsonl`, **2,377 records from 38 episodes**.
+- The 7 failed attempts: transcription ×2 (119a1: `AUTH-73M61656` typed with an extra digit; 132a1: `Q` read as `9`),
+  decoy number ×1 (137a1 submitted a different letter's code), decoy/budget ×2 (130 ×2: the 120-action budget spent
+  cycling through decoy letters), crash budget ×1 (119a2: 16 crash reports, 13 re-logins), attachment/budget ×1
+  (136a1: budget ran out while attaching the letter, no crashes). All are classes the oracle is built to reject.
+- Pool: revert mode held across 45 restores (p50 82 s, 9/45 under 30 s, 11/45 over 120 s, max 418 s); three 503 reverts
+  replaced in place; one replacement create timed out at 240 s, the retry hit the 429 cap and the reaper killed the
+  orphan (designed path; the other worker's episode was untouched); no fork deaths; `reap --dry-run` = 0 afterwards.
+
+## Wrap-up
+
+### Every run of the session
+
+| run id | prompt | family / seeds | verified (within 2 attempts) | first pass | median actions (verified) | $ tokens | $ VM |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| luna-v9-fam1-s0-9 | v9 | 1 / 0–9 | 6/10 = 60 % [31.3, 83.2] | 5/10 | 72 | 1.49 | 0.24 |
+| probe-audit-s7 | (scripted replay) | 1 / 7 | 0/1 (oracle diagnostic, reproduced the false negative) | — | — | 0.00 | 0.01 |
+| luna-v10-fam1-s0-9 | v10 + notes | 1 / 0–9 | 10/10 = 100 % [72.2, 100] | 9/10 | 48.5 | 0.78 | 0.11 |
+| luna-v10-fam1-s10-34 | v10 + notes | 1 / 10–34 | 15/25 = 60 % [40.7, 76.6] | 12/25 | 55 | 2.60 | 0.38 |
+| luna-v10-fam2-s10-34 | v10 + notes | 2 / 10–34 | 25/25 = 100 % [86.7, 100] | 24/25 | 48 | 1.51 | 0.23 |
+| luna-v10-bo2-hard | v10 + notes, best-of-2 fork | 1 / 11,13,15,17,18,19,23,25,27,34 | 2/10 = 20 % [5.7, 51.0] (one attempt) | 2/10 | 45 | 0.85 | 0.20 |
+| luna-v5-f3-s100-139 | v5 | 3 / 100–139 | 38/40 = 95 % [83.5, 98.6] | 35/40 | 59 | 2.69 | 0.39 |
+| **total** | | 121 seed-runs, 146 attempts | **96 verified** | | | **$9.92** | **$1.56** |
+
+### Spend against the budgets
+
+| budget | limit | stop line | spent | left |
+| --- | --- | --- | --- | --- |
+| OpenAI (Luna only) | $20.00 | $17.00 | **$9.92** (metrics upper bound, cache reads not priced) | $10.08 |
+| Solari | $10.00 | $8.50 | **$1.56** (VM hours at $0.134/h; snapshot storage unbilled until 2026-10-01) | $8.44 |
+| Anthropic | $0 | — | $0.00 | — |
+
+### Every failure class, with counts (attempts, all read)
+
+| class | count | runs | one-line signature |
+| --- | --- | --- | --- |
+| window (right date, old time kept when the half-day differs) | 18 (+1 mixed with date) | fam1 s10–34 (13), bo2 (5, +1 date+window) | `event_time_window` only; v10's rule never acted on |
+| add-event (hour label → *Add New Event* → second appointment) | 7 | fam1 s10–34 | `single_event` 2 + `no_collateral` add; Save at y≈680 refused until duration set |
+| date drift (CURRENT re-derived from the form's date field) | 3 | v9 | one-week drift or an unsaved chain; fixed by `--history-notes` (0 on v10) |
+| date arithmetic (wrong next-weekday, clean execution) | 5 (+1 mixed) | fam1 s10–34 (3), bo2 (2) | `event_date` a week off |
+| crash budget (≥ 4 crash reports, re-login loops, nothing saved) | 5 | v9 (3), v10 s0–9 (1), f3 (1: 119a2) | 4–16 crashpad reports, 5–18 re-logins |
+| calendar click cycle (entry → chart → calendar …) | 1 | v9 | 124 clicks, never edited |
+| oracle false negative (`DIRECT_DB_WRITE` on a perfect episode) | 3 | v9 (2), probe (1) | fixed: base64 audit comments |
+| Chrome relaunch race (no browser at episode start) | 1 | fam2 | fixed: relaunch waits/verifies/raises |
+| transcription (extra digit, look-alike) | 2 | f3 | `appeal_auth_number` one character off |
+| decoy number / decoy budget / attachment budget | 1 / 2 / 1 | f3 (137a1 / 130 ×2 / 136a1) | wrong letter's code; 120 actions among decoys; budget out while attaching |
+| **total failed attempts** | **50** of 146 | | |
+
+### Leftover snapshots
+
+None beyond the golden lineage. The account holds exactly four snapshots: `snap_dl4e90g095y2` (v5 desktop golden, live),
+`snap_dl4e05ciyt1p` (v4, ancestor), `snap_dl4driq97904` (v1, ancestor), `snap_dl4cngznmvr7` (sandbox golden). All ten
+`cp-*` checkpoints (four from the 2026-09-04 01:xx smoke, six from `luna-v10-bo2-hard`) were deleted at 10:45 local
+with `backend.delete_snapshot`, 10/10 succeeded. `search.snapshot_delete_errors` was empty in every verdict; the six
+that leaked did so through the no-branch path, fixed in e9d0e23.
+
+### Three most useful next actions
+
+1. **Prompt v11 for family 1, then fresh seeds 35–59 (≈ $3).** Two rules fix 20 of the 23 v10 losses on fresh seeds:
+   put "CURRENT time → TARGET window" in the note and change the time whenever the current time is outside the
+   requested half-day; click the appointment's own text (never the hour labels) and Cancel any form titled
+   "Add New Event". Neither retries (3/13) nor best-of-2 (2/10) recover these; only the prompt can.
+2. **Golden v6 at `disk_gb` 20 with `--disable-gpu` baked in** (`forkloop build-world`, ~10 min, then re-point
+   `FORKLOOP_GOLDEN_SNAPSHOT_CLAIMS_OPS_V1`), re-measuring `recordingUrl` and the post-revert machine id on the
+   way; then delete the v4/v1 ancestors before 2026-10-01 storage billing (≈ 25 GB).
+3. **Student bake-off on a rented GPU** with the 5,267 new records (families 1–2: 2,890; family 3: 2,377) plus the
+   6,354 family-3 records from 2026-09-03: `train/` is wired, the student has never run.
+
+Session end: full test suite green (see the commit), `reap --dry-run` = 0 machines, 26 local commits unpushed.

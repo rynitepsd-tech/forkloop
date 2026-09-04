@@ -1,24 +1,31 @@
-# Handoff — Forkloop, as of 2026-09-03 (night)
+# Handoff — Forkloop, as of 2026-09-04 (midday, after the overnight run)
 
 Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
-measurement), `docs/limitations.md` (everything unproven or broken).
+measurement), `docs/limitations.md` (everything unproven or broken), and
+**`docs/overnight-2026-09-04.md`** (the ledger of the 2026-09-04 overnight session:
+every run, every dollar, every failure class, the Solari changelog mapping).
 
 **One line:** a snapshot-native training loop for vision-only GUI agents on
 Solari desktops — build a payer-portal + OpenEMR world once, snapshot it, and
 every episode reset is one API call. The library, the world, the oracle and the
-training scripts are built and tested; the world runs for real on Solari; Luna v5 verifies 94/100 family-3 seeds at $0.061 each; revert() and best-of-N search now run for real on Solari; the student has never run.
+training scripts are built and tested (202 offline tests); the world runs for real
+on Solari; GPT-5.6 Luna is the volume teacher on all three task families
+(fresh-seed rates: family 1 60 %, family 2 100 %, family 3 96 %); revert-mode
+pools, best-of-N fork search and checkpoint deletes all run for real; the student
+has never run (no GPU).
 
-Eleven local commits are unpushed (the latest is the reset-bench / best-of-2 commit of 2026-09-03 night, on top of `21642a7`); push only when asked. `runs/` is git-ignored; the trajectories live only on this Mac. Repo: `rynitepsd-tech/forkloop`
-(fork of `solari-sdk/solari-cookbook`), cloned at `~/Desktop/Solari/repo`,
-project under `projects/forkloop/`.
+Twenty-six local commits are unpushed (`origin/main` ahead 26; latest: the overnight wrap-up, 2026-09-04);
+push only when asked. `runs/` is git-ignored; the trajectories live only on this
+Mac. Repo: `rynitepsd-tech/forkloop` (fork of `solari-sdk/solari-cookbook`),
+cloned at `~/Desktop/Solari/repo`, project under `projects/forkloop/`.
 
 ---
 
 ## First five minutes
 
-**Recreate the `venv` before anything else** (it is a real directory now,
-not a symlink, but it does not survive reliably between sessions):
+**Recreate the `venv` before anything else** (it does not survive reliably
+between sessions):
 
 ```bash
 cd ~/Desktop/Solari/repo/projects/forkloop
@@ -27,20 +34,40 @@ rm -rf venv && python3.11 -m venv venv && ./venv/bin/pip install -q -e ".[dev,wo
 
 Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`
 (mode 600, never commit it). It exports `SOLARI_API_KEY`, `SOLARI_PLAN=starter`,
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` + `ANTHROPIC_WORKSPACE_ID`,
 `FORKLOOP_GOLDEN_SNAPSHOT_CLAIMS_OPS_V1` (desktop golden) and
 `FORKLOOP_GOLDEN_SANDBOX_CLAIMS_OPS_V1` (headless golden).
 
 ```bash
 source ~/.config/forkloop/env
 export PYTHONPATH=. FORKLOOP_CONCURRENCY=2
-PYTHONPATH=. ./venv/bin/pytest -q          # 193 offline tests, ~1 min, no key needed (safe with the env sourced: tests/conftest.py scrubs the golden ids)
-./venv/bin/python -m forkloop.cli reap --dry-run   # must list 0 machines; drop --dry-run to kill leftovers
+./venv/bin/pytest -q                              # 202 offline tests, ~1 min (tests/conftest.py scrubs the golden ids)
+./venv/bin/python -m forkloop.cli reap --dry-run  # must list 0 machines; drop --dry-run to kill leftovers
 ```
 
 The Solari account is **Starter** with a hard $30 cap: two concurrent machines,
-desktops allowed. About $0.55 plus snapshot storage has been spent. Four
-snapshots exist; `v5` is the live golden desktop and the other three are its
-ancestors, which cannot be deleted while it exists.
+desktops allowed. Four snapshots exist (the v5 golden desktop `snap_dl4e90g095y2`,
+its two ancestors, and the sandbox golden), about 34 GB; snapshot storage is
+billed from 2026-10-01 (10 GB free, $0.05/GB/month). Every `cp-*` checkpoint was
+deleted on 2026-09-04.
+
+The standard Luna collect (change only prompt file, family, seeds, run id):
+
+```bash
+./venv/bin/python -u -m forkloop.cli collect --world claims-ops-v1 --policy student \
+  --student-url https://api.openai.com/v1 --model gpt-5.6-luna --effort high \
+  --history-k 16 --history-notes --prev-shot --max-steps 150 --max-seconds 1200 \
+  --retry-failed 1 --pool-mode revert --concurrency 2 \
+  --system-prompt-file forkloop/policies/prompts/hosted_gui_agent_v10.md \
+  --families reschedule_constrained --seeds 35-59 --run-id luna-v10-fam1-s35-59
+```
+
+Family 3 uses `hosted_gui_agent_v5.md`, `--max-steps 120 --max-seconds 900`, no
+`--history-notes` (the measured configuration). Run one `collect` at a time, under
+`nohup` into `runs/logs/<run-id>.log`; `forkloop metrics --run runs/<id> --model
+gpt-5.6-luna` prices it; `scripts/inspect_episode.py --failed-only runs/<id>` reads
+the failures. Keep the Mac plugged in and awake: an ~80 min sleep on 2026-09-04
+stalled a run and dropped a revert.
 
 ---
 
@@ -49,70 +76,71 @@ ancestors, which cannot be deleted while it exists.
 **Built and green offline.** Core library (backends, env, pool, reset, oracle,
 recorder, exporters, search, metrics, CLI), the `claims-ops-v1` world (portal +
 OpenEMR 8.3.0 + three task families + held-out compositions), the `toy-counter`
-world, teacher and student policies, and the training ladder. 158 tests, all
+world, teacher and student policies, and the training ladder. 202 tests, all
 offline, no key required.
 
-**Verified on real Solari.** The golden desktop world boots with OpenEMR and the
-portal healthy, Chrome logged into the portal and locked to localhost with
-popups disabled. A scripted click-and-type episode drove the real agent channel
-end to end and the oracle scored it 1.0; the same script with a decoy
-authorization number was rejected as `WRONG_VALUE`. Screenshots and both
-verdicts are in `docs/demo_episode/`.
-
-**Measured.** Numbers and method in `docs/spikes.md`; raw rows in `bench/`.
+**Verified on real Solari, measured (`docs/spikes.md`, `docs/overnight-2026-09-04.md`).**
 
 | Measurement | Result |
 | --- | --- |
-| `revert()` to golden, desktop, n=10 (2026-09-03) | **works**, same machine id; p50 100.9 s, p95 151.7 s, 0 failures; restore bimodal ≈ 22 s or 70–160 s |
-| Reset via fork, desktop, n=10 (2026-09-03, same session) | p50 92.0 s, p95 169.4 s, 0 failures; same bimodal restore |
-| Reset via fork, desktop, n=10 | p50 25.0 s, p95 26.6 s, 1 failure (disk-full, since fixed) |
-| Reset via fork, sandbox, n=10 | p50 19.1 s, p95 21.8 s, 0 failures |
-| Observe-act-observe loop | 0.45 s p50 → about 2.2 agent steps per second |
-| Fork fidelity | restores RAM, processes and windows; kernel uptime continues |
-| Parallel forks | two desktops from one snapshot, ~31 s each |
-| Session recording | works on forked desktops in-VM; `recordingUrl` never populates |
+| Family 3 (resolve_denial), Luna v5, seeds 0–99 | 94/100 verified, $0.061 per verified; seeds 20–99 fresh: 77/80 = 96.2 % [89.5, 98.7] |
+| Family 3, **fresh seeds 100–139** (2026-09-04, `runs/luna-v5-f3-s100-139`) | **38/40 = 95 % [83.5, 98.6]**, first pass 35/40, $0.081 per verified; seeds 0–139 combined 132/140 |
+| Family 1 (reschedule_constrained), Luna **v10 + `--history-notes`**, seeds 0–9 | 10/10, first pass 9/10, median 48.5 actions, $0.089 per verified |
+| Family 1, **fresh seeds 10–34** | **15/25 = 60 % [40.7, 76.6]**, first pass 12/25, $0.20 per verified |
+| Family 2 (update_insurance_reconcile), v10, **fresh seeds 10–34**, both variants | **25/25 = 100 % [86.7, 100]**, first pass 24/25, $0.07 per verified |
+| Best-of-2 fork search on the 10 double-failed family-1 seeds | 2/10 recovered, $0.53 per recovered seed; checkpoint deletes work |
+| `revert()` to golden, desktop, n=10 (2026-09-03) | works, same machine id; p50 100.9 s; restores bimodal ≈ 22 s or 70–160 s |
+| Revert-mode pool over 121 restores on 2026-09-04 (six runs) | held revert mode through ten 503 reverts (each replaced in place, 200–245 s); 0 fork deaths |
+| Observe-act-observe loop | 0.45 s p50 |
 
-Chart 2 has its revert and fork bars from the live golden (`bench/chart2_solari_0903.png`; the older fork-only chart is `bench/chart2_solari.png`). Chart 1 does not exist:
-it needs a student.
+**SFT data on disk (`runs/exports/`).** Family 3: `sft_luna_v5_f3_s20-99.jsonl`
+(5,232 records) + `sft_luna_v5_s0-19.jsonl` (1,122) + **`sft_luna-v5-f3-s100-139.jsonl` (2,377 from 38 episodes)**. Families 1–2 combined:
+**`sft_luna-v10-fam12.jsonl`, 2,890 records from 52 episodes** (27 family-1, 25
+family-2), built from the v10 runs and the search winners. Per-run files next to it.
+
+**Harness findings of 2026-09-04, all fixed and tested:**
+
+- The student's history was compact actions only, so a "remember X" instruction
+  never reached the next turn; `--history-notes` shows the model's own reasoning
+  line next to each previous action (its memory). `collect` also never passed
+  `--history-k` to the `Env`, so 16 showed 8. These two turned family 1 from a
+  one-week date drift into 10/10 on seeds 0–9.
+- OpenEMR 8.3 base64-encodes `log.comments`; the `ui_path` tripwire now decodes
+  before matching. Two perfect calendar-only episodes had scored `DIRECT_DB_WRITE`.
+  A `ui_path` failure now stores `audit_rows_after_watermark` in the verdict.
+- The `before_episode` Chrome relaunch raced its own `pkill` (new Chrome attached
+  to the dying one → no browser); it now waits, clears the profile lock, verifies,
+  and fails the reset stage if Chrome is missing.
+- The pool flipped to fork mode on a bare `ConnectionError` during revert; only a
+  real refusal (409 / "Not revertable" / paused) flips it now.
+- `best_of_n` leaked the checkpoint when the two candidates deduplicated to one.
 
 ---
 
-## What is blocked
+## What is blocked or open
 
-**Rung 1 has volume: 11/17 family-3 episodes verified** (64.7 % [41.3, 82.7]; `runs/teacher-pilot4`, `runs/teacher-f3-s0-9`, `runs/teacher-f3-s1-9`, `runs/teacher-f3-s10-14-8gb`; `scripts/episode_table.py` prints the per-episode table, `runs/exports/` holds the SFT pairs — 746 examples from the 11 verified episodes). $2.22 per episode, $4.00 per verified episode, all but a cent of it Opus. **Every failure is the 60-action budget, and three of the four were spent recovering from 2–3 Chrome tab crashes** (`docs/spikes.md`). The crashes, not the policy, are the next thing to fix: they happen with `--disable-gpu` in place, `chrome.log` shows `Network service crashed`, and the guest kernel logged RCU stalls mid-episode — suspect memory pressure on the 4 GB desktop or vCPU starvation on the host. `cpu`/`mem_mb` are ignored on forks (measured: a `--mem-mb 8192` collect ran at 4031 MB) and `free -m` shows 2.8 GB available at episode end, so memory is not the lead. Use `scripts/chrome_crash_probe.py` (replays a verified trajectory on fresh forks, counts crashpad reports, no Opus) to compare Chrome flag sets via `FORKLOOP_CHROME_FLAGS` / `FORKLOOP_CHROME_DROP`; the winning set goes into `chrome_base_flags` and `browser_setup.sh`.
+**Family 1's remaining failure classes on fresh seeds (23 failed attempts of 38):**
+window 13 (right date, old time kept when the requested half-day differs — the
+rule is in v10 but never acted on; the notes carry dates, not times), add-event 7
+(v10's "click the TIME" lands on the calendar's hour labels, which open *Add New
+Event*; a second appointment gets saved), date arithmetic 3. Neither plain retries
+(3/13) nor best-of-2 search (2/10) recover the window class. Seeds 0–9 were easy by
+construction: the appointment already sat in the requested window for 8/10 of them
+(11/25 on seeds 10–34). **v11 candidates:** (a) "CURRENT time → TARGET window"
+in the note, and change the time whenever the current time is outside the window;
+(b) "click the appointment's own text, never the hour labels; if a form titled
+Add New Event opens, click Cancel". Not written, per the overnight plan's v10 cap.
 
-**The teacher completed family 3 end to end** (pilot 3, seed 1, `runs/teacher-pilot3`): right authorization number, letter downloaded, appeal filed with attachment via the GTK chooser; every effect check passed. It scored 0 only because OpenEMR rewrites `uuid` on rows it displays and the checksum oracle counted that as collateral — fixed with `oracle.ignore_columns` in `world.yaml` (`docs/contracts.md` §6). Seeds 1 and 3 then scored 1.0 (pilot 4).
+**Chrome crashes** remain the other loss (re-login loops after "Aw, Snap!";
+median 2 crashpad reports per attempt, up to 14). `scripts/chrome_crash_probe.py`
+and the swiftshader flag experiment are unchanged from 2026-09-03.
 
-**The teacher runs.** First real teacher episodes are in `runs/teacher-pilot*`
-(see `docs/spikes.md`): the policy logs into OpenEMR, searches the right
-patient and recovers from crashes on its own; what it cannot survive is the
-OpenEMR chart tab dying with "Aw, Snap! Error code: 5" (renderer SIGTRAP),
-which happened on the pilot machine but not on probe forks. Episodes now keep
-`diagnostics/chrome.log` and `dmesg.log`; read those from the next crashing
-episode before changing anything else. Cost: ≈ 100k input tokens per 60-step
-episode at `claude-opus-5` (≈ $0.57).
-
-**The teacher is unblocked on the Anthropic side.** `ANTHROPIC_API_KEY` and
-`ANTHROPIC_WORKSPACE_ID` are both in `~/.config/forkloop/env` (the key is
-identity-linked, so the workspace header is mandatory; `teacher.py` sends it)
-and a `claude-opus-5` smoke call with the computer toolset succeeded. The first
-pilot (`collect … --run-id teacher-pilot`) never got a Solari machine: the
-account answered 429 `Too many concurrent sessions` with zero sessions listed
-(see `docs/spikes.md`). Re-run the pilot once Solari creates machines again.
-
-**Family 1 is not blocked any more** (see `docs/limitations.md`): the
-"only Administrator" list was Chrome's renderer crashing on every
-authenticated OpenEMR page (no GPU process on the template — fixed with
-`--disable-gpu`: in `browser_setup.sh` for future goldens and in the
-`before_episode` relaunch hook for v5) plus OpenEMR's per-user provider
-filter, which one click on "All Users" widens. A reschedule
-has still not been driven through the GUI.
-
-**(Superseded 2026-09-03 — forks snapshot fine now and `collect --best-of 2 --search-mode fork` verified 3/3 family-3 seeds through real branch points, `runs/luna-v5-f3-bo2-smoke`, $0.087 per verified; `docs/spikes.md`.)** ~~**Forks cannot be snapshotted.**~~ `snapshot()` on a `from_snapshot` desktop was
-409 `Not snapshottable`; fresh desktops snapshot fine. Golden images are
-therefore rebuilt from scratch (`forkloop build-world`, ~10 min, resumable
-with `--attach`), and `best_of_n` search — which checkpoints a forked worker —
-cannot run on this account in either mode. Use `--best-of 1`.
+**Solari items** (changelog of 2026-09-04, mapped in the ledger): `disk_gb` up to
+20 GB on fresh machines (needs a golden v6 rebuild), `recordingUrl` now in
+responses (not re-measured), revert = fresh machine swapped in (machine id
+constancy not re-measured), idempotency keys (not adopted), ancestors deletable
+and storage billed from October. Still unaddressed: bimodal restores, guest RCU
+stalls / tab crashes, `cpu`/`mem_mb` ignored on forks.
 
 **No GPU.** The student bake-off and LoRA training need a rented card.
 
@@ -120,94 +148,13 @@ cannot run on this account in either mode. Use `--best-of 1`.
 
 ## Next steps, in order
 
-**Solari re-checked 2026-09-03 evening after support said "all set" (`docs/spikes.md` top section): `revert()` now works (desktop 21.5 s p50, state restored 3/3; a refused revert leaves the machine alive) and `snapshot()` works on forks — the two blockers behind fork-only resets and `--best-of 1` are gone, not yet exploited. `recordingUrl`, the 4 GB disk and ignored cpu/mem on forks are unchanged. **Benchmarked 2026-09-03 night (`docs/spikes.md` "night" section): `reset-bench --methods revert fork --trials 10 --no-fallback` on the golden — revert 10/10 on one machine id, p50 100.9 s; fork 10/10, p50 92.0 s; both bimodal (≈ 22 s or 70–160 s) so the slow half is Solari's host-side restore, not our 429 backoff. Revert is the pool's reset mode from here (CLI default `--pool-mode revert`, fork fallback kept) — but in both v7 runs the pool flipped itself to fork mode at a worker's third reset because a slow restore exceeded the 90 s post-revert ready window (`not reachable after revert`); the fix (`RevertTimeoutError` → replace the machine, keep the mode; 240 s window) **held live in the v8 run: 16 attempts in revert mode, one 503 replaced one machine** (`revert_failed_replaced_machine`). The first best-of-2 search verified 3/3 family-3 seeds and surfaced two pool bugs, both fixed and tested: branch pools reaped the parent's worker, and finished branch forks were never closed. Checkpoint snapshots (`cp-*`) were not deleted (three left on the account; delete from the console); the next search run records why in `search.snapshot_delete_errors`.**
-
-**Family 3 SFT set done (2026-09-03, `runs/luna-v5-f3-s20-99`): Luna v5 verified 77/80 seeds 20–99 = 96.2 % [89.5, 98.7]** (first pass 73/80; `--retry-failed 2` recovered 4 of 7), $0.08 per verified, **5,232 SFT examples** in `runs/exports/sft_luna_v5_f3_s20-99.jsonl`. Combined seeds 0–99: Luna v5 94/100 = 94 % at $0.061/verified vs Opus 5 9/15 = 60 % at $3.55 (`runs/exports/opus_vs_luna_v5_f3_full.md`). The three unrecovered seeds are transcription misreads/decoys/budget — the failure classes the oracle is built to reject; the fresh seeds beat the 85 % from the tuned 0–19 set. The run survived 2 fork deaths, 2 create timeouts and one ~3.5 h Mac-sleep stall unattended via `--reset-retries` and the pool's 429 reap. This closes the SFT-data goal; next is a GPU box for the student bake-off (still blocked). 
-
-**Families 1–2, Luna v6, seeds 0–9 with `--retry-failed 2` (2026-09-03, `runs/luna-v6-fam12-s0-9`): 7/20 seeds verified within three attempts** (family 1 3/10, family 2 4/10 — all four the portal-only variant; `docs/spikes.md` has the full breakdown). Three fixes landed from the failures, all offline-green: (1) prompt v7 (`hosted_gui_agent_v7.md`) replaces v6's wrong "cancel the provider-unavailable dialog" rule with "click OK" and forbids recomputing the target from a typed date — **not yet run**; (2) family-2 seeding now copies the patient's sex and address onto the insurance policy (OpenEMR 8.3 refuses to save a policy without them; confirmed live), byte-identical manifests otherwise; (3) the `ui_path` tripwire also accepts an OpenEMR `log` row whose SQL names the changed table and pk (the seed-2 `DIRECT_DB_WRITE` false negative), live comment format still unconfirmed. `collect --retry-failed N` is in and works (`scripts/inspect_episode.py`, `scripts/audit_probe.py` are the new triage tools; `tests/conftest.py` scrubs golden ids so the suite is green with `~/.config/forkloop/env` sourced). **Done 2026-09-03 night (`docs/spikes.md`): family 1 on v7 = 7/10 within two attempts (first pass 6/10, $0.34 per verified, `runs/luna-v7-fam1-s0-9`); family-2 two-system seeds on v7 = 6/6 (first pass 5/6, $0.097 per verified, `runs/luna-v7-fam2-2sys`).** Family 1's remaining problem is that no verified episode calls `done()` (all ran to 150 actions re-saving the same date) and the two double failures recomputed the target from the date they had just saved; prompt v8 ran 2026-09-04 (`runs/luna-v8-fam1-s0-9`): 7/10 again, first pass 4/10, but verified episodes are half the length and end with `done()`; every failure is the same one-week drift triggered by the blank "Available Appointments Calendar" modal that appears after OK. Prompt **v9** (`hosted_gui_agent_v9.md`: v7 navigation + fixed CURRENT date + the modal named explicitly) and the scroll-loop detector are written and **not yet run** — run family 1 seeds 0–9 on v9 next (≈ $2), then seeds 10–29 of both families for SFT volume.
-
-1. **Chrome tab crashes** (see "What is blocked"): re-run
-   `scripts/chrome_crash_probe.py --stress 6` for the baseline and
-   `FORKLOOP_CHROME_FLAGS="--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"`
-   once forks stop dying (2026-09-03 02:30–03:00 UTC five of eight probe forks
-   vanished on host `i-00cac13223691ff7d`). Result so far (`docs/spikes.md`):
-   swiftshader 5/6 completed replays verified vs baseline 2/3, about one
-   crash report per replay under both — but forks *died* 5/8 under baseline
-   vs 1/7 under swiftshader (last pairs interleaved on one host: 1/2 vs 0/2).
-   Suggestive, not proven. Next: run seeds 15–19 with
-   `FORKLOOP_CHROME_FLAGS="--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader"`
-   and compare `scripts/episode_table.py` crash columns and machine deaths
-   with seeds 0–14; adopt in `chrome_base_flags`/`browser_setup.sh` if it
-   holds. Ask Solari about the stalls/deaths regardless (ids and times in
-   `docs/solari-repro.md`).
-   **Cheaper teacher candidate: OpenAI GPT-5.6 Luna** ($0.20/$1.20 per 1M vs
-   Opus $5/$25; vision + computer-use listed as supported; weak long-context
-   recall, slow at xhigh). The OpenAI-compatible student path is wired for it —
-   put `OPENAI_API_KEY` in `~/.config/forkloop/env`, then
-   `collect --policy student --student-url https://api.openai.com/v1 --model gpt-5.6-luna --effort high --seeds 0-2 --pool-mode fork`
-   (text actions, no native tool; `metrics` prices it). Under $1 for three seeds.
-   **Status 2026-09-03 (`docs/spikes.md`):** grounds well, 1.5–2.4 s per call,
-   ≈ $0.03 per episode; 0/6 with the plain compact prompt at any effort
-   (loops on an already-focused field), 0/3 with the hosted prompt
-   (`forkloop/policies/prompts/hosted_gui_agent.md`, `--system-prompt-file`,
-   `--history-k 16`) but no loops and the right auth number read on one seed —
-   it runs out of the 60-action budget. Third run = `--prev-shot`
-   (previous screenshot too) + `--max-steps 120 --max-seconds 900`
-   (`run.json` records `budget_override`) **verified seed 1 at 1.0 for
-   $0.045** (`runs/luna-high-v3-s0-2`; Opus: $1.83 on the same seed). Seed 0
-   lost 70 actions to a read-only address bar in a Chrome popup window and a
-   decoy letter; prompt v4 (popup + decoy guidance, alternating-loop warning)
-   **verified 2/3** (`runs/luna-high-v4-s0-2`: seeds 1 and 2 for $0.04–0.08
-   each; seed 0 with four decoys still fails). Volume run on seeds 3–19 with
-   the v4 configuration is `runs/luna-high-v4-s3-19`; compare its success
-   rate and per-seed outcomes with Opus's seeds 3–14 via
-   `scripts/episode_table.py`. **Result: Luna v4 11/20 (55 %) at $0.15 per
-   verified vs Opus 9/15 (60 %) at $3.55; 8 vs 9 on shared seeds**
-   (`scripts/compare_teachers.py`). Luna is the volume teacher from here;
-   Opus stays the reference for audits and hard families. v5 prompt
-   (`hosted_gui_agent_v5.md`: one tab per app, exact transcription, keep
-   the number in reasoning) + `detail: high` images is being retried on the
-   seeds v4 failed (`runs/luna-high-v5-retry`): **7/9**. **Clean v5 pass on
-   seeds 0–19 (`runs/luna-high-v5-s0-19`): 17/20 = 85 % [64, 95], $0.073
-   per verified, 1,122 SFT examples; Opus 9/15 on the same family, 12 vs 9
-   on shared seeds.** Luna v5 is the volume teacher. **Families 1–2 pilot
-   (`runs/luna-v5-fam12-s0-2`): family 1 1/3, family 2 2/3 — first
-   end-to-end completions of both**; the family-1 instruction was
-   disambiguated in the generator and prompt v6 (`hosted_gui_agent_v6.md`)
-   adds date-picker/calendar rules. Next: families 1–2 seeds 0–9 with v6
-   (≈ $1.50), then seeds 20–99 on family 3 (≈ $7) for the SFT set; keep
-   Opus for audits. Both use `collect --retry-failed 2` (2026-09-03): failed
-   seeds are re-run on fresh forks, every attempt is kept on disk with
-   `attempt` in its manifest, and metrics/exports see only the shortest
-   verified attempt per seed (`docs/contracts.md` §10; superseded attempts
-   still count in `cost_*`).
-   The v5 prompt was tuned on seeds 0–19, so treat 85 % as an upper estimate
-   until fresh seeds confirm it.
-   Cheaper lever already in: the teacher caches its prompt (moving breakpoint
-   + pruning hysteresis), which should cut Opus input cost by more than half;
-   check `cache_read` in the next run's `metrics`.
-2. **More family-3 seeds and the other families** (the command below; seeds
-   0–14 are done; the 429/orphan failure mode is handled by the pool now):
-   ```bash
-   ./venv/bin/python -m forkloop.cli collect --world claims-ops-v1 --policy teacher \
-     --families resolve_denial --seeds 15-24 --best-of 1 --pool-mode fork --concurrency 2
-   ```
-   `--best-of` > 1 cannot work on this account (forks are not snapshottable).
-   Budget: about $2.20 of Opus per episode; Solari is negligible.
-3. **Rebuild golden v6** when Solari is stable (see "What is true today"), then **drive one family-1 reschedule through the GUI** the way
-   `scripts/gui_episode.py` does the appeal (login → Calendar → "All Users" →
-   open the event → change date/time → Save), then let the teacher loose on
-   family 1 too.
-4. **Solari support email was sent on 2026-09-02** (the text is
-   `docs/solari-message.md`; `docs/solari-repro.md` maps each item to the
-   script that reproduces it, for the reply). If Solari enables `revert()` or
-   fork snapshots, the Chart 2 revert bar and best-of-N search follow from one
-   benchmark run each. New for the thread: mid-episode RCU stalls in the guest.
-5. **Check snapshot storage pricing** in the console; five snapshots of
-   6–8 GB are on the account now (v6 plus the v5 lineage; the lineage can be
-   deleted once v6 is verified, newest first).
-6. Optional and cheap: the local docker-compose baseline in
-   `forkloop/bench/local_baseline/` adds a third bar to Chart 2.
+1. **Prompt v11 for family 1** (window rule with a time note; hour-label rule),
+   run seeds 35–59 fresh (≈ $3), compare with the 60 % of v10 on 10–34.
+2. **Golden v6** with `disk_gb` 20 and Chrome started with `--disable-gpu`
+   (`forkloop build-world`, ~10 min); re-measure `recordingUrl` and the revert
+   machine-id behaviour on the way (`docs/solari-repro.md` scripts, cents).
+3. **Student bake-off** once a GPU exists (`train/`): 5,267 new records from this session plus 6,354 earlier family-3 records; family 3 seeds 140–199 (≈ $5) if more volume is wanted.
+4. Keep `forkloop reap --dry-run` at 0 and the account at four snapshots.
 
 ## Gotchas that cost real time yesterday
 
