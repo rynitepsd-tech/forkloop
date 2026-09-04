@@ -222,6 +222,19 @@ through **six 503 reverts**, each replaced in place in 203–242 s; no fork deat
 planned; the v11 candidates are (a) a window rule with an explicit "CURRENT time → TARGET time" note, (b) "click the
 appointment's own text, never the hour labels; Cancel any form titled Add New Event".
 
+**Family 2 on v10 + `--history-notes`, fresh seeds 10–34, both variants by seed (`runs/luna-v10-fam2-s10-34`, 2026-09-04
+06:14–08:06 local, 26 attempts):** **25/25 verified = 100 % [86.7, 100]; first pass 24/25.** 9 portal-only seeds verified in
+8–12 actions, 16 two-system seeds (OpenEMR "Edit Current Insurance" + portal resubmission) in 42–142 (median of all 25:
+48); every verified episode ends with `done()` and passes all checks (policy number and plan in OpenEMR, claim
+`RESUBMITTED` with the new member id, one resubmission, no appeal, other claim and distractors untouched, audit path).
+$1.74 for the run ($1.51 tokens, $0.23 VM), **$0.07 per verified seed**; 1,301 SFT records. The single miss (seed 31,
+attempt 1) was not the policy: the `before_episode` Chrome relaunch raced its own `pkill` — `chrome.log` "Opening in
+existing browser session", then no browser — so the episode began on a bare desktop; Luna opened Chrome from the dock
+(default profile, no portal session) and spent 151 actions trying portal credentials. Fixed the same hour (relaunch
+waits for the old Chrome to exit, clears the profile's Singleton files, verifies the new one, and raises so the reset
+stage fails and the seed is re-queued); the retry verified in 10 actions. Restores n = 26, p50 69 s, 9/26 under 30 s,
+7/26 over 120 s; two 503 reverts replaced in place; no fork deaths; crashpad median 0 per attempt.
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |
@@ -233,6 +246,7 @@ appointment's own text, never the hour labels; Cancel any form titled Add New Ev
 | 1 reschedule_constrained, **fresh seeds 10–34, v10 + history notes** (2026-09-04) | — | **15/25 = 60 % [40.7, 76.6]** | 12/25 | $0.20 (median 55; window 13, add-event 7, date 3 of 23 failed attempts) |
 | 2 update_insurance_reconcile, portal-only (seeds 1, 2, 8, 9) | 4/4 | not re-run | — | — |
 | 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
+| 2 update_insurance_reconcile, **fresh seeds 10–34, both variants, v10 + history notes** (2026-09-04) | — | **25/25 = 100 % [86.7, 100]** | 24/25 | $0.07 (median 48; the one miss was a Chrome relaunch race, fixed) |
 
 ## Measured on 2026-09-02 (later) — Chrome crash, calendar providers, fork snapshots
 

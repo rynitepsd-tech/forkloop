@@ -138,3 +138,33 @@ files, launches, verifies a `forkloop-chrome` Chrome is running (≤ 12 s), retr
 reset stage, so `--reset-retries` re-queues the seed) instead of starting a doomed episode. Applies from the next
 run; the current process has the old code.
 
+Ran 06:14–08:06 local (26 attempts: 25 + 1 retry). `forkloop metrics --run runs/luna-v10-fam2-s10-34 --model gpt-5.6-luna`:
+
+```
+episodes                    25 selected of 26 attempts (1 superseded)
+success                     100.0% [86.7, 100.0] (n=25)
+median steps                48
+median reset (s)            90.335
+cost / success (USD)        0.0695
+cost / episode (USD)        0.0668
+  of which VM / tokens      0.228 / 1.5091
+tokens in / out             6690466 / 142487
+reason codes: OK=25
+```
+
+- **Honest fresh-seed family-2 estimate: 25/25 verified = 100 % [86.7, 100]; first pass 24/25 = 96 %.** Both variants
+  by seed: 9 portal-only (8–12 actions) and 16 two-system (42–142 actions, OpenEMR insurance edit + portal
+  resubmission); verified median 48, 25/25 end with `done()`, all 8–9 checks passed on every verified episode.
+- Cost: **$1.51 tokens (OpenAI), $0.23 VM (Solari)**; $0.07 per verified seed. Running totals: OpenAI $6.38 / Solari $0.97.
+- The one failure (seed 31, attempt 1) was the Chrome relaunch race above (no browser at episode start, 151 actions
+  of credential guessing); its retry verified in 10 actions. No policy failure in the family.
+- Pool: revert mode held across 26 restores (p50 69 s, 9/26 under 30 s, 7/26 over 120 s, max 199 s); two 503 reverts
+  replaced in place; no fork deaths; `reap --dry-run` = 0 afterwards. Crashpad median 0 per attempt (max 7).
+- SFT export: `runs/exports/sft_luna-v10-fam2-s10-34.jsonl`, **1,301 records from 25 episodes**.
+
+## Step 3 — does search recover the hard seeds?
+
+Seeds that failed both attempts in steps 1–2 (v10 runs): family 1 **11, 13, 15, 17, 18, 19, 23, 25, 27, 34** (10 seeds:
+8 window, 1 add-event ×2 [23], 1 date arithmetic [34]); family 2 none. Run once with `--best-of 2 --search-mode fork
+--concurrency 1` under `luna-v10-bo2-hard`.
+
