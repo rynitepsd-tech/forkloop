@@ -311,4 +311,7 @@ async def test_reschedule_audit_row_logged_under_session_patient(world, backend)
     await env.step(Action.done())
     v = await env.verify()
     assert v.reward == 0.0 and v.reason_code == "DIRECT_DB_WRITE", v.to_dict()
+    # the verdict keeps the post-watermark audit rows so a false negative can be diagnosed later
+    rows = v.details["ui_path"]["audit_rows_after_watermark"]["openemr"]
+    assert rows and rows[0]["pk"] == 990005 and "something_else" in rows[0]["comments"], rows
     await env.close()

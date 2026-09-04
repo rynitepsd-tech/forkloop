@@ -442,9 +442,13 @@ cost is an upper bound.
   https://api.openai.com/v1 --model gpt-5.6-luna` switches on
   `reasoning_effort`, `detail: high` images, a 300 s timeout and 4096 output
   tokens; `--system-prompt-file` replaces the compact prompt with one of
-  `policies/prompts/hosted_gui_agent{,_v5,_v6,_v7,_v8,_v9}.md`, `--history-k
+  `policies/prompts/hosted_gui_agent{,_v5,_v6,_v7,_v8,_v9,_v10}.md`, `--history-k
   16` and `--prev-shot` give it the last actions as text and the previous
-  screenshot, and a history-based loop warning (three near-identical pointer
+  screenshot (the env keeps at least that many actions since 2026-09-04; before,
+  `collect` left the env at its default of 8 and `--history-k 16` showed 8),
+  `--history-notes` puts the model's own reasoning line next to each previous
+  action — its only memory across turns, since the history is compact actions
+  (`note_from_reply`; measured need in `docs/spikes.md` 2026-09-04) — and a history-based loop warning (three near-identical pointer
   actions, three waits, an alternating pair, or five consecutive scrolls in
   one direction whatever their coordinates) appends a "do not repeat" line. The model's reasoning precedes the action inside `raw_action`
   (`policy_note` stays empty), which is what `scripts/inspect_episode.py`
@@ -493,7 +497,7 @@ revert|fork`, `--max-steps/--max-seconds` (recorded as `budget_override` in
 `run.json`), `--reset-retries N` (re-queue a seed whose reset failed, after
 `--reset-retry-wait-s`), `--retry-failed N` (after the pass, re-run every
 seed below 1.0 up to N more times on a fresh fork; §4.14), and the student
-knobs `--student-url --system-prompt-file --history-k --prev-shot
+knobs `--student-url --system-prompt-file --history-k --history-notes --prev-shot
 --image-detail --effort`. `_policy()` takes `family/seed/attempt` context so
 tests can swap in attempt-aware policies. `reap --dry-run` lists the
 account's forkloop machines. `reset-bench` hands the benchmark its own argv

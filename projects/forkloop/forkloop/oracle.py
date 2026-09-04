@@ -343,6 +343,7 @@ class Oracle:
         changes = await diff_baseline(self.ctx.baseline, self.ctx.dbs, self.ctx.primary_keys)
         exempt = set(self.ctx.exempt_tables) | set(c.exempt_tables or [])
         missing: list[dict[str, Any]] = []
+        audit_rows: dict[str, list[dict[str, Any]]] = {}
         checked = 0
         for ch in changes:
             if ch.table in exempt:
@@ -382,7 +383,22 @@ class Oracle:
                     n = int(next(iter(rows2[0].values()))) if rows2 else 0
             if n == 0:
                 missing.append({"table": ch.table, "pk": ch.pk, "kind": ch.kind})
+                # Keep the evidence: what the audit table actually holds after the watermark, so a
+                # false DIRECT_DB_WRITE can be diagnosed from the verdict alone (the VM is gone by then).
+                if db_name not in audit_rows:
+                    ccol = audit.get("comments_col")
+                    cols = f"{pk_col} AS pk, {audit['entity_col']} AS entity, {audit['id_col']} AS entity_id"
+                    if ccol:
+                        cols += f", SUBSTR({ccol}, 1, 300) AS comments"
+                    try:
+                        got = await self.ctx.dbs[db_name].query(
+                            f"SELECT {cols} FROM {audit['table']} WHERE {pk_col} > ? ORDER BY {pk_col} DESC", [wm])
+                        audit_rows[db_name] = [dict(r) for r in got[:20]]
+                    except Exception as e:  # noqa: BLE001 - diagnostics only
+                        audit_rows[db_name] = [{"error": f"{type(e).__name__}: {str(e)[:200]}"}]
         details[c.id] = {"passed": not missing, "checked": checked, "unaudited_changes": missing[:50]}
+        if audit_rows:
+            details[c.id]["audit_rows_after_watermark"] = audit_rows
         return not missing
 
     async def _check_forbidden(self, c: Check, details: dict[str, Any]) -> bool:

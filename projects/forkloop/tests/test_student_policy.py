@@ -609,3 +609,54 @@ def test_image_detail_hint_is_sent_only_when_set():
     assert parts[-1]["image_url"]["detail"] == "high"
     lo = StudentPolicy("http://stub/v1", "m", image_max_side=64).build_messages(obs)[0]
     assert "detail" not in [p for p in lo[-1]["content"] if p["type"] == "image_url"][-1]["image_url"]
+
+
+def test_note_from_reply_strips_the_action_line():
+    from forkloop.policies.student import note_from_reply
+
+    assert note_from_reply("CURRENT 2026-09-11 → TARGET 2026-09-18.\nOpen it.\nclick(1, 2)") == \
+        "CURRENT 2026-09-11 → TARGET 2026-09-18. Open it."
+    assert note_from_reply("click(1, 2)") == ""
+    assert note_from_reply("") == ""
+    assert note_from_reply("x " * 200 + "\ndone()").endswith("…")
+    assert len(note_from_reply("x " * 200 + "\ndone()")) <= 160
+
+
+def test_history_notes_put_the_policy_reasoning_next_to_each_action():
+    """The env's history is compact actions only; with history_notes the policy sees its own
+    earlier reasoning line next to each of them (its memory across turns, 2026-09-04)."""
+    bodies: list[dict] = []
+    replies = iter(["CURRENT 2026-09-11 → TARGET 2026-09-18. Open the appointment.\nclick(10, 20)",
+                    "Same target. Type the date.\ntype(\"2026-09-18\")",
+                    "Save it.\nclick(30, 40)"])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_completion(next(replies)))
+
+    pol = _policy(handler, history_notes=True, history_k=2)
+    hist: list[str] = []
+    for step in range(3):
+        obs = Obs(_png(64, 36), "move it", step=step, history=list(hist[-8:]))
+        action, meta = asyncio.run(pol.act(obs))
+        hist.append(_as_dict(action)["type"] and meta["raw_action"].strip().splitlines()[-1])
+    asyncio.run(pol.aclose())
+    text0 = next(p for p in bodies[0]["messages"][1]["content"] if p["type"] == "text")["text"]
+    text2 = next(p for p in bodies[2]["messages"][1]["content"] if p["type"] == "text")["text"]
+    assert "note:" not in text0 and "first step" in text0
+    assert "each with the note you wrote" in text2
+    assert "1. click(10, 20) — note: CURRENT 2026-09-11 → TARGET 2026-09-18. Open the appointment." in text2
+    assert '2. type("2026-09-18") — note: Same target. Type the date.' in text2
+    # off by default: plain compact history, no notes
+    pol2 = _policy(lambda r: httpx.Response(200, json=_completion("Save.\nclick(1, 1)")), history_k=2)
+    asyncio.run(pol2.act(Obs(_png(64, 36), "move it", step=1, history=["click(10, 20)"])))
+    asyncio.run(pol2.aclose())
+
+
+def test_collect_env_keeps_at_least_the_policy_history():
+    from argparse import Namespace
+    from forkloop.cli import _env_history_k
+
+    assert _env_history_k(Namespace(history_k=16)) == 16
+    assert _env_history_k(Namespace(history_k=2)) == 8
+    assert _env_history_k(Namespace()) == 8

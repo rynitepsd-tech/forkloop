@@ -156,6 +156,26 @@ worker=1 … CapacityError … could not restore this snapshot in time`), that o
 fork (183 s) and the pool stayed in revert mode; restores n = 16, p50 52 s, 6/16 under 30 s, 1/16 over 120 s. No fork
 deaths.
 
+**Family 1 on prompt v9, seeds 0–9, same budget/retry, `--pool-mode revert --concurrency 2` (`runs/luna-v9-fam1-s0-9`,
+2026-09-04 02:00–03:05 local, 15 attempts):** **6/10 verified within two attempts, first pass 5/10** (seeds 0, 1, 5, 6, 8;
+seed 3 on its retry). The verified episodes are the shortest yet — 66, 70, 70, 74, 92, 116 actions (median 72 vs 103 on v8
+and 155 on v7), 6/6 ending with `done()` two actions after OK — so v9's modal rule did what it was written for. $1.73 for
+the run ($1.49 tokens, $0.24 VM), $0.29 per verified seed. The nine failed attempts fall into four classes, all read
+end to end:
+
+| class | attempts | what happened |
+| --- | --- | --- |
+| **oracle false negative** (`DIRECT_DB_WRITE`) | 2 (seeds 3, 7, attempt 1) | The two cleanest episodes of the run: 40 and 37 actions, `done()` after OK, every effect check passed (date, window, provider, single event) — scored 0 because `ui_path` found the `openemr_postcalendar_events` change unaudited. Both went calendar → Finder → editor without ever opening the patient's dashboard; all six verified episodes opened the dashboard (which writes a `log` row keyed by the patient id, the branch of the loose tripwire that matches). So OpenEMR's calendar-save log row does not match the "comments name the table and pk" fallback added on 2026-09-03 (its live format was never confirmed). Seed 3's retry verified in 92 actions via the dashboard. Fix in flight: the verdict now keeps `audit_rows_after_watermark` on a `ui_path` failure, and a scripted replay of seed 7's 37 actions on a fresh fork (`runs/probe-audit-s7`, no tokens) captures the live rows. |
+| **date drift** (`WRONG_SLOT` by one week, or an unsaved chain) | 3 (4a1, 4a2, 9a1) | Not the modal this time — the recompute happened *inside the edit form*, one step after the date field showed the new date: seed 9a1 picked Sep 15 in the date picker, scrolled, then wrote "CURRENT 2026-09-15 → TARGET 2026-09-22" and saved Sep 22 (34 actions, `done()`); seed 4a2 typed Sep 18, scrolled, and saved Sep 25; seed 4a1 chained Sep 11 → 18 → 25 → … → Nov 13 through seven picker/typing rounds because its Save clicks at (347, 680) never registered (the row of buttons was at y≈632 in every verified episode), leaving the appointment untouched. Root cause found in the harness, not the prompt: the history the model sees is compact actions only (`env.py`, `ep.history.append(parsed.to_compact())`), so the "CURRENT → TARGET, copy it every step" line never reaches the next turn — the policy re-derives both dates from the screen every step and drifts the moment the field shows the new date. Second finding: `collect` never passed `--history-k` to the `Env`, so `--history-k 16` showed the env default of 8. Both fixed offline: the env keeps `max(history_k, 8)` actions and `--history-notes` renders the model's own reasoning line (`note_from_reply`, ≤ 160 chars, action line stripped) next to each previous action; prompt v10 tells it that the notes are its only memory and that the form's date field is never a CURRENT source, and forbids clicking days in the picker (both drift seeds used it; the verified ones typed). |
+| **crash budget** | 3 (2a1, 7a2, 9a2) | 10, 4 and 14 crashpad reports, 10, 5 and 18 re-logins, 154–168 actions, the appointment never edited (dates unchanged). Seed 9a2 spent 12 `F5` reloads on "Aw, Snap!"; each re-login costs 4–6 actions and the Finder search is repeated after every crash. Same class as the family-3 crash failures; not a prompt problem. |
+| **calendar click cycle** | 1 (2a2) | 124 clicks in 154 actions: clicking the appointment entry in the calendar opened the patient's chart (the name link), Luna went "back to the calendar", clicked the same entry again — a three-action cycle (entry → chart → calendar) invisible to the loop detector; 1 crash. v10 adds: click the TIME of the entry (the name opens the chart), and never repeat a click that opened the chart. |
+
+Crashes overall: median 2 crashpad reports per attempt (range 0–14), 1–3 RCU stalls each, 2–18 re-logins; the four
+attempts with ≥ 4 crash reports all failed. Restores: n = 15, p50 109 s, 5/15 under 30 s, 5/15 over 120 s, max 192 s —
+**revert mode held for all 15** (no `revert_*` events, no 503, no fork deaths, nothing reaped; `reap --dry-run` = 0
+afterwards). The v9 gate (first pass ≥ 6/10) was missed by one seed, with two of the misses being oracle false negatives
+on otherwise perfect episodes; v10 (`hosted_gui_agent_v10.md` + `--history-notes`) runs next on the same seeds.
+
 **Families 1–2 status after v7 (seeds 0–9 / two-system seeds):**
 
 | family / variant | v6 (2026-09-03 morning, 3 attempts) | v7 (2026-09-03 night, 2 attempts) | v7 first pass | $/verified (v7) |

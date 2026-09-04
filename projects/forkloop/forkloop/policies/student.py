@@ -274,15 +274,34 @@ def loop_warning(history: list[str] | None, *, min_repeats: int = 3, px: int = 2
     return None
 
 
-def build_user_text(instruction: str, history: list[str] | None, style: str, step: int | None = None) -> str:
-    """The text part of the user turn: instruction + last-k history (+ a loop warning when stuck)."""
+def note_from_reply(text: str, *, max_chars: int = 160) -> str:
+    """The model's own reasoning line from one reply, without the action line: what it gets
+    to see next to that action in later turns when ``history_notes`` is on. Measured need
+    (2026-09-04, runs/luna-v9-fam1-s0-9): the history is compact actions only, so the
+    "CURRENT -> TARGET" line the prompt asks for never reached the next turn and the policy
+    re-derived the target from whatever the date field showed (two of five failures)."""
+    lines = [ln.strip() for ln in (text or "").strip().splitlines() if ln.strip()]
+    if lines and _ACT_RE.match(lines[-1]):
+        lines = lines[:-1]
+    note = " ".join(" ".join(lines).split())
+    if len(note) > max_chars:
+        note = note[: max_chars - 1].rstrip() + "…"
+    return note
+
+
+def build_user_text(instruction: str, history: list[str] | None, style: str, step: int | None = None,
+                    notes: list[str | None] | None = None) -> str:
+    """The text part of the user turn: instruction + last-k history (+ a loop warning when stuck).
+    ``notes`` (same length as ``history``) puts the policy's own earlier reasoning next to each action."""
     lines = [f"Task: {instruction.strip()}" if style != "fara" else instruction.strip()]
-    hist = [h for h in (history or []) if isinstance(h, str) and h.strip()]
+    pairs = [(h, (notes[i] if notes and i < len(notes) else None))
+             for i, h in enumerate(history or []) if isinstance(h, str) and h.strip()]
+    hist = [h for h, _ in pairs]
     if hist:
         lines.append("")
-        lines.append("Previous actions (oldest first):")
-        for i, h in enumerate(hist, 1):
-            lines.append(f"{i}. {h.strip()}")
+        lines.append("Previous actions (oldest first)" + (", each with the note you wrote when you took it:" if notes else ":"))
+        for i, (h, n) in enumerate(pairs, 1):
+            lines.append(f"{i}. {h.strip()}" + (f" — note: {n.strip()}" if n and n.strip() else ""))
         warn = loop_warning(hist)
         if warn:
             lines.append("")
@@ -399,6 +418,7 @@ class StudentPolicy:
         hosted_reasoning: bool = False,
         prev_screenshot: bool = False,
         image_detail: str | None = None,
+        history_notes: bool = False,
     ) -> None:
         if prompt_style not in PROMPT_STYLES:
             raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}, got {prompt_style!r}")
@@ -426,6 +446,10 @@ class StudentPolicy:
         #: Also send the screenshot from before the previous action, so the model can see
         #: whether that action changed anything (the loop failure mode of 2026-09-03).
         self.prev_screenshot = bool(prev_screenshot)
+        #: Show the policy's own reasoning line next to each previous action: its only memory
+        #: across turns (the env's history is compact actions). Keyed by observation step.
+        self.history_notes = bool(history_notes)
+        self._notes: dict[int, str] = {}
         #: OpenAI-style image fidelity hint ("high"/"low"/"auto"); None omits the field (vLLM).
         #: Hosted models default to "auto", which may downscale a 1280x720 screenshot enough to
         #: misread an authorization code (measured 2026-09-03: "G" read as "6", digits dropped).
@@ -498,8 +522,13 @@ class StudentPolicy:
         history = list(getattr(obs, "history", None) or [])
         if self.history_k >= 0:
             history = history[-self.history_k:] if self.history_k > 0 else []
+        notes: list[str | None] | None = None
+        if self.history_notes and history:
+            # history[i] is the action taken at step (obs.step - len(history) + i)
+            base = int(getattr(obs, "step", 0) or 0) - len(history)
+            notes = [self._notes.get(base + i) for i in range(len(history))]
         text = build_user_text(getattr(obs, "instruction", ""), history, self.prompt_style,
-                               step=getattr(obs, "step", None))
+                               step=getattr(obs, "step", None), notes=notes)
         def img(url: str) -> dict[str, Any]:
             part: dict[str, Any] = {"url": url}
             if self.image_detail:
@@ -639,6 +668,8 @@ class StudentPolicy:
             return None, self._error_meta(e, latency)
         meta["model_latency_s"] = latency
         meta["tokens"] = self._tokens(data)
+        if self.history_notes:
+            self._notes[int(getattr(obs, "step", 0) or 0)] = note_from_reply(meta.get("raw_action") or "")
         return action, meta
 
     async def propose(self, obs: Any, n: int) -> list[tuple[Any, dict]]:

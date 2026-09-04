@@ -33,6 +33,13 @@ def _backend(name: str, world: Any, latency: float = 0.0):
     return SolariBackend()
 
 
+
+def _env_history_k(args: Any) -> int:
+    """The env keeps at least as many past actions as the policy wants to see. Until 2026-09-04
+    the env used its default of 8 whatever ``--history-k`` said, so ``--history-k 16`` showed 8."""
+    return max(int(getattr(args, "history_k", 8) or 8), 8)
+
+
 def _budget_override(args: argparse.Namespace) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if getattr(args, "max_steps", None):
@@ -89,6 +96,7 @@ def _policy(spec: str, args: argparse.Namespace, **context: Any):
             system_prompt = Path(args.system_prompt_file).read_text()
         return StudentPolicy(base_url=args.student_url, model=args.model or "student", prompt_style=args.prompt_style,
                              system_prompt=system_prompt, history_k=args.history_k, prev_screenshot=args.prev_shot,
+                             history_notes=bool(getattr(args, "history_notes", False)),
                              image_detail=(args.image_detail or ("high" if hosted else None)),
                              api_key=os.environ.get("STUDENT_API_KEY") or os.environ.get("OPENAI_API_KEY"),
                              hosted_reasoning=hosted, max_tokens=4096 if hosted else 512, timeout_s=300.0 if hosted else 120.0,
@@ -156,7 +164,7 @@ async def _run(args: argparse.Namespace) -> int:
     _preflight(args.policy, args)
     rec = Recorder(args.runs, run_id=args.run_id, meta={"policy": args.policy, "world": w.name, "backend": backend.name,
                                                        "model": _policy_model(args.policy, args)})
-    env = Env(w, backend, family=args.family, split=args.split, recorder=rec)
+    env = Env(w, backend, family=args.family, split=args.split, recorder=rec, history_k=_env_history_k(args))
     try:
         pol = _policy(args.policy, args)
         if args.best_of > 1:
@@ -220,7 +228,7 @@ async def _collect(args: argparse.Namespace) -> int:
         for reset_try in range(1, args.reset_retries + 2):
             async with sem:
                 # Every attempt is a fresh reset: in fork mode that is a new fork of the golden.
-                env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec,
+                env = Env(w, backend, family=fam, split=args.split, pool=pool, recorder=rec, history_k=_env_history_k(args),
                           budget_override=_budget_override(args), record_extra={"attempt": attempt})
                 pol = _policy(args.policy, args, family=fam, seed=seed, attempt=attempt)
                 row: dict[str, Any] = {"family": fam, "seed": seed, "attempt": attempt}
@@ -359,6 +367,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                            help="student: replace the system prompt with this file ({w},{h},{w1},{h1} are filled in)")
             p.add_argument("--history-k", type=int, default=8, help="student: previous actions shown as text")
             p.add_argument("--prev-shot", action="store_true", help="student: also send the screenshot from before the last action")
+            p.add_argument("--history-notes", action="store_true",
+                           help="student: show the model's own reasoning line next to each previous action (its memory)")
             p.add_argument("--image-detail", default=None, help="student: OpenAI image detail hint (hosted default: high)")
             p.add_argument("--max-steps", type=int, default=None, help="override the task's action budget for this run")
             p.add_argument("--max-seconds", type=float, default=None, help="override the task's wall budget for this run")

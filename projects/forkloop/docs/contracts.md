@@ -254,7 +254,12 @@ or it was deleted; *added* rows in non-exempt tables also count. Changes whose
 **ui_path_only.** For every non-exempt row change detected above, there must be
 an `audit_log` row (portal) or `log` row (OpenEMR) for that entity written
 after seeding. Missing audit → `DIRECT_DB_WRITE`. (Inside the VM only the UI
-can write, so this is a tripwire, not the only defence.)
+can write, so this is a tripwire, not the only defence.) OpenEMR's `log` is
+matched loosely (`audit.loose`): the row's patient id, or a `comments` SQL that
+names the changed table and primary key. When a change goes unmatched the
+check's `details` also carry `audit_rows_after_watermark` — up to 20 of the
+newest audit rows per database (`pk`, `entity`, `entity_id`, first 300 chars of
+`comments`) — so a false `DIRECT_DB_WRITE` can be diagnosed after the VM is gone.
 
 **forbidden_screens.** Portal records every request path in `page_views`;
 any row after seeding whose path starts with an entry in `world.forbidden_paths`
