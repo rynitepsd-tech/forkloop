@@ -1,4 +1,4 @@
-# Handoff — Forkloop, as of 2026-09-05 (after the student bake-off session)
+# Handoff — Forkloop, as of 2026-09-06 (after the fair-conventions student session)
 
 Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
@@ -13,10 +13,14 @@ training scripts are built and tested (210 offline tests); the world runs for re
 on Solari; GPT-5.6 Luna is the volume teacher on all three task families
 (fresh-seed rates: family 1 60 %, family 2 100 %, family 3 96 %); revert-mode
 pools, best-of-N fork search and checkpoint deletes all run for real; **the base
-student has now run** — `microsoft/Fara1.5-4B` served on this Mac with mlx-vlm at
-1.5 s per call scores **0/30 on family 3** (seeds 200–229) as shipped, 0/30 with the
-`visit_url` parser fix, and 0/30 on the easier variant; every episode dies at
-the OpenEMR login (`docs/student-2026-09-05.md`). SFT on a rented GPU is the next rung.
+student has run twice** — `microsoft/Fara1.5-4B` served on this Mac with mlx-vlm
+scores **0/30 on family 3** (seeds 200–229) as shipped, with the `visit_url` macro,
+and on the easier variant, every episode dying at the OpenEMR login
+(`docs/student-2026-09-05.md`); with two fair, convention-level changes (a note
+that spells out username/password, a Fara prompt without the ask-the-user rule)
+it **logs in 30/30 and still scores 0/30**, dying between the login and the
+patient chart (`docs/student-2026-09-06.md`) — that run is the like-for-like floor
+for the SFT ladder, and SFT on a rented GPU is the next rung.
 
 9 local commits are unpushed (`origin/main` ahead 9; latest: the student-session wrap-up, 2026-09-05);
 push only when asked. `runs/` is git-ignored; the trajectories live only on this
@@ -116,6 +120,8 @@ offline, no key required.
 | **Student, base `microsoft/Fara1.5-4B`, family 3 seeds 200–229, as shipped** (2026-09-04, `runs/fara15-4b-base-f3-s200-229`) | **0/30 = 0 % [0, 11.3]**; invalid-action rate 20.8 % (all `visit_url`), 24/30 ended by the invalid limit; $0.22 VM |
 | **Student + `--nav-macro`, same seeds** (`runs/fara15-4b-base-f3-s200-229-nav`) | **0/30 = 0 % [0, 11.3]**; invalid 0.0 % (2,825 steps); 30/30 stuck at the OpenEMR login, 10 stopped via `ask_user_question`; $0.40 VM |
 | **Student + `--nav-macro`, `resolve_denial_easy`, same seeds** (`runs/fara15-4b-base-f3easy-s200-229-nav`) | **0/30 = 0 % [0, 11.3]**; invalid 0.0 % (1/2,983); same login wall, 19/30 guessing passwords, 10 `ask_user_question`; $0.43 VM |
+| **Student probes, 2026-09-05 (`docs/student-2026-09-06.md`)**: seeds 200–204, 60 steps, `--nav-macro` plus one policy-side option each | OpenEMR login rung: `--instruction-note` (username/password spelled out) **5/5**; `fara_no_user_v1.md` prompt (no critical points, v5 conventions) **4/5**, 0 `ask_user_question`; `--history-notes` 1/5; note + prompt **5/5**. $0.04–0.05 each |
+| **Student, base 4B, the fair configuration** (`--nav-macro` + `fara_no_user_v1.md` + `--instruction-note`, seeds 200–229, 120 steps; `runs/fara15-4b-fair-f3-s200-229`) | **0/30 = 0 % [0, 11.3]** — **the like-for-like floor for the SFT ladder.** Staircase: openemr_login **30/30**, openemr_chart 0/30, everything after 0/30; invalid 0.0 % (1/3,643); 0 `ask_user_question`; 25/30 navigate OpenEMR by invented URLs and drop the session, 12/30 hit the post-login "Aw, Snap!"; 3.78 s per call; $0.54 VM |
 | Family 1 (reschedule_constrained), Luna **v10 + `--history-notes`**, seeds 0–9 | 10/10, first pass 9/10, median 48.5 actions, $0.089 per verified |
 | Family 1, **fresh seeds 10–34** | **15/25 = 60 % [40.7, 76.6]**, first pass 12/25, $0.20 per verified |
 | Family 2 (update_insurance_reconcile), v10, **fresh seeds 10–34**, both variants | **25/25 = 100 % [86.7, 100]**, first pass 24/25, $0.07 per verified |
@@ -173,8 +179,17 @@ constancy not re-measured), idempotency keys (not adopted), ancestors deletable
 and storage billed from October. Still unaddressed: bimodal restores, guest RCU
 stalls / tab crashes, `cpu`/`mem_mb` ignored on forks.
 
-**The base student cannot do family 3, and the reason is upstream of the task (2026-09-04,
-`docs/student-2026-09-05.md`).** Three findings, in order of what they cost:
+**The base student cannot do family 3; the login wall is gone and the navigation wall is next (2026-09-05,
+`docs/student-2026-09-06.md`).** With `--instruction-note "Credentials for OpenEMR: username admin, password pass.
+Click the Username field, type admin, click the Password field, type pass, click Login."` and
+`--system-prompt-file forkloop/policies/prompts/fara_no_user_v1.md` (Fara's identity and tool schema kept through
+the `{fara_identity}` / `{fara_tools}` placeholders, the critical-points text replaced by a no-user rule, the v5 world
+conventions appended) the base 4B logs into OpenEMR in 30/30 episodes and never asks a user; then, in 25/30
+episodes, it navigates OpenEMR by invented URLs (`/openemr/login.php`, `/openemr/patient/1`,
+`login.php?username=admin&password=pass`) that drop the session, and 12/30 meet Chrome's post-login "Aw, Snap!"; no
+episode opens the patient chart. `--history-notes` made the login worse (1/5). The staircase that shows this lives in
+every verdict now (`details.ui_milestones`, `scripts/milestone_staircase.py`); the three 2026-09-05 runs predate it.
+The 2026-09-04 findings, for the record:
 
 1. *Action format:* base Fara 1.5 calls `visit_url` (its browser harness action) on ~10 of its first 30 steps
    regardless of the tool enum. Fixed: `StudentPolicy(nav_macro=True)` / `collect --nav-macro` expands it into
@@ -187,9 +202,9 @@ stalls / tab crashes, `cpu`/`mem_mb` ignored on forks.
    which the parser maps to `done(success=false)`. There is no user to answer; the rule fires exactly where the
    model is unsure.
 
-Not tried (would each cost cents and an hour): `--history-notes` for the student (it forgets that the login
-already failed), a 5-seed probe whose instruction spells out "Username: admin, Password: pass" (tells whether the
-failure is reading or motor), `--max-invalid` raised, `--prompt-style compact` (Fara was not trained on it).
+All three of the probes proposed here were run on 2026-09-05 (see above): the login failure was reading, not motor.
+Not tried: `--max-invalid` raised (moot at 0 % invalid), `--prompt-style compact` (Fara was not trained on it), a
+convention line about OpenEMR having no guessable URLs (would be task-adjacent; SFT teaches the same thing).
 
 **No GPU.** LoRA training needs a rented card; `train/` is wired and the SFT ladder plan is in
 `docs/student-2026-09-05.md`.

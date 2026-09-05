@@ -722,7 +722,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
 | OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
-| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways) | vLLM serves it; **or mlx-vlm on the M5 Max Mac** (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
+| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways; 2026-09-05 with the fair conventions: 30/30 logins, 0/30, `docs/student-2026-09-06.md`) | vLLM serves it; **or mlx-vlm on the M5 Max Mac** (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
 | LoRA training | `--smoke` needs torch | — | yes | — |
 | Reset benchmark | simulator numbers (labelled) | **revert and fork bars measured on the desktop golden** (n=10 each, p50 100.9 s / 92.0 s, 0 failures; earlier fork-only: sandbox 19.1 s, desktop 25.0 s) | — | — |
 
@@ -740,6 +740,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | Docker tag `openemr/openemr:8.3.0-2026-08-30` (no `7.0.3` tag exists) | hub.docker.com |
 | Fara 1.5 (4B/9B/27B, Qwen3.5 base, `<tool_call>` format, 1000×1000 coordinate space) | huggingface.co/microsoft/Fara1.5-4B, github.com/microsoft/fara |
 | Fara 1.5 4B's 1000×1000 space against the 1280×720 screen is correctly handled by `coord_space=norm1000`, `image_max_side=1280` (the rescaled click sat on the named nav link); the base model emits `visit_url` on ~10 of its first 30 steps whatever the tool enum says, types `admin` and `pass` into one login field, guesses passwords, and stops with `ask_user_question` when unsure | measured live 2026-09-04, `docs/student-2026-09-05.md`, `runs/fara15-4b-base-f3-s200-229*` |
+| Told which word is the password (`--instruction-note`), base Fara 1.5 4B does the two-field login (30/30 episodes); without the critical-points prompt text it never calls `ask_user_question`; past the login it navigates OpenEMR by invented URLs and drops the session; OpenEMR 8.3 logs `login` rows with `success` 0/1 and `http-request-update` rows whose base64 `comments` are the request path; Chrome's post-login "Aw, Snap!" (error code 5) persists with `--disable-gpu` | measured live 2026-09-05, `docs/student-2026-09-06.md`, `runs/fara15-4b-fair-f3-s200-229` |
 | mlx-vlm 0.6.17 (mlx 0.32.2) loads `microsoft/Fara1.5-4B` (`Qwen3_5ForConditionalGeneration`) from the bf16 safetensors without conversion, needs `jinja2` for the chat template, applies the template's `<think>` default (the model closes it at once; `enable_thinking=false` gives identical output), parses `<tool_call>` into `tool_calls` only when the request carries `tools`, and leaves `<\|im_end\|>` in `content` | measured 2026-09-04 (`runs/logs/mlx-server-fara15-4b.log`) |
 | Computer-use toolset `computer_toolset_20260801` GA, member names, batch semantics, result shapes | platform.claude.com computer-use docs |
 | Gym-Anything / CUA-World includes OpenEMR; small models collapse on high complexity; 200-step budgets help on OpenEMR | arxiv 2604.06126 |
