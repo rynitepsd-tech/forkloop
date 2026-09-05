@@ -279,7 +279,9 @@ machines.
 | 2 update_insurance_reconcile, two-system (seeds 0, 3–7) | 0/6 (18 attempts) | **6/6** | 5/6 | $0.097 |
 | 2 update_insurance_reconcile, **fresh seeds 10–34, both variants, v10 + history notes** (2026-09-04) | — | **25/25 = 100 % [86.7, 100]** | 24/25 | $0.07 (median 48; the one miss was a Chrome relaunch race, fixed) |
 | 3 resolve_denial, **fresh seeds 100–139, v5** (2026-09-04) | — | **38/40 = 95 % [83.5, 98.6]** | 35/40 | $0.081 (median 59; transcription 2, decoy 1, budget 4 of 7 failed attempts) |
-| 3 resolve_denial, **student: base microsoft/Fara1.5-4B, fresh seeds 200–229** (planned 2026-09-05) | — | **not yet measured** — session stopped at the power gate (Mac on battery); plan and preflight in `docs/student-2026-09-05.md` | — | — |
+| 3 resolve_denial, **student: base microsoft/Fara1.5-4B (bf16, mlx-vlm, 1.5 s/call), fresh seeds 200–229, as shipped** (2026-09-04, `runs/fara15-4b-base-f3-s200-229`) | — | **0/30 = 0 % [0, 11.3]** (one attempt) | 0/30 | $0.007 VM/episode (invalid-action rate 20.8 %, all `visit_url`; 24/30 ended by the 10-invalid limit inside ~30 steps) |
+| 3 resolve_denial, **student: base Fara1.5-4B + `--nav-macro`, same seeds** (2026-09-04, `runs/fara15-4b-base-f3-s200-229-nav`) | — | **0/30 = 0 % [0, 11.3]** (one attempt) | 0/30 | $0.013 VM/episode (invalid 0.0 %; 30/30 stuck at the OpenEMR login: `admin` and `pass` typed into one field, then guessed passwords; 10 stopped via `ask_user_question`, 19 out of steps) |
+| 3 **resolve_denial_easy** (page-1 number, no distractors), **student: base Fara1.5-4B + `--nav-macro`, same seeds** (2026-09-04, `runs/fara15-4b-base-f3easy-s200-229-nav`) | — | running — see `docs/student-2026-09-05.md` | — | — |
 
 ## Measured on 2026-09-02 (later) — Chrome crash, calendar providers, fork snapshots
 

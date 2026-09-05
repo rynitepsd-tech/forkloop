@@ -1,4 +1,4 @@
-# Handoff — Forkloop, as of 2026-09-04 (midday, after the overnight run)
+# Handoff — Forkloop, as of 2026-09-05 (after the student bake-off session)
 
 Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
@@ -12,10 +12,13 @@ every episode reset is one API call. The library, the world, the oracle and the
 training scripts are built and tested (202 offline tests); the world runs for real
 on Solari; GPT-5.6 Luna is the volume teacher on all three task families
 (fresh-seed rates: family 1 60 %, family 2 100 %, family 3 96 %); revert-mode
-pools, best-of-N fork search and checkpoint deletes all run for real; the student
-has never run (no GPU).
+pools, best-of-N fork search and checkpoint deletes all run for real; **the base
+student has now run** — `microsoft/Fara1.5-4B` served on this Mac with mlx-vlm at
+1.5 s per call scores **0/30 on family 3** (seeds 200–229) as shipped, 0/30 with the
+`visit_url` parser fix, and EASY_RESULT on the easier variant; every episode dies at
+the OpenEMR login (`docs/student-2026-09-05.md`). SFT on a rented GPU is the next rung.
 
-Twenty-six local commits are unpushed (`origin/main` ahead 26; latest: the overnight wrap-up, 2026-09-04);
+UNPUSHED_LINE
 push only when asked. `runs/` is git-ignored; the trajectories live only on this
 Mac. Repo: `rynitepsd-tech/forkloop` (fork of `solari-sdk/solari-cookbook`),
 cloned at `~/Desktop/Solari/repo`, project under `projects/forkloop/`.
@@ -51,6 +54,31 @@ its two ancestors, and the sandbox golden), about 34 GB; snapshot storage is
 billed from 2026-10-01 (10 GB free, $0.05/GB/month). Every `cp-*` checkpoint was
 deleted on 2026-09-04.
 
+**Serving the student on this Mac** (M5 Max, 64 GB; measured 2026-09-04, 1.5 s per
+1280×720 call, bf16, 9 GB resident). mlx-vlm lives in its own venv:
+
+```bash
+python3.11 -m venv venv-mlx && ./venv-mlx/bin/pip install -q mlx-vlm jinja2   # jinja2: the chat template needs it
+nohup caffeinate -i ./venv-mlx/bin/python -m mlx_vlm.server --model microsoft/Fara1.5-4B \
+  --host 127.0.0.1 --port 8001 --max-num-seqs 2 --max-tokens 512 --log-level INFO \
+  > runs/logs/mlx-server-fara15-4b.log 2>&1 &
+PYTHONPATH=. ./venv/bin/python scripts/student_click_check.py --student-url http://127.0.0.1:8001/v1 \
+  --model microsoft/Fara1.5-4B --prompt-style fara --seed 200      # one fork, one click; look at the crosshair PNG
+```
+
+The student collect (family 3, 30 fresh seeds, ≈ 2 h and $0.40 of VM at 120 steps):
+
+```bash
+./venv/bin/python -u -m forkloop.cli collect --world claims-ops-v1 --policy student \
+  --student-url http://127.0.0.1:8001/v1 --model microsoft/Fara1.5-4B \
+  --prompt-style fara --history-k 8 --nav-macro --max-steps 120 --max-seconds 900 \
+  --retry-failed 0 --pool-mode revert --concurrency 2 --split train \
+  --families resolve_denial --seeds 200-229 --run-id <run-id>
+```
+
+`--nav-macro` is required with base Fara: it emits `visit_url` whatever the tool enum says, and without the macro
+the 10-invalid limit ends every episode. `scripts/classify_failures.py runs/<id>` gives the failure-class table.
+
 The standard Luna collect (change only prompt file, family, seeds, run id):
 
 ```bash
@@ -85,6 +113,9 @@ offline, no key required.
 | --- | --- |
 | Family 3 (resolve_denial), Luna v5, seeds 0–99 | 94/100 verified, $0.061 per verified; seeds 20–99 fresh: 77/80 = 96.2 % [89.5, 98.7] |
 | Family 3, **fresh seeds 100–139** (2026-09-04, `runs/luna-v5-f3-s100-139`) | **38/40 = 95 % [83.5, 98.6]**, first pass 35/40, $0.081 per verified; seeds 0–139 combined 132/140 |
+| **Student, base `microsoft/Fara1.5-4B`, family 3 seeds 200–229, as shipped** (2026-09-04, `runs/fara15-4b-base-f3-s200-229`) | **0/30 = 0 % [0, 11.3]**; invalid-action rate 20.8 % (all `visit_url`), 24/30 ended by the invalid limit; $0.22 VM |
+| **Student + `--nav-macro`, same seeds** (`runs/fara15-4b-base-f3-s200-229-nav`) | **0/30 = 0 % [0, 11.3]**; invalid 0.0 % (2,825 steps); 30/30 stuck at the OpenEMR login, 10 stopped via `ask_user_question`; $0.40 VM |
+| **Student + `--nav-macro`, `resolve_denial_easy`, same seeds** (`runs/fara15-4b-base-f3easy-s200-229-nav`) | EASY_ROW |
 | Family 1 (reschedule_constrained), Luna **v10 + `--history-notes`**, seeds 0–9 | 10/10, first pass 9/10, median 48.5 actions, $0.089 per verified |
 | Family 1, **fresh seeds 10–34** | **15/25 = 60 % [40.7, 76.6]**, first pass 12/25, $0.20 per verified |
 | Family 2 (update_insurance_reconcile), v10, **fresh seeds 10–34**, both variants | **25/25 = 100 % [86.7, 100]**, first pass 24/25, $0.07 per verified |
@@ -142,18 +173,41 @@ constancy not re-measured), idempotency keys (not adopted), ancestors deletable
 and storage billed from October. Still unaddressed: bimodal restores, guest RCU
 stalls / tab crashes, `cpu`/`mem_mb` ignored on forks.
 
-**No GPU.** The student bake-off and LoRA training need a rented card.
+**The base student cannot do family 3, and the reason is upstream of the task (2026-09-04,
+`docs/student-2026-09-05.md`).** Three findings, in order of what they cost:
+
+1. *Action format:* base Fara 1.5 calls `visit_url` (its browser harness action) on ~10 of its first 30 steps
+   regardless of the tool enum. Fixed: `StudentPolicy(nav_macro=True)` / `collect --nav-macro` expands it into
+   click(640, 90) → key(ctrl+a) → type(url) → key(Return) over four env steps with one model call, and
+   `history_back` into alt+Left. Invalid rate 20.8 % → 0.0 %.
+2. *OpenEMR login:* with navigation working, 30/30 episodes reach the login page and 0/30 get past it. The model
+   clicks Username, types `admin`, then types `pass` into the same field ("Invalid username or password"), does
+   not read `pass` as the password, and starts guessing (`OpenEMR`, `password`, `Password123`, `12345`…).
+3. *Critical points:* 10/30 episodes end with Fara's `ask_user_question` ("I need the OpenEMR admin password"),
+   which the parser maps to `done(success=false)`. There is no user to answer; the rule fires exactly where the
+   model is unsure.
+
+Not tried (would each cost cents and an hour): `--history-notes` for the student (it forgets that the login
+already failed), a 5-seed probe whose instruction spells out "Username: admin, Password: pass" (tells whether the
+failure is reading or motor), `--max-invalid` raised, `--prompt-style compact` (Fara was not trained on it).
+
+**No GPU.** LoRA training needs a rented card; `train/` is wired and the SFT ladder plan is in
+`docs/student-2026-09-05.md`.
 
 ---
 
 ## Next steps, in order
 
-1. **Prompt v11 for family 1** (window rule with a time note; hour-label rule),
+1. **SFT the student on a rented GPU** (`train/train_lora.py`, commands in `docs/student-2026-09-05.md`): the base
+   model's 0/30 is a login-and-format floor, not a ceiling; the 8,731 family-3 SFT records
+   (`sft_luna_v5_f3_s20-99` 5,232 + `sft_luna_v5_s0-19` 1,122 + `sft_luna-v5-f3-s100-139` 2,377) all show the
+   two-field login and the omnibox navigation as compact actions. Evaluate each rung on seeds 200–229 with
+   `--nav-macro` so the comparison with the base numbers is like for like.
+2. **Prompt v11 for family 1** (window rule with a time note; hour-label rule),
    run seeds 35–59 fresh (≈ $3), compare with the 60 % of v10 on 10–34.
-2. **Golden v6** with `disk_gb` 20 and Chrome started with `--disable-gpu`
+3. **Golden v6** with `disk_gb` 20 and Chrome started with `--disable-gpu`
    (`forkloop build-world`, ~10 min); re-measure `recordingUrl` and the revert
    machine-id behaviour on the way (`docs/solari-repro.md` scripts, cents).
-3. **Student bake-off** once a GPU exists (`train/`): 5,267 new records from this session plus 6,354 earlier family-3 records; family 3 seeds 140–199 (≈ $5) if more volume is wanted.
 4. Keep `forkloop reap --dry-run` at 0 and the account at four snapshots.
 
 ## Gotchas that cost real time yesterday
@@ -198,6 +252,16 @@ same areas.
   machine instead of paying for a fresh one. The build scripts are idempotent.
 
 ---
+
+### Student-serving gotchas (2026-09-04)
+
+- **mlx-vlm 0.6.17 needs `jinja2`** for the Qwen3.5 chat template; without it every `/chat/completions` is a 500.
+- **Fara's coordinate space is 1000×1000** and the shipped `coord_space=norm1000` / `image_max_side=1280` are
+  right (hand-checked: the rescaled point sat on the *Patients* nav link). Do not "fix" it.
+- **Base Fara emits `visit_url`**; run the student with `--nav-macro` or every episode ends at the 10-invalid limit.
+- **The mlx-vlm server returns `<|im_end|>` inside `content`**; the parser ignores it, but it shows up in
+  `raw_action` and in the last-actions column of `classify_failures.py`.
+- **Two episodes share one server**: 1.5 s per call alone, 2.4–3.7 s with `--concurrency 2`; `--max-num-seqs 2`.
 
 ## House rules worth repeating
 
