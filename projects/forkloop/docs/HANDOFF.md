@@ -15,10 +15,10 @@ on Solari; GPT-5.6 Luna is the volume teacher on all three task families
 pools, best-of-N fork search and checkpoint deletes all run for real; **the base
 student has now run** — `microsoft/Fara1.5-4B` served on this Mac with mlx-vlm at
 1.5 s per call scores **0/30 on family 3** (seeds 200–229) as shipped, 0/30 with the
-`visit_url` parser fix, and EASY_RESULT on the easier variant; every episode dies at
+`visit_url` parser fix, and 0/30 on the easier variant; every episode dies at
 the OpenEMR login (`docs/student-2026-09-05.md`). SFT on a rented GPU is the next rung.
 
-UNPUSHED_LINE
+8 local commits are unpushed (`origin/main` ahead 8; latest: the student-session wrap-up, 2026-09-05);
 push only when asked. `runs/` is git-ignored; the trajectories live only on this
 Mac. Repo: `rynitepsd-tech/forkloop` (fork of `solari-sdk/solari-cookbook`),
 cloned at `~/Desktop/Solari/repo`, project under `projects/forkloop/`.
@@ -115,7 +115,7 @@ offline, no key required.
 | Family 3, **fresh seeds 100–139** (2026-09-04, `runs/luna-v5-f3-s100-139`) | **38/40 = 95 % [83.5, 98.6]**, first pass 35/40, $0.081 per verified; seeds 0–139 combined 132/140 |
 | **Student, base `microsoft/Fara1.5-4B`, family 3 seeds 200–229, as shipped** (2026-09-04, `runs/fara15-4b-base-f3-s200-229`) | **0/30 = 0 % [0, 11.3]**; invalid-action rate 20.8 % (all `visit_url`), 24/30 ended by the invalid limit; $0.22 VM |
 | **Student + `--nav-macro`, same seeds** (`runs/fara15-4b-base-f3-s200-229-nav`) | **0/30 = 0 % [0, 11.3]**; invalid 0.0 % (2,825 steps); 30/30 stuck at the OpenEMR login, 10 stopped via `ask_user_question`; $0.40 VM |
-| **Student + `--nav-macro`, `resolve_denial_easy`, same seeds** (`runs/fara15-4b-base-f3easy-s200-229-nav`) | EASY_ROW |
+| **Student + `--nav-macro`, `resolve_denial_easy`, same seeds** (`runs/fara15-4b-base-f3easy-s200-229-nav`) | **0/30 = 0 % [0, 11.3]**; invalid 0.0 % (1/2,983); same login wall, 19/30 guessing passwords, 10 `ask_user_question`; $0.43 VM |
 | Family 1 (reschedule_constrained), Luna **v10 + `--history-notes`**, seeds 0–9 | 10/10, first pass 9/10, median 48.5 actions, $0.089 per verified |
 | Family 1, **fresh seeds 10–34** | **15/25 = 60 % [40.7, 76.6]**, first pass 12/25, $0.20 per verified |
 | Family 2 (update_insurance_reconcile), v10, **fresh seeds 10–34**, both variants | **25/25 = 100 % [86.7, 100]**, first pass 24/25, $0.07 per verified |
