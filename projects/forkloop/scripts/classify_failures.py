@@ -36,6 +36,11 @@ def compact(step: dict) -> str:
             return to_compact(a)
         except Exception:
             return json.dumps(a)[:60]
+    if step.get("valid") is False:
+        note = step.get("policy_note") or ""
+        if "unsupported Fara action '" in note:
+            return "INVALID(" + note.split("'")[1] + ")"
+        return "INVALID(" + note[:30] + ")"
     raw = (step.get("raw_action") or "").strip().splitlines()
     return raw[-1][:60] if raw else "<none>"
 
@@ -103,8 +108,11 @@ def classify(ep: Path) -> dict | None:
         return row
     inv_rate = n_invalid / n_steps if n_steps else 0.0
     auth = details.get("appeal_auth_number") or {}
-    if reason == "INVALID_ACTION_LIMIT" or inv_rate > 0.5 or (n_steps and n_invalid >= 0.5 * n_steps):
-        cls, sig = "invalid/parse", f"{n_invalid}/{n_steps} invalid"
+    if reason == "INVALID_ACTION_LIMIT" or end == "invalid_actions" or inv_rate > 0.5:
+        # the episode was ended by the env's invalid-action limit, or most of its actions were unparseable
+        notes = Counter((s.get("policy_note") or "").split("'")[1] if "unsupported Fara action '" in (s.get("policy_note") or "")
+                        else "other" for s in steps if s.get("valid") is False)
+        cls, sig = "invalid/parse", f"{n_invalid}/{n_steps} invalid: " + ", ".join(f"{k}×{v}" for k, v in notes.most_common(3))
     elif reason in ("WRONG_RECORD", "COLLATERAL_EDIT", "DUPLICATE_SIDE_EFFECT") or \
             ((details.get("no_collateral") or {}).get("unexpected_changes")) or \
             int((details.get("single_appeal") or {}).get("actual") or 0) > 1:
