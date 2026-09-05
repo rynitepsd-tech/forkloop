@@ -198,16 +198,66 @@ failure is reading or motor), `--max-invalid` raised, `--prompt-style compact` (
 
 ## Next steps, in order
 
-1. **SFT the student on a rented GPU** (`train/train_lora.py`, commands in `docs/student-2026-09-05.md`): the base
-   model's 0/30 is a login-and-format floor, not a ceiling; the 8,731 family-3 SFT records
-   (`sft_luna_v5_f3_s20-99` 5,232 + `sft_luna_v5_s0-19` 1,122 + `sft_luna-v5-f3-s100-139` 2,377) all show the
-   two-field login and the omnibox navigation as compact actions. Evaluate each rung on seeds 200–229 with
-   `--nav-macro` so the comparison with the base numbers is like for like.
+1. **SFT the student on a rented GPU — the family-3 ladder, evaluated like for like.** The base number to beat is
+   the *fair* configuration's result in `docs/student-2026-09-06.md` (base `microsoft/Fara1.5-4B`, family 3 seeds
+   200–229, `--nav-macro --system-prompt-file forkloop/policies/prompts/fara_no_user_v1.md --instruction-note "…"`,
+   120 steps / 900 s; run `fara15-4b-fair-f3-s200-229`). Every rung is trained on family-3 episodes drawn in
+   `task_id` order so the subsets nest (25 ⊂ 50 ⊂ 94 ⊂ 115), from the two verified v5 runs (77 + 38 episodes,
+   7,609 records); SFT records reference screenshots by absolute path under `runs/`, so the two run directories
+   (≈ 1.9 GB of PNGs) travel with the repo. Do not train on the Mac.
+
+   ```bash
+   # on this Mac: ship the repo and the two runs (runs/ is git-ignored)
+   rsync -a --exclude venv --exclude venv-mlx ~/Desktop/Solari/repo/projects/forkloop/  gpu:~/forkloop/
+   rsync -a runs/luna-v5-f3-s20-99 runs/luna-v5-f3-s100-139  gpu:~/forkloop/runs/
+
+   # on the GPU box (one 80 GB card; python3.11, pip install -e ".[train]")
+   cd ~/forkloop && export PYTHONPATH=.
+   for N in 25 50 94; do
+     python -m train.make_sft --run-dir runs/luna-v5-f3-s20-99 --run-dir runs/luna-v5-f3-s100-139 \
+       --families resolve_denial --exclude-split 'heldout_*' --history-k 8 --limit $N --out data/sft_f3_$N.jsonl
+   done
+   python -m train.make_sft --run-dir runs/luna-v5-f3-s20-99 --run-dir runs/luna-v5-f3-s100-139 \
+     --families resolve_denial --exclude-split 'heldout_*' --history-k 8 --out data/sft_f3_all.jsonl   # 115 episodes
+
+   for N in 25 50 94 all; do
+     python -m train.train_lora --model microsoft/Fara1.5-4B --data data/sft_f3_$N.jsonl \
+       --output-dir ckpt/fara_f3_$N --prompt-style fara --history-k 8 --max-image-side 1280 --coord-space norm1000 \
+       --epochs 2 --lr 1e-4 --lora-r 16 --lora-alpha 32 --lora-dropout 0.05 --batch-size 1 --grad-accum 8 \
+       --dtype bf16 --save-steps 200 --merge-out ckpt/fara_f3_$N/merged
+     vllm serve ckpt/fara_f3_$N/merged --port 8011 --served-model-name fara-f3-$N --dtype bfloat16 --max-model-len 16384
+   done
+   ```
+
+   Evaluate every rung with **exactly the step-3 flags** of the fair base run, so the base number is the like-for-like
+   floor (the note and the no-user prompt stay on: a model that no longer needs them costs nothing by having them, and
+   removing them would change two things at once; `--nav-macro` stays on and `classify_failures.py`'s macro count
+   shows whether the SFT model still emits `visit_url`):
+
+   ```bash
+   python -u -m forkloop.cli collect --world claims-ops-v1 --policy student \
+     --student-url http://<gpu-host>:8011/v1 --model fara-f3-$N \
+     --prompt-style fara --history-k 8 --nav-macro --max-steps 120 --max-seconds 900 \
+     --retry-failed 0 --pool-mode revert --concurrency 2 --split train \
+     --families resolve_denial --seeds 200-229 \
+     --system-prompt-file forkloop/policies/prompts/fara_no_user_v1.md \
+     --instruction-note "Credentials for OpenEMR: username admin, password pass. Click the Username field, type admin, click the Password field, type pass, click Login." \
+     --run-id fara15-4b-sft$N-fair-f3-s200-229
+   PYTHONPATH=. python scripts/milestone_staircase.py runs/fara15-4b-fair-f3-s200-229 runs/fara15-4b-sft$N-fair-f3-s200-229
+   ```
+
+   Read each rung with the staircase before the success rate: the base model dies between `openemr_login` and
+   `openemr_chart`, so the first rung that moves the chart / document / `auth_typed` percentages is the one that
+   matters even while success is still 0. Budget: four rungs × 30 seeds ≈ 4 × $0.45 of Solari VM at the base's
+   120-step median (less as episodes succeed and end early); GPU time about an hour per rung at 2 epochs. Held-out
+   seeds (`--split heldout_seeds`, 100000+) only after the train-split curve exists.
 2. **Prompt v11 for family 1** (window rule with a time note; hour-label rule),
    run seeds 35–59 fresh (≈ $3), compare with the 60 % of v10 on 10–34.
 3. **Golden v6** with `disk_gb` 20 and Chrome started with `--disable-gpu`
    (`forkloop build-world`, ~10 min); re-measure `recordingUrl` and the revert
-   machine-id behaviour on the way (`docs/solari-repro.md` scripts, cents).
+   machine-id behaviour on the way (`docs/solari-repro.md` scripts, cents). The post-login "Aw, Snap!"
+   (`interface/main/tabs/main.php`, error code 5) still fires on the v5 golden with `--disable-gpu` set by
+   `ensure_chrome_gpu_flag` (3/5 episodes of probe (a), 2026-09-05).
 4. Keep `forkloop reap --dry-run` at 0 and the account at four snapshots.
 
 ## Gotchas that cost real time yesterday
