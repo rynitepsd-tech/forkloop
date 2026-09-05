@@ -9,7 +9,7 @@ every run, every dollar, every failure class, the Solari changelog mapping).
 **One line:** a snapshot-native training loop for vision-only GUI agents on
 Solari desktops — build a payer-portal + OpenEMR world once, snapshot it, and
 every episode reset is one API call. The library, the world, the oracle and the
-training scripts are built and tested (205 offline tests); the world runs for real
+training scripts are built and tested (210 offline tests); the world runs for real
 on Solari; GPT-5.6 Luna is the volume teacher on all three task families
 (fresh-seed rates: family 1 60 %, family 2 100 %, family 3 96 %); revert-mode
 pools, best-of-N fork search and checkpoint deletes all run for real; **the base
@@ -44,7 +44,7 @@ Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`
 ```bash
 source ~/.config/forkloop/env
 export PYTHONPATH=. FORKLOOP_CONCURRENCY=2
-./venv/bin/pytest -q                              # 205 offline tests, ~1 min (tests/conftest.py scrubs the golden ids)
+./venv/bin/pytest -q                              # 210 offline tests, ~1 min (tests/conftest.py scrubs the golden ids)
 ./venv/bin/python -m forkloop.cli reap --dry-run  # must list 0 machines; drop --dry-run to kill leftovers
 ```
 
@@ -104,7 +104,7 @@ stalled a run and dropped a revert.
 **Built and green offline.** Core library (backends, env, pool, reset, oracle,
 recorder, exporters, search, metrics, CLI), the `claims-ops-v1` world (portal +
 OpenEMR 8.3.0 + three task families + held-out compositions), the `toy-counter`
-world, teacher and student policies, and the training ladder. 205 tests, all
+world, teacher and student policies, and the training ladder. 210 tests, all
 offline, no key required.
 
 **Verified on real Solari, measured (`docs/spikes.md`, `docs/overnight-2026-09-04.md`).**
