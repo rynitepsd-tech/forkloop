@@ -719,3 +719,55 @@ def test_fara_call_name_args():
     assert ap.fara_call_name_args([{"function": {"name": "computer_use", "arguments": '{"action": "history_back"}'}}]) == ("history_back", {"action": "history_back"})
     assert ap.fara_call_name_args("no call here") is None
     assert ap.fara_call_name_args("") is None
+
+
+def test_instruction_note_is_appended_policy_side_and_described():
+    """--instruction-note: the model sees the note after the task text; the observation (and so
+    the recorded task) is untouched; describe() records it for run.json."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_completion(_fara({"action": "left_click", "coordinate": [500, 500]})))
+
+    note = "Credentials for OpenEMR: username admin, password pass."
+    policy = _policy(handler, prompt_style="fara", image_max_side=1280, instruction_note=note)
+    obs = Obs(_png(1280, 720), "Claim C-1 was denied. Log in as admin / pass.", step=0)
+    asyncio.run(policy.act(obs))
+    asyncio.run(policy.aclose())
+    text = seen["body"]["messages"][1]["content"][0]["text"]
+    assert text.startswith("Claim C-1 was denied. Log in as admin / pass.\n\n" + note)
+    assert obs.instruction == "Claim C-1 was denied. Log in as admin / pass."
+    assert policy.describe()["instruction_note"] == note
+    assert _policy(handler).describe()["instruction_note"] is None
+
+
+def test_system_prompt_file_keeps_fara_identity_and_tools_via_placeholders():
+    """A fara prompt file with {fara_identity} and {fara_tools} keeps the trained identity and the
+    computer_use schema (with the nav-macro enum) while replacing the critical-points text."""
+    from forkloop.policies.student import FARA_CRITICAL_POINTS, FARA_IDENTITY
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_completion(_fara({"action": "left_click", "coordinate": [500, 500]})))
+
+    prompt = (ROOT / "forkloop" / "policies" / "prompts" / "fara_no_user_v1.md").read_text()
+    assert "{fara_identity}" in prompt and "{fara_tools}" in prompt
+    assert "ask_user_question" in prompt and "No user" in prompt or "no user" in prompt
+    policy = _policy(handler, prompt_style="fara", image_max_side=1280, nav_macro=True, system_prompt=prompt)
+    asyncio.run(policy.act(Obs(_png(1280, 720), "go", step=0)))
+    asyncio.run(policy.aclose())
+    system = seen["body"]["messages"][0]["content"]
+    assert system.startswith(FARA_IDENTITY)
+    assert "{fara_identity}" not in system and "{fara_tools}" not in system
+    assert FARA_CRITICAL_POINTS not in system and "Case 1: Missing User Information" not in system
+    assert "Never use ask_user_question" in system
+    tool_json = system.rsplit("<tools>\n", 1)[1].split("\n</tools>", 1)[0]
+    tool = json.loads(tool_json)
+    assert tool["function"]["name"] == "computer_use"
+    enum = tool["function"]["parameters"]["properties"]["action"]["enum"]
+    assert "visit_url" in enum and "left_click" in enum and "ask_user_question" not in enum
+    assert "1000x1000" in tool["function"]["description"]
+    assert policy.describe()["system_prompt_override"] is True

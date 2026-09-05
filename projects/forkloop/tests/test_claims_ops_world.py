@@ -361,3 +361,131 @@ def test_resolve_denial_easy_variant_is_page_one_no_distractors_and_shares_the_s
         seen_std_distractors |= std.difficulty["distractors"] > 0
         seen_std_two_pages |= std.difficulty["n_pages"] == 2
     assert seen_std_distractors and seen_std_two_pages  # the flag actually removes something on these seeds
+
+
+# ------------------------------------------------------------ UI milestones
+
+
+def _b64(s: str) -> str:
+    import base64 as _b
+
+    return _b.b64encode(s.encode()).decode()
+
+
+async def test_ui_milestones_rungs_from_audit_trails(world, backend):
+    """The staircase rungs come from the audit trails after the episode and never touch the reward:
+    a successful OpenEMR login row, rows keyed by the target patient, a document request path
+    (base64 comments as on 8.3), the portal claim page / appeal form in page_views, the appeal row."""
+    from forkloop.oracle import Verdict
+
+    env = Env(world, backend, family="resolve_denial", settle_s=0)
+    obs, info = await env.reset(4)  # seed 4 needs no attachment (as in the ui_path success test)
+    task = env.ep.task
+    assert not task.difficulty["require_attachment"]
+    pid, claim = task.expected["patient_pid"], task.expected["claim_number"]
+    wm = env.ep.baseline.watermarks["openemr.log"]
+    # nothing happened yet: every rung False, evidence zero
+    ms0 = await world.ui_milestones(env.ep.dbs, env.ep.baseline, task)
+    assert ms0["rungs"] == {r: False for r in world.MILESTONE_RUNGS} and ms0["highest"] is None
+    assert ms0["evidence"]["openemr_logins"] == 0 and ms0["evidence"]["portal_page_views"] == 0
+    # a failed login, then a successful one, then the chart and a document view
+    db = env.ep.dbs["openemr"]
+    await db.execute_script("\n".join([
+        osql.insert_log(id=wm + 1, event="login", category="", user="admin", patient_id=0, comments="failure: 127.0.0.1",
+                        date="2026-09-08 10:00:00", success=0),
+        osql.insert_log(id=wm + 2, event="login", category="", user="admin", patient_id=0, comments="success: 127.0.0.1",
+                        date="2026-09-08 10:00:01"),
+        osql.insert_log(id=wm + 3, event="http-request-update", category="", user="admin", patient_id=None,
+                        comments=_b64("/openemr/interface/patient_file/summary/demographics.php"), date="2026-09-08 10:00:02"),
+        osql.insert_log(id=wm + 4, event="patient-record-select", category="Patient Demographics", user="admin", patient_id=pid,
+                        comments=_b64("SELECT * FROM patient_data WHERE pid = ?"), date="2026-09-08 10:00:03"),
+    ]))
+    ms1 = await world.ui_milestones(env.ep.dbs, env.ep.baseline, task)
+    assert ms1["rungs"]["openemr_login"] and ms1["rungs"]["openemr_chart"] and not ms1["rungs"]["openemr_document"]
+    assert ms1["evidence"]["openemr_logins"] == 1 and ms1["evidence"]["openemr_login_failures"] == 1
+    assert ms1["evidence"]["openemr_rows_for_patient"] == 1 and ms1["highest"] == "openemr_chart"
+    await db.execute_script(osql.insert_log(id=wm + 5, event="http-request-update", category="", user="admin", patient_id=None,
+                                            comments=_b64(f"/openemr/controller.php?document&view&patient_id={pid}&doc_id=1"),
+                                            date="2026-09-08 10:00:04"))
+    # the portal side: claim page, appeal form, then the appeal itself
+    c = portal_client(env)
+    c.get(f"/claims/{claim}")
+    ms2 = await world.ui_milestones(env.ep.dbs, env.ep.baseline, task)
+    assert ms2["rungs"]["openemr_document"] and ms2["rungs"]["portal_claim"] and not ms2["rungs"]["portal_appeal_form"]
+    assert ms2["evidence"]["openemr_document_paths"][0].startswith("/openemr/controller.php?document")
+    c.get(f"/claims/{claim}/appeal")
+    c.post(f"/claims/{claim}/appeal", data={"reason_code": "PRECERT_OBTAINED", "authorization_number": task.expected["auth_number"],
+                                           "narrative": "Prior authorization was obtained before the service date."})
+    obs, reward, term, trunc, info = await env.step(Action.done())
+    v = await env.verify()
+    assert v.reward == 1.0 and v.reason_code == "OK", v.to_dict()
+    ms = v.details["ui_milestones"]
+    assert ms["rungs"] == {r: True for r in world.MILESTONE_RUNGS} and ms["n_reached"] == 6 and ms["highest"] == "appeal_submitted"
+    assert ms["order"] == list(world.MILESTONE_RUNGS)
+    # the verdict is unchanged by the rungs: same reward/milestones/reason as the oracle alone
+    assert Verdict.from_dict(v.to_dict()).reward == 1.0 and v.milestones == 1.0
+    await env.close()
+
+
+async def test_ui_milestones_are_in_the_verdict_of_a_failed_episode_and_off_reward(world, backend):
+    """An episode that only logged in and stopped: reward 0, NOT_DONE, but the login rung is recorded."""
+    env = Env(world, backend, family="resolve_denial", settle_s=0)
+    obs, info = await env.reset(6)
+    wm = env.ep.baseline.watermarks["openemr.log"]
+    await env.ep.dbs["openemr"].execute_script(osql.insert_log(
+        id=wm + 1, event="login", category="", user="admin", patient_id=0, comments="success: 127.0.0.1", date="2026-09-08 10:00:01"))
+    obs, reward, term, trunc, info = await env.step(Action.done(success=False, note="ask_user_question: password?"))
+    v = await env.verify()
+    assert v.reward == 0.0 and v.reason_code == "NOT_DONE" and v.milestones == 0.0
+    ms = v.details["ui_milestones"]
+    assert ms["rungs"]["openemr_login"] is True and ms["highest"] == "openemr_login" and ms["n_reached"] == 1
+    assert not ms["rungs"]["portal_claim"] and not ms["rungs"]["appeal_submitted"]
+    # a world without the hook contributes nothing
+    from forkloop.world import World
+
+    assert await World.ui_milestones(world, env.ep.dbs, env.ep.baseline, env.ep.task) is None
+    await env.close()
+
+
+async def test_milestone_staircase_script_reads_a_run(world, backend, tmp_path):
+    """scripts/milestone_staircase.py aggregates the rungs over a run directory; a run recorded
+    without ui_milestones says the database rungs need a re-run while the trajectory rungs still count."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import milestone_staircase as mstair
+
+    from forkloop.trajectories import Recorder
+
+    rec = Recorder(tmp_path / "runs", run_id="stair-test", meta={"policy": "scripted"})
+    env = Env(world, backend, family="resolve_denial", settle_s=0, recorder=rec)
+    # episode 1: logs in, types the auth number, stops
+    obs, info = await env.reset(7)
+    wm = env.ep.baseline.watermarks["openemr.log"]
+    auth = env.ep.task.expected["auth_number"]
+    await env.ep.dbs["openemr"].execute_script(osql.insert_log(
+        id=wm + 1, event="login", category="", user="admin", patient_id=0, comments="success", date="2026-09-08 10:00:01"))
+    await env.step(Action.parse({"type": "type", "text": "admin"}))
+    await env.step(Action.parse({"type": "type", "text": auth}))
+    await env.step(Action.done(success=False, note="stopped"))
+    await env.verify()
+    # episode 2: nothing at all
+    obs, info = await env.reset(8)
+    await env.step(Action.done(success=False, note="stopped"))
+    await env.verify()
+    await env.close()
+    res = mstair.staircase(rec.dir)
+    assert res["n"] == 2 and res["has_ui_milestones"] is True
+    assert res["counts"]["openemr_login"] == 1 and res["counts"]["login_page"] == 1 and res["counts"]["auth_typed"] == 1
+    assert res["counts"]["appeal_submitted"] == 0 and res["percent"]["openemr_login"] == 50.0
+    table = mstair.format_table([res])
+    assert "| openemr_login | 1/2 = 50 % |" in table and "needs a re-run" not in table
+    # strip the rungs from the verdicts, as a run from before 2026-09-05 would look
+    for d in rec.episodes():
+        vp = d / "verdict.json"
+        v = json.loads(vp.read_text())
+        v["details"].pop("ui_milestones", None)
+        vp.write_text(json.dumps(v))
+    res_old = mstair.staircase(rec.dir)
+    assert res_old["has_ui_milestones"] is False and res_old["counts"]["auth_typed"] == 1
+    assert "needs a re-run" in mstair.format_table([res_old])

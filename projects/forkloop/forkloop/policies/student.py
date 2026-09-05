@@ -420,6 +420,7 @@ class StudentPolicy:
         image_detail: str | None = None,
         history_notes: bool = False,
         nav_macro: bool = False,
+        instruction_note: str | None = None,
     ) -> None:
         if prompt_style not in PROMPT_STYLES:
             raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}, got {prompt_style!r}")
@@ -450,6 +451,12 @@ class StudentPolicy:
         if self.nav_macro:
             allowed = allowed + tuple(a for a in ("visit_url", "history_back") if a not in allowed)
         self.fara_allowed = allowed
+        #: Policy-side text appended to every instruction the model sees (``collect
+        #: --instruction-note``). The world and the recorded task are untouched; the note is
+        #: a prompt-engineering knob and is recorded in run.json ``policy_options``. Measured
+        #: need 2026-09-05: base Fara reads "log in as admin / pass" and types both words into
+        #: one field, so a probe that spells the login out tells reading from motor.
+        self.instruction_note = (instruction_note or "").strip() or None
         self.screen_size = tuple(screen_size) if screen_size else None
         #: Hosted reasoning models (OpenAI GPT-5.x via /chat/completions) reject sampling
         #: parameters and count reasoning tokens against ``max_completion_tokens``.
@@ -496,7 +503,8 @@ class StudentPolicy:
             "prompt_style": self.prompt_style, "coord_space": self.coord_space,
             "image_max_side": self.image_max_side, "temperature": self.temperature,
             "max_tokens": self.max_tokens, "history_k": self.history_k, "seed": self.seed,
-            "nav_macro": self.nav_macro,
+            "nav_macro": self.nav_macro, "history_notes": self.history_notes,
+            "instruction_note": self.instruction_note, "system_prompt_override": bool(self.system_prompt_override),
         }
 
     # -- request construction ---------------------------------------------- #
@@ -539,7 +547,10 @@ class StudentPolicy:
             # history[i] is the action taken at step (obs.step - len(history) + i)
             base = int(getattr(obs, "step", 0) or 0) - len(history)
             notes = [self._notes.get(base + i) for i in range(len(history))]
-        text = build_user_text(getattr(obs, "instruction", ""), history, self.prompt_style,
+        instruction = str(getattr(obs, "instruction", "") or "")
+        if self.instruction_note:
+            instruction = instruction.rstrip() + "\n\n" + self.instruction_note
+        text = build_user_text(instruction, history, self.prompt_style,
                                step=getattr(obs, "step", None), notes=notes)
         def img(url: str) -> dict[str, Any]:
             part: dict[str, Any] = {"url": url}
@@ -673,11 +684,22 @@ class StudentPolicy:
         return action, meta
 
     def _formatted_override(self, coord_size: tuple[int, int]) -> str:
-        """Fill {w}/{h}/{w1}/{h1} in a user-supplied system prompt; other braces are left alone."""
+        """Fill {w}/{h}/{w1}/{h1} in a user-supplied system prompt; other braces are left alone.
+
+        Two more placeholders let a prompt file keep Fara's trained pieces while replacing the
+        rest: ``{fara_identity}`` is :data:`FARA_IDENTITY` and ``{fara_tools}`` is the
+        ``<tools>`` block with the ``computer_use`` schema for this coordinate space and the
+        policy's allowed actions (so ``nav_macro`` still advertises ``visit_url``).
+        """
         w, h = int(coord_size[0]), int(coord_size[1])
         out = self.system_prompt_override
         for k, v in (("{w1}", w - 1), ("{h1}", h - 1), ("{w}", w), ("{h}", h)):
             out = out.replace(k, str(v))
+        if "{fara_identity}" in out:
+            out = out.replace("{fara_identity}", FARA_IDENTITY)
+        if "{fara_tools}" in out:
+            tool = fara_computer_use_tool(w, h, self.fara_allowed)
+            out = out.replace("{fara_tools}", FARA_FN_CALL_FORMAT.replace("{tool_descs}", json.dumps(tool, ensure_ascii=False)))
         return out
 
     async def _post(self, body: dict) -> dict:
@@ -786,5 +808,5 @@ class StudentPolicy:
 
 __all__ = [
     "StudentPolicy", "PROMPT_STYLES", "COORD_SPACES", "build_system_prompt", "build_user_text",
-    "fara_computer_use_tool", "prepare_image", "FARA_DEFAULT_ALLOWED",
+    "fara_computer_use_tool", "prepare_image", "FARA_DEFAULT_ALLOWED", "FARA_IDENTITY", "FARA_CRITICAL_POINTS",
 ]

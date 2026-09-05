@@ -192,6 +192,12 @@ class World:
         """Hook after seeding, before the agent's first observation."""
         return None
 
+    async def ui_milestones(self, dbs: dict[str, DbAccess], baseline: Any, task: TaskInstance) -> Optional[dict[str, Any]]:
+        """Controller-side progress rungs read from the databases after an episode (which UI
+        screens the agent reached), stored under ``verdict.details["ui_milestones"]``. Analysis
+        only: never part of the reward. Worlds that cannot tell return None."""
+        return None
+
     def gui_factory(self) -> Any:
         """Optional GuiSim factory for the fake backend."""
         return None

@@ -49,6 +49,18 @@ def _budget_override(args: argparse.Namespace) -> dict[str, Any]:
     return out
 
 
+def _policy_options(spec: str, args: argparse.Namespace) -> dict[str, Any]:
+    """The policy-side knobs of a run, for run.json (the world and the task manifests never
+    change with them, so this is the only place they are recorded)."""
+    if spec != "student":
+        return {}
+    return {"prompt_style": getattr(args, "prompt_style", None), "history_k": getattr(args, "history_k", None),
+            "history_notes": bool(getattr(args, "history_notes", False)), "prev_shot": bool(getattr(args, "prev_shot", False)),
+            "nav_macro": bool(getattr(args, "nav_macro", False)),
+            "system_prompt_file": getattr(args, "system_prompt_file", None),
+            "instruction_note": getattr(args, "instruction_note", None), "image_detail": getattr(args, "image_detail", None)}
+
+
 def _policy_model(spec: str, args: argparse.Namespace) -> Optional[str]:  # noqa: D401
     if spec == "teacher":
         return args.model or "claude-opus-5"
@@ -98,6 +110,7 @@ def _policy(spec: str, args: argparse.Namespace, **context: Any):
                              system_prompt=system_prompt, history_k=args.history_k, prev_screenshot=args.prev_shot,
                              history_notes=bool(getattr(args, "history_notes", False)),
                              nav_macro=bool(getattr(args, "nav_macro", False)),
+                             instruction_note=getattr(args, "instruction_note", None),
                              image_detail=(args.image_detail or ("high" if hosted else None)),
                              api_key=os.environ.get("STUDENT_API_KEY") or os.environ.get("OPENAI_API_KEY"),
                              hosted_reasoning=hosted, max_tokens=4096 if hosted else 512, timeout_s=300.0 if hosted else 120.0,
@@ -209,7 +222,8 @@ async def _collect(args: argparse.Namespace) -> int:
                                                        "pool_mode": args.pool_mode, "concurrency": args.concurrency,
                                                        "cpu": args.cpu, "mem_mb": args.mem_mb,
                                                        "budget_override": _budget_override(args),
-                                                       "retry_failed": retry_failed})
+                                                       "retry_failed": retry_failed,
+                                                       "policy_options": _policy_options(args.policy, args)})
     pool = WorkerPool(backend, w, size=args.concurrency, mode=args.pool_mode, cpu=args.cpu, mem_mb=args.mem_mb)
     await pool.start()
     seeds = _seed_list(args.seeds)
@@ -371,6 +385,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             p.add_argument("--history-notes", action="store_true",
                            help="student: show the model's own reasoning line next to each previous action (its memory)")
             p.add_argument("--image-detail", default=None, help="student: OpenAI image detail hint (hosted default: high)")
+            p.add_argument("--instruction-note", default=None,
+                           help="student: text appended to every instruction the model sees (policy-side; recorded in run.json)")
             p.add_argument("--nav-macro", action="store_true",
                            help="student (fara): expand visit_url into omnibox click + ctrl+a + type + Return and "
                                 "history_back into alt+Left instead of rejecting them")

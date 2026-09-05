@@ -214,6 +214,14 @@ class Env:
             verdict.reason_code = "INVALID_ACTION_LIMIT"
         if ep.truncated and verdict.reward < 1.0 and verdict.reason_code in ("OK",):
             verdict.reason_code = "BUDGET_EXCEEDED"
+        # UI milestones (which screens the agent reached, from the audit trails) ride along in the
+        # details for analysis; they never touch reward, milestones or the reason code.
+        try:
+            ms = await self.world.ui_milestones(ep.dbs, ep.baseline, ep.task)
+        except Exception as e:  # noqa: BLE001 - diagnostics only
+            ms = {"error": f"{type(e).__name__}: {e}"}
+        if ms:
+            verdict.details["ui_milestones"] = ms
         ep.verdict = verdict
         if ep.recorder:
             await self._save_diagnostics(ep)

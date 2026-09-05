@@ -267,6 +267,20 @@ newest audit rows per database (`pk`, `entity`, `entity_id`, first 300 chars of
 any row after seeding whose path starts with an entry in `world.forbidden_paths`
 → `FORBIDDEN_SCREEN`.
 
+**UI milestones (analysis only, 2026-09-05).** After the oracle has run, `Env.verify` asks the
+world for `ui_milestones(dbs, baseline, task)` and stores the answer under
+`verdict.details["ui_milestones"]`; it never changes `reward`, `milestones` or `reason_code`.
+The base `World` returns `None`. `ClaimsOpsWorld` returns
+`{"rungs": {rung: bool}, "order": [...], "highest": rung | None, "n_reached": int, "evidence": {...}}`
+with the rungs, in order, `openemr_login` (a `log` row `event LIKE 'login%'`, `success` 1 after the
+watermark; failed logins are counted in `evidence.openemr_login_failures`), `openemr_chart` (any `log`
+row keyed by the target patient, or an audited request path under `patient_file`), `openemr_document`
+(an `http-request` row whose base64-decoded path names a document view), `portal_claim` and
+`portal_appeal_form` (`page_views` paths `/claims/<number>` and `/claims/<number>/appeal`), and
+`appeal_submitted` (an `appeals` row for the claim). `scripts/milestone_staircase.py` aggregates them
+over a run and adds two trajectory rungs (`login_page`: the task's username typed; `auth_typed`: the
+expected authorization number typed anywhere).
+
 ---
 
 ## 7. Payer portal (`worlds/claims_ops_v1/portal/`)

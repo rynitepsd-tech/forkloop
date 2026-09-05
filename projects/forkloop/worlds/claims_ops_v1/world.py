@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from forkloop.dbaccess import DbAccess
+from forkloop.oracle import _comment_texts
 from forkloop.world import HealthReport, World
 
 HERE = Path(__file__).resolve().parent
@@ -37,6 +38,16 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 """
+
+
+def _truthy(v: Any) -> bool:
+    """``success`` as MariaDB's TSV ("1") or SQLite's int; NULL counts as success (OpenEMR's default)."""
+    if v is None:
+        return True
+    try:
+        return int(float(v)) != 0
+    except (TypeError, ValueError):
+        return str(v).strip().lower() in ("true", "t", "yes")
 
 
 class ClaimsOpsWorld(World):
@@ -138,6 +149,75 @@ class ClaimsOpsWorld(World):
         await machine.exec("sh", ["-c", f"rm -rf {self.config.paths['downloads']}/* 2>/dev/null; true"])
         if "gui" in machine.capabilities:
             await self.ensure_chrome_gpu_flag(machine)
+
+    # ------------------------------------------------------- UI milestones
+    #: The staircase rungs in order, for every family (a rung a family cannot reach stays False).
+    MILESTONE_RUNGS: tuple[str, ...] = ("openemr_login", "openemr_chart", "openemr_document",
+                                        "portal_claim", "portal_appeal_form", "appeal_submitted")
+
+    async def ui_milestones(self, dbs: dict[str, DbAccess], baseline: Any, task: Any) -> dict[str, Any] | None:
+        """Which screens the agent reached, read from the two audit trails after the episode.
+
+        OpenEMR's ``log`` (rows after the seed-time watermark): a successful ``login`` row for
+        the task's user; any row keyed by the target patient (the session's active chart);
+        an ``http-request`` row whose decoded path is a document view for that patient (8.3
+        base64-encodes ``comments``). The portal's ``page_views``: the claim page and the appeal
+        form of the target claim; ``appeal_submitted`` is an appeal row for the target claim.
+        Added 2026-09-05 for the student staircase (docs/student-2026-09-06.md); analysis only.
+        """
+        expected = dict(getattr(task, "expected", None) or {})
+        wm = dict(getattr(baseline, "watermarks", None) or {})
+        pid = expected.get("patient_pid")
+        claim_number = expected.get("claim_number")
+        claim_id = expected.get("claim_id")
+        rungs = {r: False for r in self.MILESTONE_RUNGS}
+        ev: dict[str, Any] = {}
+        emr, portal = dbs.get("openemr"), dbs.get("portal")
+        if emr is not None:
+            wm_log = int(wm.get("openemr.log", 0) or 0)
+            rows = await emr.query("SELECT event AS e, success AS s, COUNT(*) AS n FROM log WHERE id > ? "
+                                   "AND event LIKE 'login%' GROUP BY event, success", [wm_log])
+            ok_logins = sum(int(r["n"]) for r in rows if _truthy(r.get("s")))
+            ev["openemr_logins"] = ok_logins
+            ev["openemr_login_failures"] = sum(int(r["n"]) for r in rows if not _truthy(r.get("s")))
+            rungs["openemr_login"] = ok_logins > 0
+            if pid is not None:
+                n = await emr.scalar("SELECT COUNT(*) AS n FROM log WHERE id > ? AND patient_id = ?", [wm_log, int(pid)])
+                ev["openemr_rows_for_patient"] = int(n or 0)
+                rungs["openemr_chart"] = int(n or 0) > 0
+            # request paths OpenEMR audited (comments = the path, base64 on 8.3): a document view
+            # names the documents controller; keep a few decoded samples as evidence.
+            req = await emr.query("SELECT comments AS c FROM log WHERE id > ? AND event LIKE 'http-request%' "
+                                  "ORDER BY id LIMIT 2000", [wm_log])
+            paths = []
+            for r in req:
+                for text in _comment_texts(r.get("c")):
+                    if text.startswith("/") or "://" in text:
+                        paths.append(text.strip())
+                        break
+            doc_paths = [p for p in paths if "document" in p.lower()]
+            chart_paths = [p for p in paths if "patient_file" in p or "demographics" in p]
+            ev["openemr_request_paths"] = len(paths)
+            ev["openemr_document_paths"] = doc_paths[:5]
+            if chart_paths and not rungs["openemr_chart"]:
+                rungs["openemr_chart"] = True
+            rungs["openemr_document"] = bool(doc_paths) and (rungs["openemr_chart"] or pid is None)
+        if portal is not None:
+            wm_pv = int(wm.get("portal.page_views", 0) or 0)
+            rows = await portal.query("SELECT path AS p FROM page_views WHERE id > ? ORDER BY id", [wm_pv])
+            paths = [str(r["p"]) for r in rows]
+            ev["portal_page_views"] = len(paths)
+            if claim_number:
+                claim_path = f"/claims/{claim_number}"
+                rungs["portal_claim"] = any(p == claim_path or p.startswith(claim_path + "/") for p in paths)
+                rungs["portal_appeal_form"] = any(p == claim_path + "/appeal" for p in paths)
+            if claim_id is not None:
+                n = await portal.scalar("SELECT COUNT(*) AS n FROM appeals WHERE claim_id = ?", [int(claim_id)])
+                ev["appeals_for_claim"] = int(n or 0)
+                rungs["appeal_submitted"] = int(n or 0) > 0
+        reached = [r for r in self.MILESTONE_RUNGS if rungs[r]]
+        return {"rungs": rungs, "order": list(self.MILESTONE_RUNGS), "highest": reached[-1] if reached else None,
+                "n_reached": len(reached), "evidence": ev}
 
     async def diagnostics(self, machine: Any) -> dict[str, str]:
         """Chrome's stderr log and the kernel ring buffer, so a renderer crash leaves evidence."""
