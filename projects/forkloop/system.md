@@ -357,7 +357,11 @@ stable_after_action, max_invalid, ...)`.
   the step, and decides termination: `done` action, `max_steps`,
   `max_seconds`, or the invalid-action limit. On termination it runs the
   oracle and returns its reward; otherwise reward is 0.0.
-- `verify()` is idempotent and fixes up reason codes for truncation.
+- `verify()` is idempotent and fixes up reason codes for truncation. After
+  the oracle it asks the world for `ui_milestones(dbs, baseline, task)` and
+  stores the answer under `verdict.details["ui_milestones"]` (analysis only,
+  never in the reward; the base `World` returns None; errors are recorded,
+  not raised). Added 2026-09-05 for the student staircase.
 - `checkpoint()`/`restore(cp)` snapshot and revert the machine *and* the
   env's own state (step, history, invalid count, clock) for search.
 - `run_episode(env, policy, seed)` is the plain loop.
@@ -474,7 +478,14 @@ cost is an upper bound.
   `collect` left the env at its default of 8 and `--history-k 16` showed 8),
   `--history-notes` puts the model's own reasoning line next to each previous
   action — its only memory across turns, since the history is compact actions
-  (`note_from_reply`; measured need in `docs/spikes.md` 2026-09-04) — and a history-based loop warning (three near-identical pointer
+  (`note_from_reply`; measured need in `docs/spikes.md` 2026-09-04) —, `--instruction-note`
+  appends a policy-side text to every instruction the model sees (the world and
+  the manifests are untouched; used by the 2026-09-05 login probes,
+  `docs/student-2026-09-06.md`), a `--system-prompt-file` may keep Fara's trained
+  identity and `computer_use` schema through the `{fara_identity}` / `{fara_tools}`
+  placeholders (`prompts/fara_no_user_v1.md`: the critical-points text replaced
+  by a no-user rule, the v5 world conventions appended), every one of these knobs
+  is recorded in `run.json` under `policy_options`, and a history-based loop warning (three near-identical pointer
   actions, three waits, an alternating pair, or five consecutive scrolls in
   one direction whatever their coordinates) appends a "do not repeat" line. The model's reasoning precedes the action inside `raw_action`
   (`policy_note` stays empty), which is what `scripts/inspect_episode.py`
@@ -609,6 +620,18 @@ two-system variant. Measured on 2026-09-03: family 3 94/100 seeds, family 1
 before the v7 and seeding fixes. `seed_world.py` dispatches by family and
 builds the held-out compositions (seeds ≥ 200000) that chain families 2 and
 3 on one patient with a third denial that must be left alone.
+`ui_milestones(dbs, baseline, task)` (2026-09-05) reads the two audit trails after
+an episode and returns the staircase rungs, in order: `openemr_login` (a `log`
+row `event LIKE 'login%'` with `success` 1 after the watermark; failed logins
+counted in the evidence), `openemr_chart` (a `log` row keyed by the target
+patient, or an audited request path under `patient_file`), `openemr_document`
+(an `http-request` row whose base64-decoded path names a document view),
+`portal_claim` / `portal_appeal_form` (`page_views` paths of the target claim),
+`appeal_submitted` (an `appeals` row for the claim). `Env.verify` stores it under
+`verdict.details["ui_milestones"]`; `scripts/milestone_staircase.py` aggregates a
+run (plus the trajectory rungs `login_page`, the task's username typed, and
+`auth_typed`, the expected authorization number typed anywhere).
+
 `resolve_denial_easy` (2026-09-04) is family 3 with the generator flag taken
 from the family name: authorization number on page 1 of a one-page letter, no
 distractor claims, `difficulty.variant == "easy"`; it seeds its RNG from the
@@ -656,16 +679,16 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-205 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
+210 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
 
 | File | Covers |
 | --- | --- |
 | `test_portal.py` (22) | schema/base counts, login, filters, appeal with upload + sha256 + same-transaction audit (trigger-based proof), duplicate appeal allowed, resubmit, messages, eligibility, page_views, `/admin`, determinism |
 | `test_openemr_layer.py` (15) | shim loads, base data deterministic and executes, every SQL helper executes on the shim, `quote`, portability |
 | `test_core_toy.py` (23) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
-| `test_claims_ops_world.py` (12) | generator determinism and split disjointness, manifest round-trip, the `resolve_denial_easy` variant (page 1, no distractors, same patient/claim/number per seed, deterministic), resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build |
+| `test_claims_ops_world.py` (15) | generator determinism and split disjointness, manifest round-trip, the `resolve_denial_easy` variant (page 1, no distractors, same patient/claim/number per seed, deterministic), resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build, the UI milestone rungs from seeded audit rows (login success/failure, patient-keyed rows, base64 request paths, portal page views, the appeal) on a verified and on a failed episode without touching the reward, and `scripts/milestone_staircase.py` on a recorded run (with and without the rungs) |
 | `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
-| `test_student_policy.py`, `test_train.py` (104) | every parser style, coordinate scaling, mocked vLLM transport, the Fara navigation macro (`visit_url` → four queued contract actions with one model call, `history_back` → alt+Left, tool enum advertises both, a new episode drops a half-finished macro) and `fara_call_name_args`, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
+| `test_student_policy.py`, `test_train.py` (106) | every parser style, coordinate scaling, mocked vLLM transport, the Fara navigation macro (`visit_url` → four queued contract actions with one model call, `history_back` → alt+Left, tool enum advertises both, a new episode drops a half-finished macro) and `fara_call_name_args`, loop warnings incl. same-direction scroll loops, `--instruction-note` (appended policy-side, observation untouched, in `describe()`), a prompt file with `{fara_identity}` / `{fara_tools}` (identity and tool enum kept, critical points gone), make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
 | `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, snapshot storage free tier, budget rows |
 
 ## 10. One episode, end to end
