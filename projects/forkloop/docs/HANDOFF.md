@@ -9,7 +9,7 @@ every run, every dollar, every failure class, the Solari changelog mapping).
 **One line:** a snapshot-native training loop for vision-only GUI agents on
 Solari desktops — build a payer-portal + OpenEMR world once, snapshot it, and
 every episode reset is one API call. The library, the world, the oracle and the
-training scripts are built and tested (202 offline tests); the world runs for real
+training scripts are built and tested (205 offline tests); the world runs for real
 on Solari; GPT-5.6 Luna is the volume teacher on all three task families
 (fresh-seed rates: family 1 60 %, family 2 100 %, family 3 96 %); revert-mode
 pools, best-of-N fork search and checkpoint deletes all run for real; **the base
@@ -18,7 +18,7 @@ student has now run** — `microsoft/Fara1.5-4B` served on this Mac with mlx-vlm
 `visit_url` parser fix, and 0/30 on the easier variant; every episode dies at
 the OpenEMR login (`docs/student-2026-09-05.md`). SFT on a rented GPU is the next rung.
 
-8 local commits are unpushed (`origin/main` ahead 8; latest: the student-session wrap-up, 2026-09-05);
+9 local commits are unpushed (`origin/main` ahead 9; latest: the student-session wrap-up, 2026-09-05);
 push only when asked. `runs/` is git-ignored; the trajectories live only on this
 Mac. Repo: `rynitepsd-tech/forkloop` (fork of `solari-sdk/solari-cookbook`),
 cloned at `~/Desktop/Solari/repo`, project under `projects/forkloop/`.
@@ -44,7 +44,7 @@ Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`
 ```bash
 source ~/.config/forkloop/env
 export PYTHONPATH=. FORKLOOP_CONCURRENCY=2
-./venv/bin/pytest -q                              # 202 offline tests, ~1 min (tests/conftest.py scrubs the golden ids)
+./venv/bin/pytest -q                              # 205 offline tests, ~1 min (tests/conftest.py scrubs the golden ids)
 ./venv/bin/python -m forkloop.cli reap --dry-run  # must list 0 machines; drop --dry-run to kill leftovers
 ```
 
@@ -104,7 +104,7 @@ stalled a run and dropped a revert.
 **Built and green offline.** Core library (backends, env, pool, reset, oracle,
 recorder, exporters, search, metrics, CLI), the `claims-ops-v1` world (portal +
 OpenEMR 8.3.0 + three task families + held-out compositions), the `toy-counter`
-world, teacher and student policies, and the training ladder. 202 tests, all
+world, teacher and student policies, and the training ladder. 205 tests, all
 offline, no key required.
 
 **Verified on real Solari, measured (`docs/spikes.md`, `docs/overnight-2026-09-04.md`).**

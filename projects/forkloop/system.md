@@ -641,14 +641,14 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-202 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
+205 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
 
 | File | Covers |
 | --- | --- |
 | `test_portal.py` (22) | schema/base counts, login, filters, appeal with upload + sha256 + same-transaction audit (trigger-based proof), duplicate appeal allowed, resubmit, messages, eligibility, page_views, `/admin`, determinism |
 | `test_openemr_layer.py` (15) | shim loads, base data deterministic and executes, every SQL helper executes on the shim, `quote`, portability |
 | `test_core_toy.py` (23) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
-| `test_claims_ops_world.py` (11) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build |
+| `test_claims_ops_world.py` (12) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build |
 | `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
 | `test_student_policy.py`, `test_train.py` (102) | every parser style, coordinate scaling, mocked vLLM transport, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
 | `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, snapshot storage free tier, budget rows |
