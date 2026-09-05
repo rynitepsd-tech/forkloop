@@ -71,9 +71,12 @@ projects/forkloop/
     claims_ops_v1/tasks/      common.py + one module per family
   train/                    make_sft, train_lora, eval, plot, bakeoff, wilson, README, examples/
   scripts/                  inspect_episode (failure triage), episode_table, compare_teachers, audit_probe (replay + OpenEMR log dump),
-                            chrome_crash_probe, solari_verify_fork (re-check revert/snapshot/disk on a golden fork), gui_episode
+                            chrome_crash_probe, solari_verify_fork (re-check revert/snapshot/disk on a golden fork), gui_episode,
+                            student_click_check (one fork, one student click, the four coordinate-space values + a crosshair PNG),
+                            classify_failures (a run's failed episodes into the bake-off classes: invalid/parse, wrong-record,
+                            transcription, decoy, budget-sane, budget-looping)
   spikes/                   _common.py, spike_00..06, run_all.sh
-  tests/                    193 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
+  tests/                    205 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
   docs/                     HANDOFF (read first), contracts, spikes (results ledger), solari-repro, solari-message, cost, limitations, buildlog
 examples/desktop-snapshot-revert-py/   the cookbook example (outside the project dir)
 ```
@@ -521,7 +524,8 @@ revert|fork`, `--max-steps/--max-seconds` (recorded as `budget_override` in
 `--reset-retry-wait-s`), `--retry-failed N` (after the pass, re-run every
 seed below 1.0 up to N more times on a fresh fork; §4.14), and the student
 knobs `--student-url --system-prompt-file --history-k --history-notes --prev-shot
---image-detail --effort`. `_policy()` takes `family/seed/attempt` context so
+--image-detail --effort --nav-macro` (the last expands Fara's `visit_url` /
+`history_back`, §4.17). `_policy()` takes `family/seed/attempt` context so
 tests can swap in attempt-aware policies. `reap --dry-run` lists the
 account's forkloop machines. `reset-bench` hands the benchmark its own argv
 (`argparse.REMAINDER` used to swallow the leading `--world`).
@@ -605,6 +609,17 @@ two-system variant. Measured on 2026-09-03: family 3 94/100 seeds, family 1
 before the v7 and seeding fixes. `seed_world.py` dispatches by family and
 builds the held-out compositions (seeds ≥ 200000) that chain families 2 and
 3 on one patient with a third denial that must be left alone.
+`resolve_denial_easy` (2026-09-04) is family 3 with the generator flag taken
+from the family name: authorization number on page 1 of a one-page letter, no
+distractor claims, `difficulty.variant == "easy"`; it seeds its RNG from the
+base family name so patient, claim, number, decoys and document count are
+those of `resolve_denial` for the same seed. It is the diagnostic rung of the
+student bake-off, listed in `world.yaml` so `World.generate` accepts it, and
+excluded from nothing automatically — pass `--families` explicitly. Measured
+2026-09-04 (`docs/student-2026-09-05.md`): base `microsoft/Fara1.5-4B` scores
+0/30 on family 3 seeds 200–229 as shipped (invalid-action rate 20.8 %, all
+`visit_url`), 0/30 with `--nav-macro` (invalid 0 %; every episode stops at the
+OpenEMR login), and 0/30 on `resolve_denial_easy`.
 
 Per-episode ids live in a block of 1000 starting at `500000 + seed*1000`, so
 episodes never collide with each other or with the base data (100001+).
@@ -648,9 +663,9 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | `test_portal.py` (22) | schema/base counts, login, filters, appeal with upload + sha256 + same-transaction audit (trigger-based proof), duplicate appeal allowed, resubmit, messages, eligibility, page_views, `/admin`, determinism |
 | `test_openemr_layer.py` (15) | shim loads, base data deterministic and executes, every SQL helper executes on the shim, `quote`, portability |
 | `test_core_toy.py` (23) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
-| `test_claims_ops_world.py` (12) | generator determinism and split disjointness, manifest round-trip, resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build |
+| `test_claims_ops_world.py` (12) | generator determinism and split disjointness, manifest round-trip, the `resolve_denial_easy` variant (page 1, no distractors, same patient/claim/number per seed, deterministic), resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build |
 | `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
-| `test_student_policy.py`, `test_train.py` (102) | every parser style, coordinate scaling, mocked vLLM transport, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
+| `test_student_policy.py`, `test_train.py` (104) | every parser style, coordinate scaling, mocked vLLM transport, the Fara navigation macro (`visit_url` → four queued contract actions with one model call, `history_back` → alt+Left, tool enum advertises both, a new episode drops a half-finished macro) and `fara_call_name_args`, loop warnings incl. same-direction scroll loops, make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
 | `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, snapshot storage free tier, budget rows |
 
 ## 10. One episode, end to end
@@ -684,7 +699,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
 | OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
-| Student | mocked transport | drives the desktop | vLLM serves it | — |
+| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways) | vLLM serves it; **or mlx-vlm on the M5 Max Mac** (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
 | LoRA training | `--smoke` needs torch | — | yes | — |
 | Reset benchmark | simulator numbers (labelled) | **revert and fork bars measured on the desktop golden** (n=10 each, p50 100.9 s / 92.0 s, 0 failures; earlier fork-only: sandbox 19.1 s, desktop 25.0 s) | — | — |
 
@@ -701,5 +716,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | OpenEMR 8.3.0 released 2026-08-18, PHP 8.3+, MariaDB 10.6+; tarball asset and sha256; `InstallerAuto.php` args; `OPENEMR_ENABLE_INSTALLER_AUTO=1` | github.com/openemr/openemr v8_3_0 |
 | Docker tag `openemr/openemr:8.3.0-2026-08-30` (no `7.0.3` tag exists) | hub.docker.com |
 | Fara 1.5 (4B/9B/27B, Qwen3.5 base, `<tool_call>` format, 1000×1000 coordinate space) | huggingface.co/microsoft/Fara1.5-4B, github.com/microsoft/fara |
+| Fara 1.5 4B's 1000×1000 space against the 1280×720 screen is correctly handled by `coord_space=norm1000`, `image_max_side=1280` (the rescaled click sat on the named nav link); the base model emits `visit_url` on ~10 of its first 30 steps whatever the tool enum says, types `admin` and `pass` into one login field, guesses passwords, and stops with `ask_user_question` when unsure | measured live 2026-09-04, `docs/student-2026-09-05.md`, `runs/fara15-4b-base-f3-s200-229*` |
+| mlx-vlm 0.6.17 (mlx 0.32.2) loads `microsoft/Fara1.5-4B` (`Qwen3_5ForConditionalGeneration`) from the bf16 safetensors without conversion, needs `jinja2` for the chat template, applies the template's `<think>` default (the model closes it at once; `enable_thinking=false` gives identical output), parses `<tool_call>` into `tool_calls` only when the request carries `tools`, and leaves `<\|im_end\|>` in `content` | measured 2026-09-04 (`runs/logs/mlx-server-fara15-4b.log`) |
 | Computer-use toolset `computer_toolset_20260801` GA, member names, batch semantics, result shapes | platform.claude.com computer-use docs |
 | Gym-Anything / CUA-World includes OpenEMR; small models collapse on high complexity; 200-step budgets help on OpenEMR | arxiv 2604.06126 |
