@@ -404,15 +404,36 @@ async def test_ui_milestones_rungs_from_audit_trails(world, backend):
     assert ms1["rungs"]["openemr_login"] and ms1["rungs"]["openemr_chart"] and not ms1["rungs"]["openemr_document"]
     assert ms1["evidence"]["openemr_logins"] == 1 and ms1["evidence"]["openemr_login_failures"] == 1
     assert ms1["evidence"]["openemr_rows_for_patient"] == 1 and ms1["highest"] == "openemr_chart"
-    await db.execute_script(osql.insert_log(id=wm + 5, event="http-request-update", category="", user="admin", patient_id=None,
-                                            comments=_b64(f"/openemr/controller.php?document&view&patient_id={pid}&doc_id=1"),
-                                            date="2026-09-08 10:00:04"))
+    # help pages, the dashboard's patient-picture fetch and the Documents list are not a document view
+    await db.execute_script("\n".join([
+        osql.insert_log(id=wm + 5, event="http-request-update", category="", user="admin", patient_id=None,
+                        comments=_b64("/openemr/Documentation/help_files/medical_dashboard_help.php"), date="2026-09-08 10:00:04"),
+        osql.insert_log(id=wm + 6, event="http-request-update", category="", user="admin", patient_id=None,
+                        comments=_b64(f"/openemr/controller.php?document&retrieve&patient_id={pid}&document_id=-1&as_file=false"
+                                      "&context=patient_picture"), date="2026-09-08 10:00:05"),
+        osql.insert_log(id=wm + 7, event="http-request-update", category="", user="admin", patient_id=None,
+                        comments=_b64(f"/openemr/controller.php?document&list&patient_id={pid}"), date="2026-09-08 10:00:06"),
+    ]))
+    ms1b = await world.ui_milestones(env.ep.dbs, env.ep.baseline, task)
+    assert not ms1b["rungs"]["openemr_document"] and ms1b["evidence"]["openemr_documents_list"] is True
+    assert ms1b["evidence"]["openemr_document_paths"] == []
+    await db.execute_script(osql.insert_log(id=wm + 8, event="http-request-update", category="", user="admin", patient_id=None,
+                                            comments=_b64(f"/openemr/controller.php?document&retrieve&patient_id={pid}&document_id=505000"
+                                                          "&as_file=false&original_file=true"),
+                                            date="2026-09-08 10:00:07"))
     # the portal side: claim page, appeal form, then the appeal itself
     c = portal_client(env)
     c.get(f"/claims/{claim}")
     ms2 = await world.ui_milestones(env.ep.dbs, env.ep.baseline, task)
     assert ms2["rungs"]["openemr_document"] and ms2["rungs"]["portal_claim"] and not ms2["rungs"]["portal_appeal_form"]
-    assert ms2["evidence"]["openemr_document_paths"][0].startswith("/openemr/controller.php?document")
+    assert ms2["evidence"]["openemr_document_paths"][0].startswith("/openemr/controller.php?document&retrieve")
+    from worlds.claims_ops_v1.world import document_view_path, documents_list_path
+
+    assert document_view_path("/openemr/controller.php?document&view&patient_id=1&doc_id=7")
+    assert not document_view_path("/openemr/Documentation/help_files/message_center_help.php")
+    assert not document_view_path("/openemr/controller.php?document&retrieve&patient_id=1&document_id=-1&context=patient_picture")
+    assert not document_view_path("/openemr/controller.php?document&list&patient_id=1")
+    assert documents_list_path("/openemr/controller.php?document&list&patient_id=1")
     c.get(f"/claims/{claim}/appeal")
     c.post(f"/claims/{claim}/appeal", data={"reason_code": "PRECERT_OBTAINED", "authorization_number": task.expected["auth_number"],
                                            "narrative": "Prior authorization was obtained before the service date."})

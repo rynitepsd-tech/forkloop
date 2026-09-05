@@ -275,7 +275,10 @@ The base `World` returns `None`. `ClaimsOpsWorld` returns
 with the rungs, in order, `openemr_login` (a `log` row `event LIKE 'login%'`, `success` 1 after the
 watermark; failed logins are counted in `evidence.openemr_login_failures`), `openemr_chart` (any `log`
 row keyed by the target patient, or an audited request path under `patient_file`), `openemr_document`
-(an `http-request` row whose base64-decoded path names a document view), `portal_claim` and
+(an `http-request` row whose base64-decoded path is a real document view: the documents controller with
+`retrieve`/`view` and a document id — `worlds.claims_ops_v1.world.document_view_path`; the `/Documentation/` help
+pages and the dashboard's `document_id=-1 … context=patient_picture` fetch do not count, and the Documents list
+page is reported as `evidence.openemr_documents_list`), `portal_claim` and
 `portal_appeal_form` (`page_views` paths `/claims/<number>` and `/claims/<number>/appeal`), and
 `appeal_submitted` (an `appeals` row for the claim). `scripts/milestone_staircase.py` aggregates them
 over a run and adds two trajectory rungs (`login_page`: the task's username typed; `auth_typed`: the

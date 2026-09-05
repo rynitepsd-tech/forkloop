@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 from forkloop.trajectories import iter_episode_dirs, load_episode
+from worlds.claims_ops_v1.world import document_view_path
 
 DB_RUNGS: tuple[str, ...] = ("openemr_login", "openemr_chart", "openemr_document",
                              "portal_claim", "portal_appeal_form", "appeal_submitted")
@@ -40,10 +41,17 @@ def episode_rungs(ep: dict) -> dict[str, bool | None]:
     v = ep.get("verdict") or {}
     m = ep.get("manifest") or {}
     steps = ep.get("steps") or []
-    ms = ((v.get("details") or {}).get("ui_milestones") or {}).get("rungs")
+    ui = (v.get("details") or {}).get("ui_milestones") or {}
+    ms = ui.get("rungs")
     out: dict[str, bool | None] = {}
     for r in DB_RUNGS:
         out[r] = (bool(ms.get(r)) if isinstance(ms, dict) else None)
+    if isinstance(ms, dict) and out["openemr_document"]:
+        # verdicts written before 2026-09-05 23:30 matched any path containing "document" (the
+        # /Documentation/ help pages and the patient-picture fetch included); re-derive from the
+        # recorded path samples with the strict rule
+        samples = (ui.get("evidence") or {}).get("openemr_document_paths") or []
+        out["openemr_document"] = any(document_view_path(p) for p in samples)
     typed = [t.strip().lower() for t in _typed_texts(steps)]
     expected = m.get("expected") or {}
     auth = str(expected.get("auth_number") or "").strip().lower()

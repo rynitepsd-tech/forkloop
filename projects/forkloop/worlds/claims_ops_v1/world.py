@@ -40,6 +40,29 @@ WantedBy=multi-user.target
 """
 
 
+def document_view_path(path: str) -> bool:
+    """True for an audited OpenEMR request path that opens a patient document: the documents
+    controller with ``retrieve`` or ``view`` and a real document id. Not the ``/Documentation/``
+    help pages (the word "document" is in their path), not the dashboard's automatic patient
+    picture fetch (``document&retrieve … document_id=-1 … context=patient_picture``), not the
+    ``document&list`` page (that is the Documents section, recorded separately). Measured on the
+    2026-09-05 9B run, where the help pages and the picture fetch were the only matches in 1/4 and
+    the list page in 3/4 chart episodes."""
+    p = str(path or "")
+    low = p.lower()
+    if "/documentation/" in low or "context=patient_picture" in low or "document_id=-1" in low:
+        return False
+    if "controller.php?document" not in low:
+        return False
+    return ("&retrieve" in low or "&view" in low) and ("document_id=" in low or "doc_id=" in low)
+
+
+def documents_list_path(path: str) -> bool:
+    """The Documents section of a chart (``controller.php?document&list&patient_id=…``)."""
+    low = str(path or "").lower()
+    return "controller.php?document&list" in low
+
+
 def _truthy(v: Any) -> bool:
     """``success`` as MariaDB's TSV ("1") or SQLite's int; NULL counts as success (OpenEMR's default)."""
     if v is None:
@@ -195,10 +218,12 @@ class ClaimsOpsWorld(World):
                     if text.startswith("/") or "://" in text:
                         paths.append(text.strip())
                         break
-            doc_paths = [p for p in paths if "document" in p.lower()]
+            doc_paths = [p for p in paths if document_view_path(p)]
+            list_paths = [p for p in paths if documents_list_path(p)]
             chart_paths = [p for p in paths if "patient_file" in p or "demographics" in p]
             ev["openemr_request_paths"] = len(paths)
-            ev["openemr_document_paths"] = doc_paths[:5]
+            ev["openemr_document_paths"] = doc_paths[:8]
+            ev["openemr_documents_list"] = bool(list_paths)
             if chart_paths and not rungs["openemr_chart"]:
                 rungs["openemr_chart"] = True
             rungs["openemr_document"] = bool(doc_paths) and (rungs["openemr_chart"] or pid is None)

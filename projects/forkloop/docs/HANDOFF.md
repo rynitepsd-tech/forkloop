@@ -19,10 +19,11 @@ and on the easier variant, every episode dying at the OpenEMR login
 (`docs/student-2026-09-05.md`); with two fair, convention-level changes (a note
 that spells out username/password, a Fara prompt without the ask-the-user rule)
 it **logs in 30/30 and still scores 0/30**, dying between the login and the
-patient chart (`docs/student-2026-09-06.md`) — that run is the like-for-like floor
+patient chart; the 9B with the same flags also scores 0/30 and reaches the chart
+in 4/30 (`docs/student-2026-09-06.md`). The 4B fair run is the like-for-like floor
 for the SFT ladder, and SFT on a rented GPU is the next rung.
 
-9 local commits are unpushed (`origin/main` ahead 9; latest: the student-session wrap-up, 2026-09-05);
+Main is pushed and in sync with origin as of 2026-09-06 (the session's commits end with the wrap-up);
 push only when asked. `runs/` is git-ignored; the trajectories live only on this
 Mac. Repo: `rynitepsd-tech/forkloop` (fork of `solari-sdk/solari-cookbook`),
 cloned at `~/Desktop/Solari/repo`, project under `projects/forkloop/`.
@@ -122,6 +123,7 @@ offline, no key required.
 | **Student + `--nav-macro`, `resolve_denial_easy`, same seeds** (`runs/fara15-4b-base-f3easy-s200-229-nav`) | **0/30 = 0 % [0, 11.3]**; invalid 0.0 % (1/2,983); same login wall, 19/30 guessing passwords, 10 `ask_user_question`; $0.43 VM |
 | **Student probes, 2026-09-05 (`docs/student-2026-09-06.md`)**: seeds 200–204, 60 steps, `--nav-macro` plus one policy-side option each | OpenEMR login rung: `--instruction-note` (username/password spelled out) **5/5**; `fara_no_user_v1.md` prompt (no critical points, v5 conventions) **4/5**, 0 `ask_user_question`; `--history-notes` 1/5; note + prompt **5/5**. $0.04–0.05 each |
 | **Student, base 4B, the fair configuration** (`--nav-macro` + `fara_no_user_v1.md` + `--instruction-note`, seeds 200–229, 120 steps; `runs/fara15-4b-fair-f3-s200-229`) | **0/30 = 0 % [0, 11.3]** — **the like-for-like floor for the SFT ladder.** Staircase: openemr_login **30/30**, openemr_chart 0/30, everything after 0/30; invalid 0.0 % (1/3,643); 0 `ask_user_question`; 25/30 navigate OpenEMR by invented URLs and drop the session, 12/30 hit the post-login "Aw, Snap!"; 3.78 s per call; $0.54 VM |
+| **Student, base `microsoft/Fara1.5-9B`, same fair configuration and seeds** (`runs/fara15-9b-fair-f3-s200-229`, mlx-vlm bf16 on this Mac, 8.1 s per call shared) | **0/30 = 0 % [0, 11.3]**; openemr_login 30/30, **openemr_chart 4/30** (Documents tab reached 4/30, no letter opened), auth_typed 0/30; 6/30 cut by the 900 s wall; 28/30 repeat one click position ≥ 10 times; 19/30 post-login "Aw, Snap!"; $0.95 VM |
 | Family 1 (reschedule_constrained), Luna **v10 + `--history-notes`**, seeds 0–9 | 10/10, first pass 9/10, median 48.5 actions, $0.089 per verified |
 | Family 1, **fresh seeds 10–34** | **15/25 = 60 % [40.7, 76.6]**, first pass 12/25, $0.20 per verified |
 | Family 2 (update_insurance_reconcile), v10, **fresh seeds 10–34**, both variants | **25/25 = 100 % [86.7, 100]**, first pass 24/25, $0.07 per verified |
@@ -187,8 +189,13 @@ the `{fara_identity}` / `{fara_tools}` placeholders, the critical-points text re
 conventions appended) the base 4B logs into OpenEMR in 30/30 episodes and never asks a user; then, in 25/30
 episodes, it navigates OpenEMR by invented URLs (`/openemr/login.php`, `/openemr/patient/1`,
 `login.php?username=admin&password=pass`) that drop the session, and 12/30 meet Chrome's post-login "Aw, Snap!"; no
-episode opens the patient chart. `--history-notes` made the login worse (1/5). The staircase that shows this lives in
-every verdict now (`details.ui_milestones`, `scripts/milestone_staircase.py`); the three 2026-09-05 runs predate it.
+episode opens the patient chart. `--history-notes` made the login worse (1/5). The 9B (same flags, 8 s per call on this Mac) knows the Finder and the
+search box, opens the chart and the Documents tab in 4/30 episodes, then clicks one spot ten-plus times or re-runs the
+login checklist; it never opens a letter. The staircase that shows this lives in every verdict now
+(`details.ui_milestones`, `scripts/milestone_staircase.py`; the document rung counts only a real
+`controller.php?document&retrieve/view`, not the help pages or the patient-picture fetch); the three 2026-09-05 runs
+predate it. Serving on this Mac: mlx-vlm holds one model per process on port 8001 (`runs/logs/serve_9b.sh` swaps
+them); the 9B's 8 s per call with two episodes puts 120-step episodes over the 900 s wall in 6/30 cases.
 The 2026-09-04 findings, for the record:
 
 1. *Action format:* base Fara 1.5 calls `visit_url` (its browser harness action) on ~10 of its first 30 steps

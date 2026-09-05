@@ -625,7 +625,11 @@ an episode and returns the staircase rungs, in order: `openemr_login` (a `log`
 row `event LIKE 'login%'` with `success` 1 after the watermark; failed logins
 counted in the evidence), `openemr_chart` (a `log` row keyed by the target
 patient, or an audited request path under `patient_file`), `openemr_document`
-(an `http-request` row whose base64-decoded path names a document view),
+(an `http-request` row whose base64-decoded path is a real document
+`controller.php?document&retrieve/view` with a document id — not the
+`/Documentation/` help pages nor the dashboard's patient-picture fetch, which the
+first detector counted on the 2026-09-05 9B run; the Documents list page is
+`evidence.openemr_documents_list`),
 `portal_claim` / `portal_appeal_form` (`page_views` paths of the target claim),
 `appeal_submitted` (an `appeals` row for the claim). `Env.verify` stores it under
 `verdict.details["ui_milestones"]`; `scripts/milestone_staircase.py` aggregates a
@@ -722,7 +726,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
 | OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
-| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways; 2026-09-05 with the fair conventions: 30/30 logins, 0/30, `docs/student-2026-09-06.md`) | vLLM serves it; **or mlx-vlm on the M5 Max Mac** (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
+| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways; 2026-09-05 with the fair conventions: 30/30 logins, 0/30; base 9B same flags 0/30 with 4/30 charts, 8 s per call, `docs/student-2026-09-06.md`) | vLLM serves it; **or mlx-vlm on the M5 Max Mac** (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
 | LoRA training | `--smoke` needs torch | — | yes | — |
 | Reset benchmark | simulator numbers (labelled) | **revert and fork bars measured on the desktop golden** (n=10 each, p50 100.9 s / 92.0 s, 0 failures; earlier fork-only: sandbox 19.1 s, desktop 25.0 s) | — | — |
 
