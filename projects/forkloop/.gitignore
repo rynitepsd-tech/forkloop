@@ -13,3 +13,4 @@ forkloop/bench/local_baseline/results.jsonl
 build/
 dist/
 .env
+venv-mlx/
