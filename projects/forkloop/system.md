@@ -57,7 +57,8 @@ projects/forkloop/
   README.md · CLAUDE.md · system.md (this file)
   forkloop/                 the library (§4)
     backends/{base,fake,solari}.py
-    policies/{base,scripted,teacher,student,action_parse}.py
+    policies/{base,scripted,teacher,student,action_parse}.py + policies/prompts/ (hosted_gui_agent*.md for the
+                              teacher path, fara_no_user_v1.md for base Fara: identity + tools kept via placeholders, no critical points)
     exporters/{jsonl,sft_pairs,osworld}.py
     bench/{reset_benchmark,cost_model}.py + bench/local_baseline/ (docker-compose baseline)
     util/{sql,minipdf}.py
@@ -74,9 +75,11 @@ projects/forkloop/
                             chrome_crash_probe, solari_verify_fork (re-check revert/snapshot/disk on a golden fork), gui_episode,
                             student_click_check (one fork, one student click, the four coordinate-space values + a crosshair PNG),
                             classify_failures (a run's failed episodes into the bake-off classes: invalid/parse, wrong-record,
-                            transcription, decoy, budget-sane, budget-looping)
+                            transcription, decoy, budget-sane, budget-looping),
+                            milestone_staircase (per-run percentage of episodes reaching each UI rung from
+                            verdict.details.ui_milestones, plus the trajectory rungs login_page / auth_typed)
   spikes/                   _common.py, spike_00..06, run_all.sh
-  tests/                    205 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
+  tests/                    210 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
   docs/                     HANDOFF (read first), contracts, spikes (results ledger), solari-repro, solari-message, cost, limitations, buildlog
 examples/desktop-snapshot-revert-py/   the cookbook example (outside the project dir)
 ```
@@ -272,7 +275,11 @@ matches on the public `name:` or the directory name. `World` provides:
 `checksum_tables/watermark_tables/primary_keys`, and the hooks
 `build`, `health` (DB pings, HTTP health when the machine has the `http`
 capability), `open_initial_screen` (ctrl+l, URL, Return), `before_episode`,
-`gui_factory`. `ClaimsOpsWorld.before_episode` clears the downloads dir and
+`gui_factory`, and `ui_milestones(dbs, baseline, task)` (2026-09-05: the
+staircase rungs read from the audit trails after an episode; the base class
+returns None, `Env.verify` stores a non-None answer under
+`verdict.details["ui_milestones"]`, never in the reward; the claims-ops
+implementation is in §5.2). `ClaimsOpsWorld.before_episode` clears the downloads dir and
 runs `ensure_chrome_gpu_flag`: on goldens whose Chrome lacks `--disable-gpu` it
 kills Chrome, **waits until the old processes are gone**, removes the profile's
 `Singleton*` files, launches with `chrome_base_flags`, **verifies** a
@@ -535,8 +542,11 @@ revert|fork`, `--max-steps/--max-seconds` (recorded as `budget_override` in
 `--reset-retry-wait-s`), `--retry-failed N` (after the pass, re-run every
 seed below 1.0 up to N more times on a fresh fork; §4.14), and the student
 knobs `--student-url --system-prompt-file --history-k --history-notes --prev-shot
---image-detail --effort --nav-macro` (the last expands Fara's `visit_url` /
-`history_back`, §4.17). `_policy()` takes `family/seed/attempt` context so
+--image-detail --effort --nav-macro --instruction-note` (`--nav-macro` expands Fara's
+`visit_url` / `history_back`; `--instruction-note` appends a policy-side text to every
+instruction the model sees, §4.17). All of them are written to `run.json` under
+`policy_options` (2026-09-05), since the world and the manifests do not change with
+them. `_policy()` takes `family/seed/attempt` context so
 tests can swap in attempt-aware policies. `reap --dry-run` lists the
 account's forkloop machines. `reset-bench` hands the benchmark its own argv
 (`argparse.REMAINDER` used to swallow the leading `--world`).
