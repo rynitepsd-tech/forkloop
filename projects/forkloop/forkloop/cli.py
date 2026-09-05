@@ -97,6 +97,7 @@ def _policy(spec: str, args: argparse.Namespace, **context: Any):
         return StudentPolicy(base_url=args.student_url, model=args.model or "student", prompt_style=args.prompt_style,
                              system_prompt=system_prompt, history_k=args.history_k, prev_screenshot=args.prev_shot,
                              history_notes=bool(getattr(args, "history_notes", False)),
+                             nav_macro=bool(getattr(args, "nav_macro", False)),
                              image_detail=(args.image_detail or ("high" if hosted else None)),
                              api_key=os.environ.get("STUDENT_API_KEY") or os.environ.get("OPENAI_API_KEY"),
                              hosted_reasoning=hosted, max_tokens=4096 if hosted else 512, timeout_s=300.0 if hosted else 120.0,
@@ -370,6 +371,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             p.add_argument("--history-notes", action="store_true",
                            help="student: show the model's own reasoning line next to each previous action (its memory)")
             p.add_argument("--image-detail", default=None, help="student: OpenAI image detail hint (hosted default: high)")
+            p.add_argument("--nav-macro", action="store_true",
+                           help="student (fara): expand visit_url into omnibox click + ctrl+a + type + Return and "
+                                "history_back into alt+Left instead of rejecting them")
             p.add_argument("--max-steps", type=int, default=None, help="override the task's action budget for this run")
             p.add_argument("--max-seconds", type=float, default=None, help="override the task's wall budget for this run")
             p.add_argument("--script", default=None, help="JSON list of compact actions for --policy scripted")

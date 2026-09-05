@@ -456,6 +456,11 @@ cost is an upper bound.
   `compact`, `json`, `fara`; Fara's coordinates are in a fixed 1000×1000
   space and are rescaled accordingly (`coord_space`). `propose(obs, n)` uses
   the server's `n`. Network and parse failures return `(None, meta)`.
+  `nav_macro=True` (`collect --nav-macro`) expands Fara's `visit_url` into
+  click(omnibox), key(ctrl+a), type(url), key(Return) over four env steps (one
+  model call; `meta["macro"]` marks the queued steps) and `history_back` into
+  alt+Left — measured need 2026-09-04: base Fara 1.5 emits `visit_url` on 10 of
+  its first 27 steps and the invalid-action limit ends the episode otherwise.
   The same class is the **hosted teacher path**: `--student-url
   https://api.openai.com/v1 --model gpt-5.6-luna` switches on
   `reasoning_effort`, `detail: high` images, a 300 s timeout and 4096 output

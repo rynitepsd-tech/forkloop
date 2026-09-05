@@ -73,6 +73,12 @@ FARA_ACTIONS: tuple[str, ...] = (
 FARA_UNSUPPORTED: frozenset[str] = frozenset(
     {"visit_url", "history_back", "web_search", "read_page_answer_question"}
 )
+#: Browser-navigation actions the student policy can expand into contract actions
+#: (``StudentPolicy(nav_macro=True)``: visit_url -> omnibox click, ctrl+a, type, Return;
+#: history_back -> alt+Left). Measured need (2026-09-04, runs/fara15-4b-base-f3-s200-229):
+#: base Fara 1.5 emits ``visit_url`` on 10 of its first 27 steps whatever the tool enum says,
+#: and the env's invalid-action limit ends the episode before anything is done.
+FARA_NAV_ACTIONS: frozenset[str] = frozenset({"visit_url", "history_back"})
 
 _TYPE_ALIASES: dict[str, str] = {
     "click": "click", "left_click": "click", "leftclick": "click", "single_click": "click", "tap": "click",
@@ -835,6 +841,37 @@ def parse_fara(text: Any, *, default_xy: tuple[int, int] | None = None) -> Parse
         return None, f"fara parse failed: {type(e).__name__}: {e}"
 
 
+def fara_call_name_args(output: Any) -> tuple[str, dict] | None:
+    """The ``(action, arguments)`` of the first usable ``computer_use`` call in Fara output,
+    before any mapping to the contract: raw text with ``<tool_call>`` blocks, or an
+    OpenAI-style ``tool_calls`` list. ``None`` when there is no call with an ``action``."""
+    try:
+        candidates: list[Any] = []
+        if isinstance(output, dict):
+            output = [output]
+        if isinstance(output, list):
+            for tc in output:
+                if isinstance(tc, dict):
+                    fn = tc.get("function") if isinstance(tc.get("function"), dict) else tc
+                    candidates.append(fn.get("arguments") if "arguments" in fn else fn)
+        elif isinstance(output, str):
+            bodies = _TOOL_CALL_RE.findall(output)
+            if not bodies and "<tool_call>" in output:
+                bodies = [output.split("<tool_call>", 1)[1]]
+            for body in bodies:
+                obj = _loads_lenient(body)
+                if isinstance(obj, dict):
+                    candidates.append(obj.get("arguments") if "arguments" in obj else obj)
+        for args in candidates:
+            if isinstance(args, str):
+                args = _loads_lenient(args)
+            if isinstance(args, dict) and isinstance(args.get("action"), str) and args["action"].strip():
+                return args["action"].strip().lower().rsplit(".", 1)[-1], dict(args)
+        return None
+    except Exception:  # never raise
+        return None
+
+
 def parse_tool_calls(tool_calls: Any, *, default_xy: tuple[int, int] | None = None) -> ParseResult:
     """Parse the OpenAI-style ``message.tool_calls`` list that vLLM returns when
     ``--enable-auto-tool-choice`` is on (instead of raw ``<tool_call>`` text)."""
@@ -987,6 +1024,7 @@ def to_compact(action: dict | Any) -> str:
 
 __all__ = [
     "ParseResult", "CONTRACT_TYPES", "DIRECTIONS", "BUTTONS", "FARA_DISPLAY_SIZE", "FARA_TOOL_NAME",
+    "FARA_NAV_ACTIONS", "fara_call_name_args",
     "FARA_ACTIONS", "FARA_UNSUPPORTED", "KEY_ALIASES", "normalize_key", "split_key_combo",
     "normalize_action", "parse_compact", "parse_json", "parse_fara", "parse_fara_call",
     "parse_tool_calls", "parse_any", "extract_thoughts", "scale_coords", "to_compact",

@@ -419,6 +419,7 @@ class StudentPolicy:
         prev_screenshot: bool = False,
         image_detail: str | None = None,
         history_notes: bool = False,
+        nav_macro: bool = False,
     ) -> None:
         if prompt_style not in PROMPT_STYLES:
             raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}, got {prompt_style!r}")
@@ -438,7 +439,17 @@ class StudentPolicy:
         self.top_p = top_p
         self.extra_body = dict(extra_body or {})
         self.system_prompt_override = system_prompt
-        self.fara_allowed = tuple(fara_allowed)
+        #: Expand Fara's browser-navigation calls into contract actions instead of rejecting
+        #: them: ``visit_url`` becomes click(omnibox), key(ctrl+a), type(url), key(Return) over
+        #: four env steps (the model is not consulted for the queued three; the next screenshot
+        #: it sees is the loaded page), ``history_back`` becomes key(alt+Left). The tool schema
+        #: then advertises both. Only meaningful with ``prompt_style="fara"``.
+        self.nav_macro = bool(nav_macro)
+        self._queue: list[tuple[dict, str]] = []
+        allowed = tuple(fara_allowed)
+        if self.nav_macro:
+            allowed = allowed + tuple(a for a in ("visit_url", "history_back") if a not in allowed)
+        self.fara_allowed = allowed
         self.screen_size = tuple(screen_size) if screen_size else None
         #: Hosted reasoning models (OpenAI GPT-5.x via /chat/completions) reject sampling
         #: parameters and count reasoning tokens against ``max_completion_tokens``.
@@ -485,6 +496,7 @@ class StudentPolicy:
             "prompt_style": self.prompt_style, "coord_space": self.coord_space,
             "image_max_side": self.image_max_side, "temperature": self.temperature,
             "max_tokens": self.max_tokens, "history_k": self.history_k, "seed": self.seed,
+            "nav_macro": self.nav_macro,
         }
 
     # -- request construction ---------------------------------------------- #
@@ -582,6 +594,35 @@ class StudentPolicy:
         except Exception as e:  # InvalidAction or anything else
             return None, f"Action.parse rejected {d}: {e}"
 
+    #: Chrome's omnibox on the 1280x720 desktop is at (640, 90) (CLAUDE.md); scaled by screen size.
+    NAV_OMNIBOX_FRAC: tuple[float, float] = (0.5, 0.125)
+
+    def nav_macro_actions(self, name: str, args: dict, screen: tuple[int, int]) -> list[dict] | None:
+        """Contract actions (screen space) for one Fara navigation call, or None if not expandable."""
+        if name == "history_back":
+            return [{"type": "key", "keys": ["alt", "Left"]}]
+        if name == "visit_url":
+            url = str(args.get("url") or args.get("text") or "").strip()
+            if not url:
+                return None
+            x = int(round(self.NAV_OMNIBOX_FRAC[0] * screen[0]))
+            y = int(round(self.NAV_OMNIBOX_FRAC[1] * screen[1]))
+            return [{"type": "click", "x": x, "y": y, "button": "left"}, {"type": "key", "keys": ["ctrl", "a"]},
+                    {"type": "type", "text": url}, {"type": "key", "keys": ["Return"]}]
+        return None
+
+    def _macro_step(self, d: dict, label: str, ctx: dict | None) -> tuple[Any, dict]:
+        action, err = self._to_action(d)
+        meta: dict[str, Any] = {
+            "raw_action": label, "note": "" if action is not None else f"invalid action: {err}",
+            "thoughts": "", "finish_reason": None, "parsed": d, "macro": label.split("]")[0].strip("["),
+            "model_latency_s": 0.0, "tokens": dict(self.usage),
+        }
+        if ctx:
+            meta.update({"model_image_size": list(ctx["model_size"]), "screen_size": list(ctx["screen_size"]),
+                         "coord_space": self.coord_space})
+        return action, meta
+
     def parse_choice(self, choice: dict, ctx: dict) -> tuple[Any, dict]:
         """Turn one ``choices[i]`` entry into ``(Action | None, meta)``."""
         message = choice.get("message") or {}
@@ -590,6 +631,19 @@ class StudentPolicy:
         reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
         coord_size = ctx["coord_size"]
         default_xy = (coord_size[0] // 2, coord_size[1] // 2)
+        if self.nav_macro and self.prompt_style == "fara":
+            call = ap.fara_call_name_args(tool_calls or content)
+            if call and call[0] in ap.FARA_NAV_ACTIONS:
+                seq = self.nav_macro_actions(call[0], call[1], tuple(ctx["screen_size"]))
+                if seq:
+                    n = len(seq)
+                    labels = [f"[nav macro {call[0]} {i}/{n}] {ap.to_compact(d)}" for i, d in enumerate(seq, 1)]
+                    self._queue = list(zip(seq[1:], labels[1:]))
+                    action, meta = self._macro_step(seq[0], labels[0], ctx)
+                    meta["raw_action"] = content or json.dumps(tool_calls, ensure_ascii=False)
+                    meta["thoughts"] = (ap.extract_thoughts(content) or "")[:2000]
+                    meta["finish_reason"] = choice.get("finish_reason")
+                    return action, meta
         if tool_calls:
             action_dict, err = ap.parse_tool_calls(tool_calls, default_xy=default_xy)
             raw = content or json.dumps(tool_calls, ensure_ascii=False)
@@ -649,6 +703,11 @@ class StudentPolicy:
 
     async def act(self, obs: Any) -> tuple[Any, dict]:
         t0 = time.perf_counter()
+        if int(getattr(obs, "step", 0) or 0) == 0:
+            self._queue = []  # a new episode never inherits a half-finished macro
+        if self._queue:
+            d, label = self._queue.pop(0)
+            return self._macro_step(d, label, None)
         try:
             body, ctx = self.build_request(obs, n=1)
         except Exception as e:

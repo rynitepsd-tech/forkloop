@@ -660,3 +660,62 @@ def test_collect_env_keeps_at_least_the_policy_history():
     assert _env_history_k(Namespace(history_k=16)) == 16
     assert _env_history_k(Namespace(history_k=2)) == 8
     assert _env_history_k(Namespace()) == 8
+
+
+def test_student_fara_nav_macro_visit_url_and_history_back():
+    """visit_url expands into four contract actions over four steps (one model call), history_back
+    into alt+Left; the tool enum advertises both. Without nav_macro visit_url stays invalid."""
+    replies = [_fara({"action": "visit_url", "url": "http://localhost/openemr/"}), _fara({"action": "history_back"})]
+    seen: dict = {"n": 0, "bodies": []}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["bodies"].append(json.loads(request.content))
+        reply = replies[min(seen["n"], len(replies) - 1)]
+        seen["n"] += 1
+        return httpx.Response(200, json=_completion(reply))
+
+    policy = _policy(handler, prompt_style="fara", image_max_side=1280, nav_macro=True)
+    assert policy.describe()["nav_macro"] is True
+    out = []
+    for step in range(5):
+        a, m = asyncio.run(policy.act(Obs(_png(1280, 720), "open OpenEMR", step=step)))
+        out.append((_as_dict(a), m))
+    asyncio.run(policy.aclose())
+
+    assert seen["n"] == 2  # one call for visit_url, none for the three queued steps, one for history_back
+    assert [d for d, _ in out] == [
+        {"type": "click", "x": 640, "y": 90, "button": "left"},
+        {"type": "key", "keys": ["ctrl", "a"]},
+        {"type": "type", "text": "http://localhost/openemr/"},
+        {"type": "key", "keys": ["Return"]},
+        {"type": "key", "keys": ["alt", "Left"]},
+    ]
+    assert all(m["macro"].startswith("nav macro visit_url") for _, m in out[:4])
+    assert "visit_url" in out[0][1]["raw_action"] and out[0][1]["model_latency_s"] >= 0
+    assert out[1][1]["raw_action"].startswith("[nav macro visit_url 2/4]") and out[1][1]["model_latency_s"] == 0.0
+    assert out[4][1]["macro"] == "nav macro history_back 1/1"
+    system = seen["bodies"][0]["messages"][0]["content"]
+    tool_json = system.rsplit("<tools>\n", 1)[1].split("\n</tools>", 1)[0]
+    enum = json.loads(tool_json)["function"]["parameters"]["properties"]["action"]["enum"]
+    assert "visit_url" in enum and "history_back" in enum and "web_search" not in enum
+
+    # a fresh episode (step 0) drops a half-finished macro
+    policy2 = _policy(handler, prompt_style="fara", image_max_side=1280, nav_macro=True)
+    asyncio.run(policy2.act(Obs(_png(1280, 720), "go", step=0)))  # visit_url -> queue of 3
+    a, m = asyncio.run(policy2.act(Obs(_png(1280, 720), "go", step=0)))
+    assert m["model_latency_s"] > 0 or "raw_action" in m and "[nav macro" not in m["raw_action"]
+    asyncio.run(policy2.aclose())
+
+    # without the macro the call is still rejected
+    policy3 = _policy(handler, prompt_style="fara", image_max_side=1280)
+    seen["n"] = 0
+    a, m = asyncio.run(policy3.act(Obs(_png(1280, 720), "go", step=0)))
+    asyncio.run(policy3.aclose())
+    assert a is None and "visit_url" in m["note"]
+
+
+def test_fara_call_name_args():
+    assert ap.fara_call_name_args(_fara({"action": "visit_url", "url": "http://x"})) == ("visit_url", {"action": "visit_url", "url": "http://x"})
+    assert ap.fara_call_name_args([{"function": {"name": "computer_use", "arguments": '{"action": "history_back"}'}}]) == ("history_back", {"action": "history_back"})
+    assert ap.fara_call_name_args("no call here") is None
+    assert ap.fara_call_name_args("") is None
