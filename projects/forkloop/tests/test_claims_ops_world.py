@@ -337,3 +337,27 @@ async def test_reschedule_audit_row_logged_under_session_patient(world, backend)
     rows = v.details["ui_path"]["audit_rows_after_watermark"]["openemr"]
     assert rows and rows[0]["pk"] == 990005 and "something_else" in rows[0]["comments"], rows
     await env.close()
+
+
+def test_resolve_denial_easy_variant_is_page_one_no_distractors_and_shares_the_seed():
+    """The easy variant (student bake-off diagnostic rung) puts the authorization number on page 1
+    of a one-page letter and has no distractor claims, while keeping the patient, claim, number,
+    decoys and document count of the standard task for the same seed. Deterministic."""
+    seen_std_distractors = seen_std_two_pages = False
+    for seed in range(200, 230):
+        easy = generate("resolve_denial_easy", seed, "train")
+        std = generate("resolve_denial", seed, "train")
+        assert easy.family == "resolve_denial_easy" and easy.task_id != std.task_id
+        assert easy.difficulty["variant"] == "easy" and std.difficulty["variant"] == "standard"
+        assert easy.difficulty["distractors"] == 0 and easy.difficulty["n_pages"] == 1
+        assert easy.expected["doc_page"] == 1 and easy.expected["distractor_claims"] == []
+        assert not [c for c in easy.oracle.invariants if c.id.startswith("distractor_")]
+        for k in ("patient_pid", "claim_id", "claim_number", "auth_number", "decoy_numbers"):
+            assert easy.expected[k] == std.expected[k], k
+        assert easy.difficulty["n_docs"] == std.difficulty["n_docs"]
+        assert easy.instruction == std.instruction
+        assert "distractor" not in easy.seeding.portal_sql.lower()
+        assert generate("resolve_denial_easy", seed, "train") == easy
+        seen_std_distractors |= std.difficulty["distractors"] > 0
+        seen_std_two_pages |= std.difficulty["n_pages"] == 2
+    assert seen_std_distractors and seen_std_two_pages  # the flag actually removes something on these seeds

@@ -21,6 +21,8 @@ FAMILIES = {
     "reschedule_constrained": reschedule_constrained.generate,
     "update_insurance_reconcile": update_insurance_reconcile.generate,
     "resolve_denial": resolve_denial.generate,
+    # diagnostic variant: auth number on page 1 of a one-page letter, no distractor claims
+    "resolve_denial_easy": resolve_denial.generate,
 }
 SEED_RANGES = {"train": (0, 99999), "heldout_seeds": (100000, 199999), "heldout_compositions": (200000, 299999)}
 

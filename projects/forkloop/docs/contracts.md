@@ -144,7 +144,7 @@ databases:
 apps:
   portal:  {url: "http://localhost:8080", health: "/healthz"}
   openemr: {url: "http://localhost/openemr", health: "/interface/login/login.php?site=default"}
-families: [reschedule_constrained, update_insurance_reconcile, resolve_denial]
+families: [reschedule_constrained, update_insurance_reconcile, resolve_denial, resolve_denial_easy]
 seed_module: worlds.claims_ops_v1.seed_world     # python module exposing generate(family, seed, split) -> TaskInstance
 budget: {max_steps: 60, max_seconds: 600}
 forbidden_paths: ["/admin", "/debug", "/api/"]
@@ -401,6 +401,11 @@ loaded from `portal/base_data.json` and `openemr/base_data.json`.
    APPEAL_SUBMITTED, reason code, authorization_number equals, (attachment
    sha256 equals). Invariants: `appeals_for(claim) == 1`, second denied claim
    for a same-surname distractor untouched, checksum, ui-path, forbidden.
+   `resolve_denial_easy` (diagnostic variant, 2026-09-04): the same generator with
+   `difficulty.variant == "easy"` — authorization number on page 1 of a one-page
+   letter, no distractor claims; the patient, claim, number and decoys are those of
+   `resolve_denial` for the same seed (shared random stream). Not part of any
+   SFT export or held-out split; pass `--families` explicitly to run it.
 
 Randomization axes (all families): names/DOBs, providers, dates, member IDs,
 denial codes and wording, amounts, which document/page holds the fact,

@@ -31,7 +31,9 @@ apps:
   openemr:
     url: "http://localhost/openemr"
     health: "/interface/login/login.php?site=default"
-families: [reschedule_constrained, update_insurance_reconcile, resolve_denial]
+# resolve_denial_easy is the diagnostic variant of family 3 (page-1 auth number, no distractor
+# claims); always pass --families explicitly to collect/eval so it is not run by accident.
+families: [reschedule_constrained, update_insurance_reconcile, resolve_denial, resolve_denial_easy]
 budget: {max_steps: 60, max_seconds: 600}
 forbidden_paths: ["/admin", "/debug", "/api/"]
 oracle:

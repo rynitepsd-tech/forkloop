@@ -2,6 +2,14 @@
 the patient's OpenEMR document. Attachment is required only when
 ``difficulty.require_attachment`` (harder variant).
 
+``resolve_denial_easy`` is the same generator with the difficulty flag ``easy``: the
+authorization number is always on page 1 of a one-page letter and there are no
+distractor claims (no same-surname patient with an adjacent denied claim). Every
+other draw is shared with the standard task of the same seed — same patient, same
+claim, same authorization number, same decoys, same document count — so the two
+variants are directly comparable seed for seed. Added 2026-09-04 as the diagnostic
+rung of the student bake-off (docs/student-2026-09-05.md).
+
 Randomisation: which document (and page) holds the number, distractor numbers
 on the same page, a same-surname distractor with its own denied claim that must
 stay untouched, off-by-one claim numbers, inbox noise.
@@ -23,7 +31,9 @@ FAMILY = "resolve_denial"
 
 def generate(family: str, seed: int, split: str, base: BaseData | None = None) -> TaskInstance:
     base = base or load_base()
-    rng = rng_for(family, seed, split)
+    easy = family.endswith("_easy")
+    # the easy variant shares the standard task's random stream so the two are comparable seed for seed
+    rng = rng_for(family[:-len("_easy")] if easy else family, seed, split)
     ids = base.next_ids()
     eid = episode_id_base(seed)
     ids["pid"] = ids["portal_patient"] = eid
@@ -38,6 +48,9 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     for _ in range(n_distractors):
         d = make_person(rng, split, ids, base, last=person.last if rng.random() < 0.7 else None)
         distractors.append((d, make_claim(rng, ids, d, status="DENIED", denial_code=rng.choice(["CO-197", "CO-29"]))))
+    if easy:
+        # drawn (so the rng stream stays aligned with the standard variant), then dropped
+        distractors, n_distractors = [], 0
 
     real = auth_number(rng)
     decoys = [auth_number(rng) for _ in range(rng.randint(1, 4))]
@@ -45,6 +58,8 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     which = rng.randrange(n_docs)
     n_pages = rng.choice([1, 1, 2])
     page = rng.randrange(n_pages) + 1
+    if easy:
+        n_pages, page = 1, 1
     require_attachment = split != "train" and rng.random() < 0.3 if split == "heldout_compositions" else rng.random() < 0.15
     service_desc = f"CPT {target.cpt} on {target.service_date.isoformat()}"
 
@@ -117,5 +132,5 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
         oracle=OracleSpec(effects=effects, invariants=invariants),
         budget={"max_steps": 60, "max_seconds": 600},
         difficulty={"distractors": n_distractors, "n_docs": n_docs, "n_pages": n_pages, "require_attachment": require_attachment,
-                    "decoys": len(decoys), "noise_messages": noise},
+                    "decoys": len(decoys), "noise_messages": noise, "variant": "easy" if easy else "standard"},
     )

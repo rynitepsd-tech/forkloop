@@ -102,6 +102,7 @@ Task families (`worlds/claims_ops_v1/tasks/`), each a pure function of `(family,
 1. `reschedule_constrained` — move patient X's appointment with Dr Y to the next Tuesday afternoon; provider must not change.
 2. `update_insurance_reconcile` — insurance changed; update OpenEMR, then resubmit claim C-#### in the portal with the corrected member ID. Sometimes OpenEMR is already updated (one-system variant).
 3. `resolve_denial` — CO-197 denial; find the authorization number in the patient's OpenEMR PDF (which document, which page, with decoy numbers on the page) and file exactly one appeal.
+   `resolve_denial_easy` is its diagnostic variant (page-1 number, no distractor claims, same patient/claim/number per seed), used for the student bake-off's easier rung.
 
 Randomised: names, DOBs, providers, dates, member IDs, denial wording, amounts, document/page placement, distractor count and similarity (same surname, adjacent claim numbers, near-miss member IDs), inbox noise, one-system vs both, partial starting state. Held-out seeds use disjoint surname pools; held-out compositions chain "update insurance, resubmit one denial, appeal another, leave a third alone".
 
