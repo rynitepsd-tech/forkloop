@@ -139,6 +139,8 @@ does not ship a GRPO script; `eval.py` is the evaluator for it.
 
 ## GPU rental guidance
 
+On a fresh Lambda-style box, `train/box_setup.sh <commit>` does the whole setup (python3.11, the two venvs on local disk, `HF_HOME` on the NFS mount, `~/forkloop-env.sh`); see its header for the gotchas it encodes.
+
 A single 24–48 GB card is enough for the whole ladder (a 4B student, LoRA r=16):
 
 | Card | Fits | Notes |
