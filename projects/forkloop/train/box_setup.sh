@@ -34,7 +34,13 @@ mkdir -p "$NFS/hf" "$NFS/checkpoints"
 df -h "$NFS" | tail -1
 
 echo "== repo at $CLONE @ $COMMIT (local disk)"
-if [ ! -d "$CLONE/.git" ]; then git clone -q "$REPO_URL" "$CLONE"; fi
+if [ ! -d "$CLONE/.git" ]; then
+  if [ -e "$CLONE" ]; then  # run directories may have been rsynced in before the clone (runs/ is git-ignored)
+    git -C "$CLONE" init -q && git -C "$CLONE" remote add origin "$REPO_URL"
+  else
+    git clone -q "$REPO_URL" "$CLONE"
+  fi
+fi
 git -C "$CLONE" fetch -q origin
 git -C "$CLONE" checkout -q "$COMMIT"
 git -C "$CLONE" log --oneline -1
