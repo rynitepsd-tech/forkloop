@@ -94,15 +94,54 @@ def format_table(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def render_png(results: list[dict], path: str | Path, labels: list[str] | None = None, title: str | None = None) -> Path:
+    """Side-by-side grouped bars: one group per rung, one bar per run (percent of episodes that reached it)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    labels = labels or [Path(r["run"]).name for r in results]
+    n_runs = len(results)
+    width = 0.8 / max(1, n_runs)
+    xs = list(range(len(RUNGS)))
+    fig, ax = plt.subplots(figsize=(11, 4.5))
+    for i, (r, lab) in enumerate(zip(results, labels)):
+        vals = [r["percent"][k] for k in RUNGS]
+        pos = [x - 0.4 + width * (i + 0.5) for x in xs]
+        bars = ax.bar(pos, vals, width, label=f"{lab} (n={r['n']})")
+        for b, k in zip(bars, RUNGS):
+            c = r["counts"][k]
+            ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 1, str(c), ha="center", va="bottom", fontsize=7)
+    ax.set_xticks(xs)
+    ax.set_xticklabels([k.replace("_", "\n") for k in RUNGS], fontsize=8)
+    ax.set_ylabel("% of episodes reaching the rung")
+    ax.set_ylim(0, 108)
+    ax.set_title(title or "Milestone staircase, family 3 (resolve_denial), held-out seeds 200-229")
+    ax.legend(fontsize=8, loc="upper right")
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("runs", nargs="+")
     p.add_argument("--all-attempts", action="store_true")
     p.add_argument("--json", default=None)
+    p.add_argument("--png", default=None, help="write a side-by-side bar chart of the runs (needs matplotlib)")
+    p.add_argument("--labels", default=None, help="comma-separated legend labels for --png (default: run ids)")
+    p.add_argument("--title", default=None, help="chart title for --png")
     p.add_argument("--episodes", action="store_true", help="also print one line per episode")
     a = p.parse_args()
     results = [staircase(r, include_superseded=a.all_attempts) for r in a.runs]
     print(format_table(results))
+    if a.png:
+        labels = [x.strip() for x in a.labels.split(",")] if a.labels else None
+        print("wrote", render_png(results, a.png, labels=labels, title=a.title))
     for r in results:
         if not r["has_ui_milestones"]:
             print(f"\n{r['run']}: no ui_milestones in its verdicts (recorded before 2026-09-05): the database rungs "
