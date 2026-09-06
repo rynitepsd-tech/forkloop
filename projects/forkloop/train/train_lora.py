@@ -508,6 +508,11 @@ def train(args: argparse.Namespace) -> dict:
         print("[train_lora] smoke: first example prompt (tail) ...\n" + processor.apply_chat_template(
             ex0["prompt_messages"], tokenize=False, add_generation_prompt=True)[-600:])
         print("[train_lora] smoke: first example target: " + ex0["target"])
+        b0 = collate([ex0])
+        kept = b0["labels"][0][b0["labels"][0] != -100]
+        tok = getattr(processor, "tokenizer", processor)
+        print(f"[train_lora] smoke: {int(kept.numel())} label tokens in the loss; decoded: "
+              + repr(tok.decode(kept.tolist()))[:400])
     micro_per_epoch = len(loader)
     steps_per_epoch = max(1, math.ceil(micro_per_epoch / args.grad_accum))
     total_steps = max(1, int(math.ceil(args.epochs * steps_per_epoch)))
