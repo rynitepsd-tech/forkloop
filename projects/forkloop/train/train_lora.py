@@ -205,13 +205,17 @@ def target_text(record: dict, style: str) -> str:
     from forkloop.policies.action_parse import parse_compact
 
     target = str(record["target"])
+    # recipe v2-reasoning (make_sft --with-reasoning): the teacher's reasoning line precedes the action,
+    # exactly the shape base Fara replies in (prose, then the tool call); "" falls back to the action alone.
+    reasoning = str(record.get("reasoning") or "").strip()
+    prefix = reasoning + "\n" if reasoning else ""
     if style == "compact":
-        return target
+        return prefix + target
     action, err = parse_compact(target)
     if action is None:
-        return target
+        return prefix + target
     if style == "json":
-        return "```json\n" + json.dumps(action, ensure_ascii=False) + "\n```"
+        return prefix + "```json\n" + json.dumps(action, ensure_ascii=False) + "\n```"
     # fara
     t = action["type"]
     args: dict[str, Any]
@@ -243,7 +247,7 @@ def target_text(record: dict, style: str) -> str:
         args = {"action": "terminate", "status": "success" if action.get("success", True) else "failure",
                 "answer": action.get("note") or ("Task completed." if action.get("success", True) else "Task failed.")}
     body = json.dumps({"name": "computer_use", "arguments": args}, ensure_ascii=False)
-    return "<tool_call>\n" + body + "\n</tool_call>"
+    return prefix + "<tool_call>\n" + body + "\n</tool_call>"
 
 
 def build_messages(record: dict, style: str, history_k: int, image_size: tuple[int, int],

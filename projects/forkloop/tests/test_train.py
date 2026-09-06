@@ -429,3 +429,17 @@ def test_bakeoff_markdown_and_nvidia_fallback(monkeypatch, tmp_path: Path, capsy
     assert "train.eval" in out and "train.train_lora" in out and "--smoke" in out
     assert (tmp_path / "bo" / "bakeoff.md").exists() and (tmp_path / "bo" / "bakeoff.json").exists()
     assert bakeoff.main(["--example-config"]) == 0
+
+
+def test_make_sft_with_reasoning_and_v2_target():
+    from train.make_sft import reasoning_from_raw
+    from train.train_lora import target_text
+
+    assert reasoning_from_raw('I will open the tab.  \nkey("ctrl+t")') == "I will open the tab."
+    assert reasoning_from_raw('key("ctrl+t")') == ""
+    assert reasoning_from_raw("The number is **AUTH-1**.\nSwitch tabs.\nclick(1, 2)") == "The number is **AUTH-1**. Switch tabs."
+    rec = {"target": "click(640, 360)", "reasoning": "The number is AUTH-1."}
+    out = target_text(rec, "fara")
+    assert out.startswith("The number is AUTH-1.\n<tool_call>") and out.endswith("</tool_call>")
+    assert target_text({"target": "click(640, 360)"}, "fara").startswith("<tool_call>")
+    assert target_text(dict(rec, reasoning=""), "compact") == "click(640, 360)"

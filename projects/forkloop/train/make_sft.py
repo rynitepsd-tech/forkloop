@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -79,6 +80,8 @@ class Stats:
     instructions_changed: int = 0  # ... of which differ from the stored manifest text
     exclude_seeds: str | None = None
     rerender_world: str | None = None
+    recipe: str = "v1-actions-only"  # v2-reasoning: records carry the teacher's reasoning line for the assistant turn
+    steps_with_reasoning: int = 0
     episodes_failed: int = 0
     episodes_kept: int = 0
     episodes_dropped_by_limit: int = 0
@@ -156,6 +159,20 @@ def iter_episodes(run_dir: Path, stats: Stats | None = None) -> Iterator[Episode
         yield Episode(run_dir=run_dir, episode_dir=ep_dir, manifest=manifest, verdict=verdict, steps=steps, bad_lines=bad)
 
 
+_ACTION_LINE = re.compile(r"^\s*(\w+)\s*\((.*)\)\s*$", re.S)
+
+
+def reasoning_from_raw(raw: object) -> str:
+    """The teacher's reasoning text from a step's ``raw_action``: every line except the trailing
+    compact action line, whitespace-normalised, untruncated. Empty when the reply was action-only."""
+    if not isinstance(raw, str):
+        return ""
+    lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
+    if lines and _ACTION_LINE.match(lines[-1]):
+        lines = lines[:-1]
+    return " ".join(" ".join(lines).split())
+
+
 def _target_for(step: dict) -> str | None:
     action = step.get("action")
     if isinstance(action, dict):
@@ -170,7 +187,7 @@ def _target_for(step: dict) -> str | None:
 
 
 def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: Stats | None = None,
-                    instruction: str | None = None) -> list[dict]:
+                    instruction: str | None = None, with_reasoning: bool = False) -> list[dict]:
     """One record per (valid) step of an episode. ``instruction`` replaces the manifest's stored text
     (``--rerender-instructions``: the current generator wording for the same seed)."""
     m = ep.manifest
@@ -215,6 +232,12 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
             "target": target,
             "step": int(step.get("i", len(out))),
         })
+        if with_reasoning:
+            reasoning = reasoning_from_raw(step.get("raw_action"))
+            rec["reasoning"] = reasoning  # "" when the teacher replied with the action only
+            rec["recipe"] = "v2-reasoning"
+            if stats is not None and reasoning:
+                stats.steps_with_reasoning += 1
         out.append(rec)
         if stats is not None:
             action = step.get("action")
@@ -273,6 +296,7 @@ def build_sft_records(
     min_reward: float = 1.0,
     keep_invalid: bool = False,
     rerender_world: str | None = None,
+    with_reasoning: bool = False,
 ) -> tuple[list[dict], Stats]:
     """Collect SFT records from one or more run directories.
 
@@ -284,6 +308,7 @@ def build_sft_records(
     after the trajectories were recorded).
     """
     stats = Stats()
+    stats.recipe = "v2-reasoning" if with_reasoning else "v1-actions-only"
     stats.exclude_seeds = exclude_seeds or None
     stats.rerender_world = rerender_world or None
     fam_set = {f.strip() for f in families if f.strip()} if families else None
@@ -329,7 +354,8 @@ def build_sft_records(
             stats.instructions_rerendered += 1
             if instruction != str(ep.manifest.get("instruction", "")):
                 stats.instructions_changed += 1
-        recs = episode_records(ep, history_k=history_k, keep_invalid=keep_invalid, stats=stats, instruction=instruction)
+        recs = episode_records(ep, history_k=history_k, keep_invalid=keep_invalid, stats=stats, instruction=instruction,
+                               with_reasoning=with_reasoning)
         records.extend(recs)
         fam_counter[str(ep.manifest.get("family"))] += 1
         split_counter[str(ep.manifest.get("split"))] += 1
@@ -364,6 +390,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--exclude-split", action="append", default=[], help="fnmatch pattern of splits to drop (repeatable), e.g. 'heldout_*'")
     p.add_argument("--exclude-seeds", default=None,
                    help="seed ranges to drop whatever the split, e.g. '200-229,200000+' (the held-out evaluation seeds)")
+    p.add_argument("--with-reasoning", action="store_true",
+                   help="recipe v2-reasoning: add the teacher's reasoning line (from raw_action) to each record so the "
+                        "assistant turn is reasoning-then-action instead of the action alone")
     p.add_argument("--rerender-instructions", default=None, metavar="WORLD",
                    help="replace each stored instruction with WORLD's current generator text for the same seed")
     p.add_argument("--history-k", type=int, default=8, help="previous actions kept in each record's history")
@@ -382,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     records, stats = build_sft_records(
         run_dirs, limit=args.limit, families=families, exclude_splits=args.exclude_split,
         history_k=args.history_k, min_reward=args.min_reward, keep_invalid=args.keep_invalid,
-        exclude_seeds=args.exclude_seeds, rerender_world=args.rerender_instructions,
+        exclude_seeds=args.exclude_seeds, rerender_world=args.rerender_instructions, with_reasoning=args.with_reasoning,
     )
     if args.exclude_seeds:
         ranges = parse_seed_ranges(args.exclude_seeds)
@@ -397,7 +426,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({"out": str(args.out), "records": n, "episodes_kept": stats.episodes_kept,
                       "episodes_seen": stats.episodes_seen, "episodes_filtered_seed": stats.episodes_filtered_seed,
                       "instructions_rerendered": stats.instructions_rerendered,
-                      "instructions_changed": stats.instructions_changed, "stats": str(stats_path)}, indent=2))
+                      "instructions_changed": stats.instructions_changed, "recipe": stats.recipe,
+                      "steps_with_reasoning": stats.steps_with_reasoning, "stats": str(stats_path)}, indent=2))
     return 0
 
 
