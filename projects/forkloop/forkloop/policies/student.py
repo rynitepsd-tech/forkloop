@@ -212,6 +212,32 @@ def build_system_prompt(style: str, width: int, height: int, *, fara_allowed: tu
     raise ValueError(f"unknown prompt_style {style!r}; expected one of {PROMPT_STYLES}")
 
 
+def fara_allowed_actions(nav_macro: bool, base: tuple[str, ...] = FARA_DEFAULT_ALLOWED) -> tuple[str, ...]:
+    """The Fara actions advertised in the tool schema: the default set, plus ``visit_url`` /
+    ``history_back`` when the navigation macro is on (``StudentPolicy(nav_macro=True)``).
+    Shared with ``train.train_lora`` so a training prompt matches the serving prompt."""
+    allowed = tuple(base)
+    if nav_macro:
+        allowed = allowed + tuple(a for a in ("visit_url", "history_back") if a not in allowed)
+    return allowed
+
+
+def format_prompt_override(text: str, coord_size: tuple[int, int], fara_allowed: tuple[str, ...]) -> str:
+    """Fill a ``--system-prompt-file`` template: ``{w}``/``{h}``/``{w1}``/``{h1}`` for the
+    coordinate space, ``{fara_identity}`` and ``{fara_tools}`` for Fara's trained pieces.
+    Other braces are left alone."""
+    w, h = int(coord_size[0]), int(coord_size[1])
+    out = text
+    for k, v in (("{w1}", w - 1), ("{h1}", h - 1), ("{w}", w), ("{h}", h)):
+        out = out.replace(k, str(v))
+    if "{fara_identity}" in out:
+        out = out.replace("{fara_identity}", FARA_IDENTITY)
+    if "{fara_tools}" in out:
+        tool = fara_computer_use_tool(w, h, fara_allowed)
+        out = out.replace("{fara_tools}", FARA_FN_CALL_FORMAT.replace("{tool_descs}", json.dumps(tool, ensure_ascii=False)))
+    return out
+
+
 _ACT_RE = re.compile(r"^\s*(\w+)\s*\((.*)\)\s*$", re.S)
 
 
@@ -447,10 +473,7 @@ class StudentPolicy:
         #: then advertises both. Only meaningful with ``prompt_style="fara"``.
         self.nav_macro = bool(nav_macro)
         self._queue: list[tuple[dict, str]] = []
-        allowed = tuple(fara_allowed)
-        if self.nav_macro:
-            allowed = allowed + tuple(a for a in ("visit_url", "history_back") if a not in allowed)
-        self.fara_allowed = allowed
+        self.fara_allowed = fara_allowed_actions(self.nav_macro, tuple(fara_allowed))
         #: Policy-side text appended to every instruction the model sees (``collect
         #: --instruction-note``). The world and the recorded task are untouched; the note is
         #: a prompt-engineering knob and is recorded in run.json ``policy_options``. Measured
@@ -691,16 +714,7 @@ class StudentPolicy:
         ``<tools>`` block with the ``computer_use`` schema for this coordinate space and the
         policy's allowed actions (so ``nav_macro`` still advertises ``visit_url``).
         """
-        w, h = int(coord_size[0]), int(coord_size[1])
-        out = self.system_prompt_override
-        for k, v in (("{w1}", w - 1), ("{h1}", h - 1), ("{w}", w), ("{h}", h)):
-            out = out.replace(k, str(v))
-        if "{fara_identity}" in out:
-            out = out.replace("{fara_identity}", FARA_IDENTITY)
-        if "{fara_tools}" in out:
-            tool = fara_computer_use_tool(w, h, self.fara_allowed)
-            out = out.replace("{fara_tools}", FARA_FN_CALL_FORMAT.replace("{tool_descs}", json.dumps(tool, ensure_ascii=False)))
-        return out
+        return format_prompt_override(self.system_prompt_override, coord_size, self.fara_allowed)
 
     async def _post(self, body: dict) -> dict:
         self.n_requests += 1

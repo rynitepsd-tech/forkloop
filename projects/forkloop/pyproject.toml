@@ -30,7 +30,7 @@ dependencies = [
 world = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1", "python-multipart>=0.0.9", "itsdangerous>=2.1"]
 teacher = ["anthropic>=0.40"]
 student = ["openai>=1.40"]
-train = ["torch>=2.3", "transformers>=4.45", "peft>=0.12", "accelerate>=0.33", "datasets>=2.20", "matplotlib>=3.8"]
+train = ["torch>=2.3", "torchvision>=0.18", "transformers>=4.45", "peft>=0.12", "accelerate>=0.33", "datasets>=2.20", "matplotlib>=3.8"]
 plots = ["matplotlib>=3.8"]
 gym = ["gymnasium>=0.29"]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "fastapi>=0.110", "jinja2>=3.1", "python-multipart>=0.0.9", "itsdangerous>=2.1", "httpx>=0.27", "matplotlib>=3.8", "uvicorn>=0.29"]

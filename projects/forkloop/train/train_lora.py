@@ -111,7 +111,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--num-workers", type=int, default=0)
     p.add_argument("--merge-out", default=None, help="also write a merged full model here for vLLM")
-    p.add_argument("--smoke", action="store_true", help=f"run {SMOKE_STEPS} steps on {SMOKE_EXAMPLES} examples")
+    p.add_argument("--system-prompt-file", default=None,
+                   help="system prompt template the student will be SERVED with (collect --system-prompt-file); "
+                        "{fara_identity}/{fara_tools}/{w}/{h} placeholders as in forkloop.policies.student")
+    p.add_argument("--instruction-note", default=None,
+                   help="text appended to every instruction, exactly as collect --instruction-note does at eval time")
+    p.add_argument("--nav-macro", action="store_true",
+                   help="advertise visit_url/history_back in the fara tool schema, as collect --nav-macro does")
+    p.add_argument("--smoke", action="store_true",
+                   help=f"smoke run: defaults to {SMOKE_STEPS} steps on {SMOKE_EXAMPLES} examples unless --limit / "
+                        "--max-steps are given; prints per-example token counts")
     return p
 
 
@@ -238,10 +247,17 @@ def target_text(record: dict, style: str) -> str:
 
 
 def build_messages(record: dict, style: str, history_k: int, image_size: tuple[int, int],
-                   coord_space: str = "auto") -> tuple[list[dict], list[dict], str]:
-    """``(prompt_messages, full_messages, target_text)`` in HF chat-template form."""
+                   coord_space: str = "auto", *, system_prompt_template: str | None = None,
+                   instruction_note: str | None = None, nav_macro: bool = False) -> tuple[list[dict], list[dict], str]:
+    """``(prompt_messages, full_messages, target_text)`` in HF chat-template form.
+
+    ``system_prompt_template`` / ``instruction_note`` / ``nav_macro`` reproduce the serving-time
+    prompt of ``StudentPolicy(system_prompt=..., instruction_note=..., nav_macro=...)`` so the
+    training chat is byte-for-byte the chat the model sees at evaluation.
+    """
     from forkloop.policies.action_parse import parse_compact, scale_coords, to_compact
-    from forkloop.policies.student import build_system_prompt, build_user_text
+    from forkloop.policies.student import (build_system_prompt, build_user_text, fara_allowed_actions,
+                                           format_prompt_override)
 
     cw, ch = _coord_size(coord_space, style, image_size)
     rec = dict(record)
@@ -256,10 +272,18 @@ def build_messages(record: dict, style: str, history_k: int, image_size: tuple[i
             a, _ = parse_compact(str(h))
             hist.append(to_compact(scale_coords(a, screen, (cw, ch))) if a is not None else h)
         rec["history"] = hist
-    system = build_system_prompt(style, cw, ch)
+    allowed = fara_allowed_actions(nav_macro)
+    if system_prompt_template:
+        system = format_prompt_override(system_prompt_template, (cw, ch), allowed)
+    else:
+        system = build_system_prompt(style, cw, ch, fara_allowed=allowed)
     history = list(rec.get("history") or [])
     history = history[-history_k:] if history_k > 0 else []
-    user_text = build_user_text(str(rec.get("instruction", "")), history, style, step=rec.get("step"))
+    instruction = str(rec.get("instruction", ""))
+    note = (instruction_note or "").strip()
+    if note:
+        instruction = instruction.rstrip() + "\n\n" + note  # StudentPolicy.build_messages does exactly this
+    user_text = build_user_text(instruction, history, style, step=rec.get("step"))
     target = target_text(rec, style)
     prompt = [
         {"role": "system", "content": [{"type": "text", "text": system}]},
@@ -273,12 +297,16 @@ class SFTExamples:
     """Map-style dataset (works with ``torch.utils.data.DataLoader`` without importing torch here)."""
 
     def __init__(self, records: list[dict], *, max_image_side: int, style: str, history_k: int,
-                 coord_space: str = "auto") -> None:
+                 coord_space: str = "auto", system_prompt_template: str | None = None,
+                 instruction_note: str | None = None, nav_macro: bool = False) -> None:
         self.records = records
         self.max_image_side = max_image_side
         self.style = style
         self.history_k = history_k
         self.coord_space = coord_space
+        self.system_prompt_template = system_prompt_template
+        self.instruction_note = instruction_note
+        self.nav_macro = nav_macro
 
     def __len__(self) -> int:
         return len(self.records)
@@ -286,7 +314,9 @@ class SFTExamples:
     def __getitem__(self, idx: int) -> dict:
         rec = self.records[idx]
         image = load_image(rec["images"][0], self.max_image_side)
-        prompt, full, target = build_messages(rec, self.style, self.history_k, image.size, self.coord_space)
+        prompt, full, target = build_messages(rec, self.style, self.history_k, image.size, self.coord_space,
+                                              system_prompt_template=self.system_prompt_template,
+                                              instruction_note=self.instruction_note, nav_macro=self.nav_macro)
         return {"image": image, "prompt_messages": prompt, "full_messages": full, "target": target}
 
 
@@ -303,6 +333,13 @@ def make_collate(processor):
     if pad_id is None:
         pad_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 0
     eos = tokenizer.eos_token or ""
+    image_token = getattr(processor, "image_token", None) or "<|image_pad|>"
+    try:
+        image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+    except Exception:
+        image_token_id = None
+
+    stats_rows: list[dict] = []  # one entry per example, read by train() for the smoke report / summary
 
     def collate(batch: list[dict]) -> dict:
         encs = []
@@ -320,6 +357,9 @@ def make_collate(processor):
             labels[:n_prompt] = -100
             extras = {k: v for k, v in enc_full.items() if k not in ("input_ids", "attention_mask")}
             encs.append((ids, am, labels, extras))
+            n_img = int((ids == image_token_id).sum()) if image_token_id is not None else -1
+            stats_rows.append({"seq_len": int(ids.shape[0]), "prompt_len": n_prompt,
+                               "target_len": int(ids.shape[0]) - n_prompt, "image_tokens": n_img})
         maxlen = max(int(e[0].shape[0]) for e in encs)
         bsz = len(encs)
         input_ids = torch.full((bsz, maxlen), pad_id, dtype=encs[0][0].dtype)
@@ -333,10 +373,22 @@ def make_collate(processor):
         out: dict[str, Any] = {"input_ids": input_ids, "attention_mask": attention, "labels": labels}
         for key in encs[0][3]:
             vals = [e[3][key] for e in encs if key in e[3]]
-            if vals and all(hasattr(v, "shape") for v in vals):
+            if not vals or not all(hasattr(v, "shape") for v in vals):
+                continue
+            # Per-token extras (e.g. transformers 5's ``mm_token_type_ids``, shape (1, seq_len)) are padded
+            # like input_ids; per-image extras (``pixel_values`` (n_patches, dim), ``image_grid_thw``) concatenate.
+            per_token = all(v.dim() >= 2 and int(v.shape[0]) == 1 and int(v.shape[1]) == int(e[0].shape[0])
+                            for v, e in zip(vals, encs))
+            if per_token and bsz > 1:
+                padded = torch.zeros((bsz, maxlen) + tuple(vals[0].shape[2:]), dtype=vals[0].dtype)
+                for i, v in enumerate(vals):
+                    padded[i, : int(v.shape[1])] = v[0]
+                out[key] = padded
+            else:
                 out[key] = torch.cat(vals, dim=0)
         return out
 
+    collate.stats_rows = stats_rows  # type: ignore[attr-defined]
     return collate
 
 
@@ -407,9 +459,9 @@ def train(args: argparse.Namespace) -> dict:
         data_path = make_synthetic_records(out_dir / "synthetic")
     limit = args.limit
     max_steps = args.max_steps
-    if args.smoke:
-        limit = SMOKE_EXAMPLES if limit is None else min(limit, SMOKE_EXAMPLES)
-        max_steps = SMOKE_STEPS if max_steps is None else min(max_steps, SMOKE_STEPS)
+    if args.smoke:  # explicit --limit / --max-steps win; the tiny defaults are for a laptop check
+        limit = SMOKE_EXAMPLES if limit is None else limit
+        max_steps = SMOKE_STEPS if max_steps is None else max_steps
     records = load_records(data_path, limit=limit)
     if not records:
         raise SystemExit(f"no records in {data_path}")
@@ -439,10 +491,19 @@ def train(args: argparse.Namespace) -> dict:
             model.enable_input_require_grads()
     model.train()
 
+    system_prompt_template = Path(args.system_prompt_file).read_text(encoding="utf-8") if args.system_prompt_file else None
     dataset = SFTExamples(records, max_image_side=args.max_image_side, style=args.prompt_style,
-                          history_k=args.history_k, coord_space=args.coord_space)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=make_collate(processor),
+                          history_k=args.history_k, coord_space=args.coord_space,
+                          system_prompt_template=system_prompt_template, instruction_note=args.instruction_note,
+                          nav_macro=args.nav_macro)
+    collate = make_collate(processor)
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate,
                         num_workers=args.num_workers, drop_last=False)
+    if args.smoke:  # show one rendered chat so template problems are visible before the first step
+        ex0 = dataset[0]
+        print("[train_lora] smoke: first example prompt (tail) ...\n" + processor.apply_chat_template(
+            ex0["prompt_messages"], tokenize=False, add_generation_prompt=True)[-600:])
+        print("[train_lora] smoke: first example target: " + ex0["target"])
     micro_per_epoch = len(loader)
     steps_per_epoch = max(1, math.ceil(micro_per_epoch / args.grad_accum))
     total_steps = max(1, int(math.ceil(args.epochs * steps_per_epoch)))
@@ -489,6 +550,10 @@ def train(args: argparse.Namespace) -> dict:
                 micro += 1
                 running += float(loss.item()) * args.grad_accum
                 running_n += 1
+                if args.smoke and micro <= 8:
+                    rows = getattr(collate, "stats_rows", [])[-args.batch_size:]
+                    print(f"[train_lora] smoke micro {micro}: loss={float(loss.item()) * args.grad_accum:.4f} "
+                          f"tokens={rows} peak_vram_gb={torch.cuda.max_memory_allocated() / 1e9 if use_cuda else 0:.2f}")
                 if micro % args.grad_accum == 0 or micro == micro_per_epoch * (epoch + 1):
                     torch.nn.utils.clip_grad_norm_(params, args.max_grad_norm)
                     optimizer.step()
@@ -531,7 +596,20 @@ def train(args: argparse.Namespace) -> dict:
         "device": str(device), "adapter": str(final), "smoke": bool(args.smoke),
         "lora": {"r": args.lora_r, "alpha": args.lora_alpha, "dropout": args.lora_dropout, "target_modules": target_modules},
         "batch_size": args.batch_size, "grad_accum": args.grad_accum, "lr": args.lr, "max_image_side": args.max_image_side,
+        "epochs": args.epochs, "warmup_ratio": args.warmup_ratio, "weight_decay": args.weight_decay,
+        "max_grad_norm": args.max_grad_norm, "seed": args.seed, "history_k": args.history_k,
+        "coord_space": args.coord_space, "dtype": args.dtype, "attn": args.attn,
+        "gradient_checkpointing": not args.no_gradient_checkpointing,
+        "system_prompt_file": args.system_prompt_file, "instruction_note": args.instruction_note, "nav_macro": args.nav_macro,
+        "losses": losses,
     }
+    rows = getattr(collate, "stats_rows", [])
+    if rows:
+        def _agg(key: str) -> dict:
+            vals = [r[key] for r in rows]
+            return {"min": min(vals), "max": max(vals), "mean": sum(vals) / len(vals)}
+        summary["tokens"] = {"examples_tokenised": len(rows), "seq_len": _agg("seq_len"),
+                             "image_tokens": _agg("image_tokens"), "target_len": _agg("target_len")}
     if args.merge_out:
         merged = model.merge_and_unload()
         merged.save_pretrained(args.merge_out)
