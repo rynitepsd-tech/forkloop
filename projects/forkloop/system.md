@@ -53,7 +53,7 @@ artifact; the measurements themselves have not been taken yet (README
 
 ```
 projects/forkloop/
-  pyproject.toml            package "forkloop", extras: dev, world, teacher, student, train, plots, gym
+  pyproject.toml            package "forkloop", extras: dev, world, teacher, student, train (torch, torchvision, transformers, peft), plots, gym
   README.md · CLAUDE.md · system.md (this file)
   forkloop/                 the library (§4)
     backends/{base,fake,solari}.py
@@ -70,17 +70,19 @@ projects/forkloop/
     claims_ops_v1/portal/     FastAPI app, schema, base data, templates, css
     claims_ops_v1/openemr/    install.sh, shim_schema.sql, base_data, openemr_sql helpers
     claims_ops_v1/tasks/      common.py + one module per family
-  train/                    make_sft, train_lora, eval, plot, bakeoff, wilson, README, examples/
+  train/                    make_sft, train_lora, eval, plot, bakeoff, wilson, box_setup.sh (one-command GPU box setup), README, examples/
   scripts/                  inspect_episode (failure triage), episode_table, compare_teachers, audit_probe (replay + OpenEMR log dump),
                             chrome_crash_probe, solari_verify_fork (re-check revert/snapshot/disk on a golden fork), gui_episode,
                             student_click_check (one fork, one student click, the four coordinate-space values + a crosshair PNG),
                             classify_failures (a run's failed episodes into the bake-off classes: invalid/parse, wrong-record,
                             transcription, decoy, budget-sane, budget-looping),
                             milestone_staircase (per-run percentage of episodes reaching each UI rung from
-                            verdict.details.ui_milestones, plus the trajectory rungs login_page / auth_typed)
+                            verdict.details.ui_milestones, plus the trajectory rungs login_page / auth_typed; --png draws
+                            several runs side by side, e.g. docs/images/staircase-f3-ladder.png)
   spikes/                   _common.py, spike_00..06, run_all.sh
-  tests/                    210 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
-  docs/                     HANDOFF (read first), contracts, spikes (results ledger), solari-repro, solari-message, cost, limitations, buildlog
+  tests/                    211 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
+  docs/                     HANDOFF (read first), contracts, spikes (results ledger incl. the SFT ladder table), solari-repro, solari-message,
+                            cost, limitations, buildlog, student-2026-09-05/06 (student ledgers), images/ (charts)
 examples/desktop-snapshot-revert-py/   the cookbook example (outside the project dir)
 ```
 
@@ -492,7 +494,10 @@ cost is an upper bound.
   identity and `computer_use` schema through the `{fara_identity}` / `{fara_tools}`
   placeholders (`prompts/fara_no_user_v1.md`: the critical-points text replaced
   by a no-user rule, the v5 world conventions appended), every one of these knobs
-  is recorded in `run.json` under `policy_options`, and a history-based loop warning (three near-identical pointer
+  is recorded in `run.json` under `policy_options`; the module-level helpers `fara_allowed_actions(nav_macro)` and
+  `format_prompt_override(text, coord_size, allowed)` do the tool-enum and placeholder work so `train/train_lora.py`
+  renders the same system prompt at training time (2026-09-05: verified byte-for-byte, 3,150 prompt tokens for the
+  same screenshot in training and in the vLLM probe), and a history-based loop warning (three near-identical pointer
   actions, three waits, an alternating pair, or five consecutive scrolls in
   one direction whatever their coordinates) appends a "do not repeat" line. The model's reasoning precedes the action inside `raw_action`
   (`policy_note` stays empty), which is what `scripts/inspect_episode.py`
@@ -663,16 +668,54 @@ episodes never collide with each other or with the base data (100001+).
 
 ## 6. Training ladder (`train/`)
 
-`make_sft.py` (verified episodes → per-step records, `--limit` for
-checkpoints, split exclusion), `train_lora.py` (transformers + peft LoRA for
-Qwen3.5-based VLMs including Fara 1.5; prompt-token masking; `--smoke`;
-imports without torch; rewrites targets into the chosen prompt style and
-coordinate space), `eval.py` (held-out episodes through the real `Env`, N
-sampling seeds, Wilson CIs, optional best-of-N, `eval_summary.json`),
-`plot.py` (`chart1` learning curve, `chart2` reset benchmark, `--demo`
-synthetic placeholders), `bakeoff.py` (base success, action-format validity,
-tokens/step, VRAM, LoRA smoke → markdown table), `wilson.py`, `README.md`
-(rungs 1, 2, 2.5, 3 with commands and GPU guidance).
+`make_sft.py` turns verified episodes (`reward == 1.0`, selected attempts only) into one record per valid step,
+sorted by `task_id` so `--limit 25/50/94` are nested prefixes. Since 2026-09-05/06 it also has
+`--rerender-instructions <world>` (the instruction comes from the world's current generator for the same seed, the
+`task_id` must match; 0 of 115 family-3 instructions differed, the 09-05 wording change was the policy-side note),
+`--exclude-seeds '200-229,200000+'` (drops the held-out evaluation seeds whatever the split and refuses to write a
+file that leaks one; the stats file records `episodes_filtered_seed`), and `--with-reasoning`, which tags the file
+`recipe: v2-reasoning` and stores the teacher's reasoning line from `raw_action` (everything before the trailing
+compact action line, untruncated) in each record; without it the recipe is `v1-actions-only`.
+
+`train_lora.py` (transformers + peft LoRA r=16 on every attention/MLP projection of the language model; Qwen3.5-based
+VLMs including Fara 1.5; imports without torch) renders each record as the chat the student is **served** with:
+`--prompt-style fara --coord-space norm1000` rescales targets and history into Fara's 1000×1000 space, and
+`--system-prompt-file`, `--instruction-note`, `--nav-macro` reproduce `StudentPolicy`'s system prompt (placeholders,
+tool enum with `visit_url`) and the note appended to the instruction. Labels mask every prompt token; the assistant
+turn is the tool call (v1) or the reasoning line then the tool call (v2), rendered by the Fara chat template as
+`<think>\n\n</think>\n\n` + content, so the served model, whose generation prompt ends in `<think>\n`, learns to close
+the think block and reply the way base Fara replies (prose, then `<tool_call>`; the parser handled 2,432 such
+replies with 0 invalid actions). `--smoke` defaults to 4 examples / 2 steps but honours explicit `--limit` /
+`--max-steps`, prints the rendered prompt tail, the decoded label tokens and per-example token counts (a 1280×720
+screenshot is 880 image tokens; the fair prompt is ≈ 3.2–3.3k tokens per example; targets average 35 tokens in v1
+and 60 in v2). The collate pads per-token extras (transformers 5's `mm_token_type_ids`) instead of concatenating
+them, which is what made batch sizes above 1 crash. `train_summary.json` records every hyperparameter, the loss
+curve, token statistics and peak VRAM; `train_log.jsonl` has one line per `--log-steps`.
+
+Measured throughput (`docs/spikes.md`, 2026-09-05/06): forward+backward with gradient checkpointing is
+6.9 s per example on an RTX A6000 (19–21 GB at batch 1, 30–34 GB at batch 2) and 3.0 s on an H100 80 GB
+(59 GB at batch 4); without checkpointing a single 3.3k-token example needs 74 GB. Attention is `sdpa` on both the
+text and the vision tower (verified; flash-attn 2 is not installed, `eager` is 1.5× slower). A 25-episode rung
+(1,758 records, 2 epochs, effective batch 8) is 440 optimiser steps: 5.5 h on the A6000, 2.3 h on the H100.
+
+`train/box_setup.sh <commit>` sets a fresh Lambda-style box up in one command: python3.11 from apt (the image ships
+3.10), the repo cloned on the local disk (tolerating run directories rsynced in first), a `venv` for training and a
+separate `venv-vllm` (vLLM pins its own torch; its JIT needs `ninja` on PATH), `HF_HOME` on the persistent NFS mount
+and a `~/forkloop-env.sh` to source. The runs referenced by the SFT records (≈ 1.9 GB of PNGs for the two family-3
+teacher runs) travel with the repo by rsync; record paths are rewritten to the box prefix with `sed` and both hashes
+are kept in the run's `run.json`.
+
+`eval.py` (held-out episodes through the real `Env`, N sampling seeds, Wilson CIs, optional best-of-N,
+`eval_summary.json`) exists, but the ladder rungs so far were evaluated with `forkloop collect` and the exact fair
+flags of the base run (`--nav-macro`, `fara_no_user_v1.md`, the credentials note, 120 steps / 900 s, greedy,
+retries off) so every row shares one serving stack: the checkpoint's merged model under vLLM on the GPU box,
+reached from the Mac through an SSH tunnel (`--student-url http://127.0.0.1:8011/v1`, ≈ 0.8 s per call). Results
+live in `docs/spikes.md` ("SFT ladder" table) and `docs/buildlog.md`: base 0/30, ckpt-25 v1 (actions-only, the
+ablation row) 0/30 with the staircase flipped (0/30 logins, 19/30 appeals filed with an invented number), ckpt-25 v2
+(reasoning targets) 0/30 with the OpenEMR path back (13/30 logins, 9/30 documents) but `auth_typed` still 0/30 and
+13/30 invented numbers, 12 of them memorised training numbers. `plot.py` (`chart1` learning curve, `chart2` reset
+benchmark, `--demo` synthetic placeholders), `bakeoff.py` (base success, action-format validity, tokens/step, VRAM,
+LoRA smoke → markdown table), `wilson.py`, `README.md` (rungs 1, 2, 2.5, 3 with commands and GPU guidance).
 
 ## 7. Spikes (`spikes/`)
 
@@ -693,7 +736,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-210 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
+211 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
 
 | File | Covers |
 | --- | --- |
@@ -702,7 +745,7 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | `test_core_toy.py` (23) | action parsing, registry, full episode + recorder + exporters + metrics, collateral and direct-DB verdicts, budget/invalid truncation, revert restores state, fork mode, best-of-N adoption, random policy, Wilson, orphan reaping (and that a branch pool never reaps its parent's machine), fork search leaves the main worker alive, a slow revert replaces the machine but keeps revert mode |
 | `test_claims_ops_world.py` (15) | generator determinism and split disjointness, manifest round-trip, the `resolve_denial_easy` variant (page 1, no distractors, same patient/claim/number per seed, deterministic), resolve_denial success and rejections (wrong number, duplicate, wrong claim, direct write, forbidden screen), update_insurance both-systems logic, reschedule oracle incl. provider change, an OpenEMR-style audit row logged under patient 0 (accepted, plain and base64-encoded) vs one naming neither table nor pk (caught, with the audit rows kept in the verdict), the Chrome relaunch waits/verifies/raises, insurance rows carry subscriber sex/address, concurrent golden build, the UI milestone rungs from seeded audit rows (login success/failure, patient-keyed rows, base64 request paths, portal page views, the appeal) on a verified and on a failed episode without touching the reward, and `scripts/milestone_staircase.py` on a recorded run (with and without the rungs) |
 | `test_collect_retry.py` (6) | `collect --retry-failed` on the fake backend: only unverified seeds re-run, retries stop once verified, `--retry-failed 0` is one pass, `select_attempts` prefers the shortest verified and ties to the earliest, exporters/metrics see one attempt per seed while cost counts all, `Recorder.update_meta` |
-| `test_student_policy.py`, `test_train.py` (106) | every parser style, coordinate scaling, mocked vLLM transport, the Fara navigation macro (`visit_url` → four queued contract actions with one model call, `history_back` → alt+Left, tool enum advertises both, a new episode drops a half-finished macro) and `fara_call_name_args`, loop warnings incl. same-direction scroll loops, `--instruction-note` (appended policy-side, observation untouched, in `describe()`), a prompt file with `{fara_identity}` / `{fara_tools}` (identity and tool enum kept, critical points gone), make_sft/limits/splits, Wilson, plots, train_lora import without torch, eval through the real env |
+| `test_student_policy.py`, `test_train.py` (107) | every parser style, coordinate scaling, mocked vLLM transport, the Fara navigation macro (`visit_url` → four queued contract actions with one model call, `history_back` → alt+Left, tool enum advertises both, a new episode drops a half-finished macro) and `fara_call_name_args`, loop warnings incl. same-direction scroll loops, `--instruction-note` (appended policy-side, observation untouched, in `describe()`), a prompt file with `{fara_identity}` / `{fara_tools}` (identity and tool enum kept, critical points gone), make_sft/limits/splits, the reasoning line extracted from `raw_action` and the v2 reasoning-then-action target, Wilson, plots, train_lora import without torch, eval through the real env |
 | `test_cost_model.py` (10) | verified prices, VM-hours per credit, monotone reset cost, snapshot storage free tier, budget rows |
 
 ## 10. One episode, end to end
@@ -736,8 +779,8 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
 | OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
-| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways; 2026-09-05 with the fair conventions: 30/30 logins, 0/30; base 9B same flags 0/30 with 4/30 charts, 8 s per call, `docs/student-2026-09-06.md`) | vLLM serves it; **or mlx-vlm on the M5 Max Mac** (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
-| LoRA training | `--smoke` needs torch | — | yes | — |
+| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways; 2026-09-05 with the fair conventions: 30/30 logins, 0/30; base 9B same flags 0/30 with 4/30 charts, 8 s per call, `docs/student-2026-09-06.md`; 2026-09-06 through vLLM on the GPU box: base 0/30, ckpt-25 v1 0/30, ckpt-25 v2 0/30, `docs/spikes.md` ladder table) | **vLLM 0.28 on the rented box, reached through an SSH tunnel** (0.8–1.7 s per call); or mlx-vlm on the M5 Max Mac (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
+| LoRA training | `--smoke` needs torch | — | **measured**: RTX A6000 6.9 s/example (ckpt-25 v1, 5.5 h, $6), H100 80 GB 3.0 s/example (ckpt-25 v2, 2.3 h, $7.5); `train/box_setup.sh` | — |
 | Reset benchmark | simulator numbers (labelled) | **revert and fork bars measured on the desktop golden** (n=10 each, p50 100.9 s / 92.0 s, 0 failures; earlier fork-only: sandbox 19.1 s, desktop 25.0 s) | — | — |
 
 ## 12. Verified external facts
