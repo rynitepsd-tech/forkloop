@@ -364,6 +364,23 @@ checksums (portal SQLite + OpenEMR MariaDB, 14 tables) 0.74 s. The
 `revert()` bar is empty because `revert()` is refused on this account (above);
 the local docker-compose bar and the cold-build bar have not been run.
 
+## SFT ladder, family 3 (resolve_denial), held-out seeds 200–229 — the table the README draws from
+
+Every row is one `collect` run with the fair configuration (`--nav-macro`, `fara_no_user_v1.md`, the credentials
+note, 120 steps / 900 s, greedy, retries off) against the same vLLM serving stack; the milestone staircase is
+`scripts/milestone_staircase.py` (chart: `docs/images/staircase-f3-ladder.png`). "invented" = an appeal submitted with
+a number that is neither the task's nor one of its decoys.
+
+| row | recipe | run | success | login | chart | document | auth_typed | invented | portal claim | appeal form | submitted | invalid | loop/budget-out | GPU, wall, $ |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base | — | `fara15-4b-base-vllm-fair-f3-s200-229` (2026-09-06) | **0/30** [0, 11.3] | 30 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0.2 % (8/3,663) | 30 (24 looping) | serve only |
+| ckpt-25 v1 | **v1-actions-only (ablation)**: tool call only, empty `<think>` | `fara15-4b-sft25-fair-f3-s200-229` (2026-09-06) | 0/30 [0, 11.3] | 0 | 0 | 0 | 0 | **19** | 26 | 23 | 19 | 0.0 % (0/1,701) | 11 | A6000, 5.53 h, $6.0 |
+| ckpt-25 v2 | **v2-reasoning**: teacher reasoning line, then the tool call | `fara15-4b-sft25v2-fair-f3-s200-229` (2026-09-06) | 0/30 [0, 11.3] | 13 | 12 | 9 | 0 | 13 | 29 | 19 | 13 | 0.0 % (0/2,432) | 17 (16 looping) | H100, 2.28 h, $7.5 |
+| ckpt-50 v2 | v2-reasoning | not run (gate: `auth_typed` 0/30) | — | | | | | | | | | | | |
+
+The 2026-09-05 mlx-vlm base run (`fara15-4b-fair-f3-s200-229`, 0/30, login 30/30, chart 0/30) is the go/no-go
+number only; the chart uses the vLLM base row.
+
 ## Measured on 2026-09-01 — Free plan, headless sandboxes (spike 0)
 
 The key available for testing is on the **Free** plan: `create_desktop` returns
