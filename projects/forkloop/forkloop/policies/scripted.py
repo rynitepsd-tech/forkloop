@@ -31,7 +31,7 @@ class ScriptedPolicy(BranchablePolicy):
                 a = Action.parse(raw, width=obs.width, height=obs.height)
                 return a, {"raw_action": a.to_compact(), "model_latency_s": 0.0, "note": self.note}
             except InvalidAction as e:
-                return None, {"raw_action": str(raw), "model_latency_s": 0.0, "error": str(e)}
+                return None, {"raw_action": str(raw), "model_latency_s": 0.0, "note": f"invalid action: {e}"}
         a = Action.done(self.done_success)
         return a, {"raw_action": a.to_compact(), "model_latency_s": 0.0}
 
@@ -53,11 +53,11 @@ class CallbackPolicy(BranchablePolicy):
     async def act(self, obs: Observation) -> PolicyResult:
         out = self.fn(obs)
         if out is None:
-            return None, {"raw_action": "", "error": "callback returned None"}
+            return None, {"raw_action": "", "note": "callback returned no action"}
         try:
             a = Action.parse(out, width=obs.width, height=obs.height)
         except InvalidAction as e:
-            return None, {"raw_action": str(out), "error": str(e)}
+            return None, {"raw_action": str(out), "note": f"invalid action: {e}"}
         return a, {"raw_action": a.to_compact(), "model_latency_s": 0.0}
 
 

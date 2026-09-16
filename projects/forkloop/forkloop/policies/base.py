@@ -1,7 +1,12 @@
 """Policy protocol. A policy sees an :class:`Observation` and returns an
 :class:`Action` (or ``None`` when it could not produce a valid one) plus a
 metadata dict: ``raw_action``, ``model_latency_s``, ``tokens``, ``note``,
-``confidence`` (0..1, optional; used by search to decide where to branch)."""
+``confidence`` (0..1, optional; used by search to decide where to branch).
+
+A truthy ``error`` is reserved for provider/runtime failures that prevent a valid
+measurement. Invalid model actions return ``None`` with a diagnostic ``note``;
+policy give-ups return a terminal action. Both remain scored policy behavior.
+"""
 
 from __future__ import annotations
 

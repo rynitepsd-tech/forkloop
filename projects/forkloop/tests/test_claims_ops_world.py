@@ -5,6 +5,7 @@ portal's HTTP routes (what Chrome would do) versus direct DB writes."""
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,20 @@ def test_manifest_roundtrip(world):
     t = generate("update_insurance_reconcile", 9, "train")
     t2 = TaskInstance.from_dict(json.loads(t.to_json()))
     assert t2.to_json() == t.to_json()
+
+
+def test_authorization_validity_covers_the_approved_service_date():
+    for seed, split in [(100, "train"), (200001, "heldout_compositions")]:
+        task = generate("resolve_denial", seed, split)
+        # Read the visible dates from the generated PDF text, not controller labels.
+        document, service = next(
+            (seed_file.content, match.group(1))
+            for seed_file in task.seeding.files
+            if (match := re.search(rb"APPROVED for CPT \d+ on (\d{4}-\d{2}-\d{2})", seed_file.content))
+        )
+        validity = re.search(rb"Valid: (\d{4}-\d{2}-\d{2}) through (\d{4}-\d{2}-\d{2})", document)
+        assert validity is not None
+        assert validity.group(1) <= service <= validity.group(2), (seed, split)
 
 
 # ---------------------------------------------------------------- resolve_denial

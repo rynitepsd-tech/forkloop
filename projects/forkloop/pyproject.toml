@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forkloop"
-version = "0.2.0"
+version = "0.2.1"
 description = "Matched computer-use policy evaluation across OpenEMR and a payer portal, with Solari resets and deterministic database evidence."
 readme = "README.md"
 requires-python = ">=3.11"

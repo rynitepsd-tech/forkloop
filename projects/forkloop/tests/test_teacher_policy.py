@@ -120,6 +120,32 @@ async def test_teacher_request_failure_is_unscored_without_retry(tmp_path):
     assert result["arms"]["B"]["scored"] == 1
 
 
+async def test_teacher_invalid_action_and_turn_limit_remain_scored(tmp_path):
+    from forkloop.backends.fake import FakeBackend
+    from forkloop.comparison import PolicyVariant, run_comparison
+    from forkloop.world import load_world
+
+    client = StubClient([
+        [_tool("bad-click", "left_click", coordinate=[99999, 99999])],
+        [_tool("bad-coordinate", "left_click", coordinate=["not a number", 20])],
+    ])
+    world = load_world("toy-counter")
+    backend = FakeBackend(base_dir=tmp_path / "fake", concurrency_cap=1, gui_factory=world.gui_factory())
+    try:
+        result = await run_comparison(world, backend, [
+            PolicyVariant("turn limit", {"policy": "teacher", "version": "test", "options": {"max_turns": 0}},
+                          lambda: TeacherPolicy(client=client, max_turns=0)),
+            PolicyVariant("invalid action", {"policy": "teacher", "version": "test", "options": {}},
+                          lambda: TeacherPolicy(client=client)),
+        ], [11], output=tmp_path / "comparison", settle_s=0, max_invalid=2)
+    finally:
+        backend.cleanup()
+    assert result["arms"]["A"]["scored"] == result["arms"]["A"]["failures"] == 1
+    assert result["arms"]["B"]["scored"] == result["arms"]["B"]["failures"] == 1
+    assert result["matched_pairs"] == 1
+    assert [cell["status"] for cell in result["cells"]] == ["completed", "completed"]
+
+
 async def test_cache_breakpoint_moves_to_the_newest_user_block(monkeypatch):
     monkeypatch.setattr("forkloop.policies.teacher.resize_png", lambda png, side: (png, 1.0))
     client = StubClient([[_tool("a", "left_click", coordinate=[1, 2])], [_tool("b", "left_click", coordinate=[3, 4])], [_text("DONE")]])

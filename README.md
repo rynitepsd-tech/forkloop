@@ -16,6 +16,13 @@ The report connects the failed check to the typed value and retained screenshot.
 every planned cell and withholds a winner. This is check-summary evidence, not
 a complete replay or a held-out reliability claim.
 
+**[Read the recorded-observation study](projects/forkloop/docs/frozen-v3-evaluation-results.md)**
+— high image detail selected exact authorization typing on 19/20 states, versus
+0/20 with low detail. A separate 18-state development validation made 16 exact
+proposals with no wrong entries and two abstentions under a two-view agreement
+rule. These are saved-state decisions, not live task completion; negative
+verification and magnification findings are included.
+
 The supported product now includes:
 
 - **`forkloop demo`**: five no-account verifier controls, each with an HTML report.

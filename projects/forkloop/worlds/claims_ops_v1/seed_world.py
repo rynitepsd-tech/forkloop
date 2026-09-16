@@ -61,7 +61,8 @@ def _composition(family: str, seed: int, split: str) -> TaskInstance:
     c29 = make_claim(rng, ids, person, status="DENIED", denial_code="CO-29")  # must stay untouched
     real = auth_number(rng)
     decoys = [auth_number(rng) for _ in range(2)]
-    pdf = authorization_letter(rng, person, real, decoys, f"CPT {c197.cpt} on {c197.service_date.isoformat()}")
+    pdf = authorization_letter(rng, person, real, decoys, f"CPT {c197.cpt} on {c197.service_date.isoformat()}",
+                               service_date=c197.service_date)
     name = "authorization_letter_1.pdf"
     openemr_sql = [person.openemr_sql(rng, eid),
                    osql.insert_document(doc_id=eid, pid=person.pid, name=name, size=len(pdf), content_hash=sha256(pdf),

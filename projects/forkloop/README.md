@@ -92,6 +92,11 @@ For your own agent, use `factory: your_importable_module:your_factory`, a nonemp
 
 Policies receive the task instruction, screenshots and action history. They do not receive the expected authorization, SQL, seeding state or oracle specification. Factory identities are caller-attested; recording a model label cannot prove what a remote server actually serves. File-based prompts are captured by content, and the CLI records configuration and policy-source fingerprints.
 
+Policy metadata reserves a truthy `error` for provider/runtime failures that
+prevent measurement. Invalid model output returns `None` with a diagnostic
+`note`; giving up returns a terminal action. Those policy behaviors consume their
+normal budgets and remain scored, rather than disappearing from the denominator.
+
 Validate configuration before a live run:
 
 ```bash
@@ -165,11 +170,20 @@ A reward of 1 means the configured effects and invariants passed on that backend
 
 The product is the evaluation workflow, not a claimed small-model training breakthrough.
 
+[The September 16 recorded-observation study](docs/frozen-v3-evaluation-results.md)
+found exact authorization typing on 19/20 states with high image detail versus
+0/20 with low detail. Additional verbal verification did not repair the error;
+uniform magnification repaired it but corrupted a previously correct answer.
+A rule frozen before a separate 18-state development validation withheld
+disagreeing readings: 16 exact entries, zero wrong entries, two abstentions,
+including one withheld correct high-detail answer. None of these proposed actions
+was executed. No production-safe submission policy or live success is claimed.
+
 | Historical evidence | Observation | Boundary |
 | --- | --- | --- |
 | [Retained live adapter episode](docs/worked-example/) | A submitted appeal contained the wrong authorization; WRONG_VALUE. | One selected failure; only six screenshot references retained. |
 | [Paired base/v3 run](docs/live-paired-v3-results.md) | Base 0/2; adapter 0/2, on development seeds 200/201. | No positive workflow learning curve. |
-| [Saved-observation diagnostic](docs/frozen-v3-evaluation-results.md) | Exact authorization selected for typing improved from 2/20 to 14/20. | Teacher-reached states, not independent navigation or persisted correct entry. |
+| [Frozen Fara saved-observation diagnostic](docs/frozen-v3-evaluation-results.md#september-6-frozen-fara-adapter-comparison) | Exact authorization selected for typing improved from 2/20 to 14/20. | Teacher-reached states, not independent navigation or persisted correct entry. |
 | Earlier student development runs | Base, SFT-v1 and SFT-v2 each 0/30. | Different experiments; do not pool them with later results. |
 | [Magnification diagnostic](docs/document-magnification-results.md) | Stopped before scoring after renderer crashes. | 0/0 matched pairs is missing evidence, not model failure. |
 

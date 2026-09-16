@@ -152,6 +152,21 @@ async def test_teacher_provider_failure_is_not_scored(environment, tmp_path, mon
     assert result["matched_pairs"] == 0
 
 
+async def test_builtin_invalid_actions_remain_in_paired_denominators(environment, tmp_path):
+    from forkloop.policies.scripted import CallbackPolicy
+
+    world, backend = environment
+    invalid = "click(99999, 99999)"
+    result = await run_comparison(world, backend, [
+        variant("scripted", lambda: ScriptedPolicy([invalid, invalid])),
+        variant("callback", lambda: CallbackPolicy(lambda obs: None if obs.step == 0 else invalid)),
+    ], [11], output=tmp_path / "comparison", settle_s=0, max_invalid=2)
+    assert result["arms"]["A"]["scored"] == result["arms"]["A"]["failures"] == 1
+    assert result["arms"]["B"]["scored"] == result["arms"]["B"]["failures"] == 1
+    assert result["matched_pairs"] == 1
+    assert [cell["status"] for cell in result["cells"]] == ["completed", "completed"]
+
+
 async def test_checker_exception_cannot_count_as_policy_failure(environment, tmp_path):
     world, backend = environment
     output = tmp_path / "comparison"

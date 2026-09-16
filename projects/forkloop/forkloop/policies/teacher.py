@@ -225,7 +225,7 @@ class TeacherPolicy(BranchablePolicy):
         while not self.queue:
             if self.turns >= self.max_turns:
                 a = Action.done(False, "teacher turn limit")
-                return a, self._meta(a, t0, error="max_turns")
+                return a, self._meta(a, t0, note="teacher turn limit")
             if self.executed:
                 self.messages.append({"role": "user", "content": self._results_for_executed(obs)})
                 self.executed = []
@@ -260,12 +260,14 @@ class TeacherPolicy(BranchablePolicy):
             return await self.act(obs)
         try:
             action = self._to_action(blk, obs)
-        except InvalidAction as e:
+        except (TypeError, ValueError, OverflowError) as e:
+            # InvalidAction and malformed numeric arguments are model output failures.
             self.executed.append({**blk, "error": str(e)})
             for rest in self.queue:
                 self.executed.append({**rest, "error": NOT_EXECUTED})
             self.queue = []
-            return None, {"raw_action": f"{blk['name']}({blk['input']})", "error": str(e), "model_latency_s": time.monotonic() - t0}
+            return None, {"raw_action": f"{blk['name']}({blk['input']})", "note": f"invalid action: {e}",
+                          "tokens": dict(self.usage), "model_latency_s": time.monotonic() - t0}
         self.executed.append(blk)
         return action, self._meta(action, t0)
 

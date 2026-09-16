@@ -282,8 +282,9 @@ def noise_messages(rng: random.Random, n: int, next_id: int, subjects: Optional[
 
 
 def authorization_letter(rng: random.Random, person: Person, auth_number: str, distractors: list[str],
-                         service_desc: str, page_of: tuple[int, int] = (1, 1)) -> bytes:
-    """A one-or-more-page PDF whose page ``page_of[0]`` carries the real auth number."""
+                         service_desc: str, page_of: tuple[int, int] = (1, 1), *,
+                         service_date: dt.date) -> bytes:
+    """A PDF whose authorization page covers the approved service's date."""
     pages: list[list[str]] = []
     total = page_of[1]
     for pg in range(1, total + 1):
@@ -293,7 +294,7 @@ def authorization_letter(rng: random.Random, person: Person, auth_number: str, d
         if pg == page_of[0]:
             paras += [f"Determination: APPROVED for {service_desc}.",
                       f"Authorization number: {auth_number}",
-                      f"Valid: {(ANCHOR - dt.timedelta(days=45)).isoformat()} through {(ANCHOR + dt.timedelta(days=45)).isoformat()}", ""]
+                      f"Valid: {(service_date - dt.timedelta(days=45)).isoformat()} through {(service_date + dt.timedelta(days=45)).isoformat()}", ""]
         else:
             paras += ["This page intentionally summarises prior correspondence.", ""]
         for d in distractors[(pg - 1) * 2:(pg - 1) * 2 + 2]:

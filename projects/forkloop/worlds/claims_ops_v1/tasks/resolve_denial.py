@@ -69,11 +69,13 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     for i in range(n_docs):
         name = rng.choice(["authorization_letter", "um_determination", "precert_notice", "payer_correspondence"]) + f"_{i + 1}.pdf"
         if i == which:
-            pdf = authorization_letter(rng, person, real, decoys, service_desc, page_of=(page, n_pages))
+            pdf = authorization_letter(rng, person, real, decoys, service_desc, page_of=(page, n_pages),
+                                       service_date=target.service_date)
             doc_hash = sha256(pdf)
             doc_name_real = name
         else:
-            pdf = authorization_letter(rng, person, rng.choice(decoys), decoys, "a different service (not this claim)", page_of=(1, 1))
+            pdf = authorization_letter(rng, person, rng.choice(decoys), decoys, "a different service (not this claim)",
+                                       page_of=(1, 1), service_date=target.service_date)
         files.append(document_seed_file(person, name, pdf))
         openemr_sql.append(osql.insert_document(doc_id=eid + i, pid=person.pid, name=name, size=len(pdf), content_hash=sha256(pdf),
                                                 docdate=ANCHOR - dt.timedelta(days=rng.randint(20, 60))))

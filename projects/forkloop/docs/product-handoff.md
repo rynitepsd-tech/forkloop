@@ -1,6 +1,87 @@
 # Forkloop publication handoff
 
-## Current handoff — curated public release
+## Current handoff — September 16 diagnostic and 0.2.1 repairs
+
+The continuation completed a bounded recorded-observation study and two source
+repairs. The [0.2.1 prerelease](https://github.com/rynitepsd-tech/forkloop/releases/tag/v0.2.1)
+contains the repaired installable package. It does not reopen live allocations
+or claim an independently completed healthcare workflow.
+
+### Findings and decisions
+
+The [full study](frozen-v3-evaluation-results.md) and
+[machine-readable evidence](worked-example/image-detail-diagnostic.json) retain
+the positive and negative results:
+
+- The initial 80-request matched experiment selected exact authorization typing
+  on 19/20 high-detail states versus 0/20 low-detail states. Navigation agreement
+  with the teacher was 12/20 versus 0/20, not measured navigation correctness.
+- A separate 20-request verification pass repaired nothing: 19/20 stayed exact.
+- Uniform magnified tiles repaired one error and introduced another: still
+  19/20. Do not promote this as an unconditional improvement.
+- A two-view agreement rule was then frozen before 36 requests on every one of
+  the remaining 18 eligible development states. It accepted 16 exact proposals,
+  zero wrong ones and withheld two, including one correct high-detail proposal.
+  This is a safety/coverage tradeoff, not a zero-error production guarantee.
+
+All 156 planned requests completed without retries. These are saved,
+teacher-reached synthetic states; no proposed action was executed. Final
+evaluation seeds 100500–100529 remain untouched. Raw observations, responses and
+ledger operations are retained locally, not included in the public summary.
+
+### Source repairs and verification
+
+Built-in teacher, scripted and callback policies now distinguish model failure
+from provider failure consistently. Invalid model actions—including malformed
+numeric coordinates—consume normal invalid-action budgets and remain scored.
+Teacher turn-limit exits are terminal policy behavior, not infrastructure errors.
+Actual provider/runtime failures still remain unscored. The fix is at the policy
+metadata source; comparison does not silently reinterpret arbitrary errors.
+
+New authorization PDFs derive their validity window from the claim's service
+date, fixing letters that explicitly approved a date outside their own printed
+window. Ordinary and composed tasks both use the repaired generator. Existing
+manifests, screenshots, PDFs and study labels were not rewritten.
+
+The final isolated source suite passed **407 tests, with 3 skips** (Torch was
+not installed). Both defects failed focused reproductions before their repairs.
+Actual PDF text extraction confirmed the repaired service/validity dates.
+
+The wheel was installed into a fresh environment outside the checkout. Seven
+consumer commands verified package identity, fake doctor, all five demo
+controls, a matched success-versus-invalid-action comparison, its explicit
+`--fail-on-regression` exit 1 and the continued Solari lifetime hold. The default
+descriptive comparison exits 0; the regression flag is opt-in.
+
+Wheel SHA-256:
+`7335f6f0def4817fd64d02f2795cf371044703862b681d95d295cffcade29b9e`.
+Local receipts are under `runs/detail-diagnostic-20260916/`, including
+`patch-verification.json`, `installed-wheel-smoke.json`, the frozen phase
+protocols/results and the same session ledger used for all follow-ups.
+
+### Accounting and remaining external gates
+
+New project API usage totaled **$0.18130080**, with **$0 pending reservations**.
+No new Solari VM or Lambda GPU was allocated. The original September 15 ledger
+and its uncertain charges are preserved byte-for-byte. This is usage-derived
+accounting, not an invoice or a reconciliation of the older charges.
+
+Further provider research distinguished a documented hard deadline for Solari
+browser sessions from the rolling idle timeout on desktop/sandbox VMs. The
+pricing promise not to bill past a balance does not explain already-running
+VM behavior clearly enough to reopen allocations.
+[Upstream clarification #79](https://github.com/solari-sdk/solari-cookbook/issues/79)
+is open and had no reply at the September 16 check. The
+[tracked allocation blocker](https://github.com/rynitepsd-tech/forkloop/issues/2)
+and the code-enforced hold remain in place.
+
+The next external milestones are an enforceable VM spending contract and one
+independent user's evaluation of the released workflow. No external adoption,
+repeat use, new live comparison or production-safe submission is claimed.
+More prompts tested on the same 38 development episodes would not substitute
+for those missing kinds of evidence.
+
+## Historical handoff — curated public 0.2.0 release
 
 The reviewed evidence is now hosted at
 [rynitepsd-tech.github.io/forkloop](https://rynitepsd-tech.github.io/forkloop/).

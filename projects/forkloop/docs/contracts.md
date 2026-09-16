@@ -153,8 +153,9 @@ forbidden_paths: ["/admin", "/debug", "/api/"]
 ```
 
 The world's `seed_world.generate(family: str, seed: int, split: str) -> TaskInstance`
-is a **pure function** of `(family, seed, split)`. Same inputs, byte-identical
-output. `split` ∈ `train | heldout_seeds | heldout_compositions` and only
+is a **pure function** of `(family, seed, split)` for a fixed generator version
+and base assets: same inputs, byte-identical output.
+`split` ∈ `train | heldout_seeds | heldout_compositions` and only
 changes the value ranges / composition rules, never the format.
 
 ---
@@ -399,6 +400,12 @@ Document contents are generated PDFs or plain `.txt` (PDF preferred; a
 one-page text PDF built with the pure-python writer in
 `forkloop/util/minipdf.py`) containing the authorization number and
 distractor numbers on the same page.
+
+From 0.2.1, an approval letter's validity period is the claim's service date
+minus/plus 45 days, not a global fixed window. The PDF helper requires the
+service date explicitly; ordinary denial tasks and composed insurance tasks
+both supply it. This changes newly generated PDF bytes and attachment hashes.
+Retained historical manifests, PDFs and screenshots are not rewritten.
 
 ---
 
@@ -666,6 +673,13 @@ semantics. Pixel equality is diagnostic, not required. Missing/corrupt evidence,
 provider/setup exceptions and incomplete attempts remain visible and unscored.
 A provider-raised timeout propagates as infrastructure failure; only the
 controller's own expired episode deadline is a task wall-budget stop.
+Model-produced invalid actions consume the ordinary invalid-action/step budget;
+policy turn-limit exits and give-ups also remain scored behavior. In policy
+metadata, a truthy `error` is reserved for provider/runtime measurement failures,
+not invalid model output. Return `(None, {"note": ...})` for an invalid action,
+or a terminal action for giving up. Built-in teacher, student, scripted and
+callback policies follow this distinction; provider errors expressed as either
+booleans or diagnostic strings remain unscored.
 Incomplete/non-comparable evidence cannot recommend a leader. Small complete
 samples remain descriptive, not statistically established reliability or deployment
 advice. `compare` exits 2 for incomplete/non-comparable evidence, 1 for a

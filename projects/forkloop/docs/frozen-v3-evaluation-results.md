@@ -1,3 +1,114 @@
+# Recorded-observation studies
+
+## September 16: image detail and safe entry
+
+**Keep high image detail. Extra verbal verification did not repair the observed
+error, and unconditional magnification traded one error for another.** A
+two-view agreement rule reduced wrong proposed entries on a separate development
+set, but withheld a correct entry too. It is a safety/coverage tradeoff to test
+prospectively in a live workflow, not a production guarantee.
+
+The [machine-readable evidence](worked-example/image-detail-diagnostic.json)
+includes every case outcome, all four frozen protocols, request/image hashes,
+usage and the negative findings. Raw screenshots, request bodies, response text
+and ledger operations remain local. All patient/claim data is synthetic.
+
+### Initial paired experiment
+
+The same `gpt-5.6-luna` model alias and workflow-v5 prompt received the original
+previous/current screenshots, instruction and eight-action history from the
+previously frozen 40-observation package. Only `image_detail` changed: low versus
+high. These are 20 authorization states and 20 navigation states from the same
+20 successful teacher episodes, not 40 independent tasks.
+
+All **80/80 planned requests** completed, best-of-one, without retries. Ordering
+alternated within each observation kind. The protocol and request hashes were
+frozen before inference; labels never entered policy inputs. Reasoning effort was
+high, the output cap 4,096 tokens, and processing tier standard.
+
+| Authorization-state condition | Exact typing action / 20 | Wrong typing action / 20 | Other or no action / 20 |
+| --- | ---: | ---: | ---: |
+| Low image detail | 0 | 1 | 19 |
+| High image detail | 19 | 1 | 0 |
+| High detail plus a separate verification pass | 19 | 1 | 0 |
+| High detail plus uniform magnified tiles | 19 | 1 | 0 |
+
+Only the first two rows were the initial paired experiment. The verification and
+tiling rows are separately frozen **exploratory follow-ups**, each covering all
+20 authorization states after the original results were inspected.
+
+High detail alone omitted a repeated digit on seed 111: it proposed
+`AUTH-53Z2715` instead of `AUTH-53Z27115`. The verification pass was given the
+untrusted proposal and the same original images; it preserved that mistake and
+all 19 correct entries. There were no repairs or regressions.
+
+The tiled pass received no prior proposal. It added all four quadrants of each
+original image, enlarged exactly 2× with nearest-neighbor pixels. It repaired
+seed 111 but changed seed 127 from the correct `AUTH-66M44149` to
+`AUTH-6GM44149`. Reporting only the repaired case would conceal that regression.
+
+Navigation agreement with the recorded teacher action was **0/20 low detail and
+12/20 high detail**. This is imitation under the frozen tolerance, not navigation
+correctness. Every response parsed and none was truncated. No proposed action
+was executed, so exact typing does not establish field selection, persisted
+entry or complete-task success.
+
+### Prospective development validation
+
+After those exploratory results, the decision rule was frozen: **type only if
+the original-high and tiled-high outputs are both type actions with identical
+full text; otherwise withhold the entry**. No oracle value informs acceptance.
+
+The validation used **all 18 remaining eligible teacher-success episodes**
+outside the original 20-state selection. Two label-blind image reviews covered
+both original images for every state. All 18 were retained; seed 103's B/8 glyph
+ambiguity is recorded rather than hidden. These states were new to this
+diagnostic, not final held-out workflow tasks.
+
+All **36/36 planned requests** completed with alternating H/T and T/H ordering,
+no retries and no case replacements:
+
+| Validation condition | Exact typing / 18 | Wrong typing / 18 | No typing / 18 |
+| --- | ---: | ---: | ---: |
+| Original high-detail images | 17 | 1 | 0 |
+| Originals plus magnified tiles | 17 | 0 | 1 |
+| Two-view agreement rule | 16 | 0 | 2 |
+
+The agreement rule withheld one correct high-detail entry as well as its one
+wrong entry. Its coverage was **16/18**, not a 100% task-success result. Agreeing
+models can share mistakes; this small development set does not establish a safe
+autonomous submission policy. No new default or verification wrapper is shipped
+on the strength of these measurements.
+
+### Cost, integrity and dataset caveats
+
+The initial comparison cost **$0.05992160**, the verification pass **$0.01792240**,
+the tiled follow-up **$0.04428448**, and the 18-state validation **$0.05917232**.
+Total: **156 project API requests, $0.18130080 usage-derived cost, $0 pending
+reservations**. No Solari VM or Lambda GPU was allocated. All calls used the
+same $45 OpenAI sublimit ($44 stop) inside the previously authorized $100 total;
+follow-ups did not create new spending ceilings. These are response-usage
+calculations, not tax-inclusive invoices. Cache state and phase ordering affect
+cost and latency.
+
+Original case/label hashes remain
+`7b881466820d672bb6d1dd3d51a73c6af2693ff488c5bb79584fde43050ed1b9` and
+`5af543b02bb28083fc0d6fa875c930e1a7d6033ff53179be42fe1fa23f0f9745`.
+Each protocol was frozen before its own calls; the public JSON retains the
+separate hashes and explicitly identifies adaptive follow-ups. Local evidence
+and one-off runners are under `runs/detail-diagnostic-20260916/` and adjacent
+`runs/*detail-diagnostic-20260916.py` files.
+
+The image review also exposed a source-data defect: historical approval letters
+used one fixed validity window, which could exclude their stated service date.
+Version 0.2.1 generates validity windows from each claim's service date for both
+ordinary and composed tasks. Historical screenshots, PDFs, labels and results
+were **not** regenerated. This study measures literal authorization entry, not
+clinical coverage or eligibility. Reserved final seeds 100500–100529 remain
+untouched.
+
+## September 6: frozen Fara adapter comparison
+
 **Public-release note.** This is a historical summary of the September 6, 2026 evaluation. The [public worked-example report](worked-example/report.html) is distributed separately from the raw evaluation evidence. Run artifacts, datasets and checkpoints referenced here are retained locally and not distributed; artifact identifiers below are repository-relative, not download links. Historical commands require those local artifacts and fresh authorization before execution; the current spending hold remains in effect.
 
 The frozen v3 adapter improved authorization reading and immediate action selection on the saved screenshots, but this session did not establish better complete-workflow performance. It read the exact authorization on 14/20 cases versus the base model’s 8/20, and selected the exact type action on 14/20 versus 2/20. It also typed six incorrect values. The live comparison stopped after a Solari readiness failure, leaving zero completed matched pairs.
