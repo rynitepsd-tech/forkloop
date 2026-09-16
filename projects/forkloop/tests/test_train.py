@@ -143,8 +143,9 @@ def test_make_sft_records_and_stats(run_dir: Path):
     assert rec["history"] == ["click(640, 360)", 'type("C-1042")']
     assert rec["instruction"] == "Do task resolve_denial-train-000003"
     assert rec["family"] == "resolve_denial" and rec["seed"] == 3 and rec["split"] == "train"
-    assert len(rec["images"]) == 1 and Path(rec["images"][0]).is_absolute() and Path(rec["images"][0]).exists()
-    assert rec["images"][0].endswith("shots/002_before.png")
+    assert len(rec["images"]) == 2 and all(Path(p).is_absolute() and Path(p).exists() for p in rec["images"])
+    assert rec["images"][0].endswith("shots/001_before.png")
+    assert rec["images"][1].endswith("shots/002_before.png")
     # the invalid step's raw text still appears in the following step's history
     upd = [r for r in records if r["family"] == "update_insurance_reconcile"]
     assert [r["step"] for r in upd] == [0, 2]
@@ -370,7 +371,7 @@ def test_run_eval_with_fakes():
     assert summary["reason_codes"] == {"OK": 8, "NOT_DONE": 8}
     assert set(summary["per_family"]) == {"resolve_denial", "reschedule_constrained"}
     assert summary["per_repeat"]["0"]["n"] == 8 and summary["per_repeat"]["1"]["n"] == 8
-    assert abs(summary["tokens_per_step"] - 35 / 3) < 1e-6
+    assert abs(summary["tokens_per_step"] - 12 / 3) < 1e-6
     r = next(x for x in results if x["seed"] == 100000 and x["family"] == "resolve_denial" and x["repeat"] == 0)
     assert r["success"] is True and r["task_id"] == "resolve_denial-heldout_seeds-100000" and r["steps"] == 3
 

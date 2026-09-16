@@ -1,8 +1,8 @@
 """Shared helpers for the day-1 Solari spikes.
 
-Standalone: needs only SOLARI_API_KEY (and the solari-sandbox package). Every
-desktop a spike creates carries metadata {"forkloop": "spike"} so a crashed
-run can be cleaned up with ``python spikes/_common.py --reap``.
+Historical standalone probes. New allocations are paused by Forkloop's provider
+lifetime hold. Existing-resource cleanup remains available with SOLARI_API_KEY
+and the solari-sandbox package: ``python spikes/_common.py --reap``.
 
 Every call here exists in solari-sandbox 0.2.0 with the signature used;
 see docs/contracts.md §2 for the verified mapping.
@@ -60,6 +60,8 @@ async def create_desktop(
 ) -> Desktop:
     """create_desktop on the unified /sandboxes route (kind=desktop). This is the
     only route that accepts from_snapshot; DesktopClient.create does not."""
+    from forkloop.spending import require_solari_lifetime_bound
+    require_solari_lifetime_bound()
     return await client.create_desktop(
         # A snapshot already implies its template; the gateway may reject both together.
         template=None if from_snapshot else "default",

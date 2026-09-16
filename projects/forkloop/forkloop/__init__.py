@@ -1,7 +1,7 @@
-"""Forkloop — snapshot-native training worlds for vision-only GUI agents.
+"""Forkloop — matched evaluation and inspectable evidence for GUI policies.
 
-reset() is one ``revert()`` call on a Solari desktop VM; fork() is one
-``create(from_snapshot=...)``. See docs/contracts.md for every interface.
+Solari snapshots restore the desktop; Forkloop seeds application state, checks
+reset equivalence and verifies persisted outcomes. See docs/contracts.md.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _LAZY = {
     "Action": "forkloop.actions",

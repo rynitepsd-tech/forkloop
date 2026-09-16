@@ -46,6 +46,7 @@ class Observation:
     history: list[str]
     width: int
     height: int
+    previous_screenshot: bytes = b""
 
     def to_dict(self, *, include_image: bool = False) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -59,6 +60,7 @@ class Observation:
             import base64
 
             d["screenshot_b64"] = base64.b64encode(self.screenshot).decode()
+            d["previous_screenshot_b64"] = base64.b64encode(self.previous_screenshot).decode()
         return d
 
 

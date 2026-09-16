@@ -116,6 +116,7 @@ def _verdict_fields(verdict: Any) -> dict:
         "milestones": _get(verdict, "milestones", None),
         "reason_code": _get(verdict, "reason_code", None),
         "failed": list(_get(verdict, "failed", None) or []),
+        "details": dict(_get(verdict, "details", None) or {}),
     }
 
 
@@ -124,32 +125,60 @@ def _verdict_fields(verdict: Any) -> dict:
 # --------------------------------------------------------------------------- #
 
 async def run_episode(env: Any, policy: Any, seed: int, cfg: EvalConfig, *, family: str, repeat: int) -> dict:
+    result = {}
+    start = time.perf_counter()
+    try:
+        return await _run_episode(env, policy, seed, cfg, family=family, repeat=repeat, result=result)
+    except Exception as e:
+        result.update(reward=0.0, success=False, reason_code="EVAL_ERROR", failed=[],
+                      error=f"{type(e).__name__}: {e}", wall_s=time.perf_counter() - start)
+        return result
+
+
+async def _run_episode(env: Any, policy: Any, seed: int, cfg: EvalConfig, *, family: str, repeat: int, result: dict) -> dict:
     t0 = time.perf_counter()
-    result: dict[str, Any] = {
+    result.update({
         "task_id": f"{family}-{cfg.split}-{seed:06d}", "family": family, "seed": seed, "split": cfg.split,
         "repeat": repeat, "best_of": cfg.best_of, "steps": 0, "invalid_steps": 0,
         "tokens_in": 0, "tokens_out": 0, "latency_s_total": 0.0, "error": None,
-    }
+    })
     if cfg.best_of > 1:
         from forkloop.search import best_of_n  # written by the search author (assumed signature)
 
-        verdict = await best_of_n(env, policy, cfg.best_of, seed, family=family)
+        from forkloop.search import SearchStats
+        stats = SearchStats()
+        if cfg.max_steps is not None:
+            env.budget_override["max_steps"] = cfg.max_steps
+        verdict = await best_of_n(env, policy, cfg.best_of, seed, family=family, stats=stats)
+        result["search"] = stats.to_dict()
+        result["tokens_in"] = stats.experiment_tokens.get("in", 0)
+        result["tokens_out"] = stats.experiment_tokens.get("out", 0)
         result.update(_verdict_fields(verdict))
-        steps = _get(verdict, "steps", None)
+        steps = getattr(getattr(env, "ep", None), "step", None)
         if steps is not None:
             result["steps"] = int(steps)
         result["wall_s"] = time.perf_counter() - t0
         return result
 
+    if cfg.max_steps is not None and hasattr(env, "budget_override"):
+        env.budget_override["max_steps"] = cfg.max_steps
     obs, info = await env.reset(seed=seed)
+    if callable(getattr(policy, "reset", None)):
+        policy.reset()
+    setup_done = time.perf_counter()
+    result["setup_s"] = setup_done - t0
     tid = _get(info, "task_id", None)
     if isinstance(tid, str) and tid:
         result["task_id"] = tid
     while True:
-        action, meta = await policy.act(obs)
+        if hasattr(env, "remaining_seconds"):
+            from forkloop.env import act_with_deadline
+            action, meta = await act_with_deadline(env, policy, obs)
+        else:
+            action, meta = await policy.act(obs)
         meta = meta or {}
-        result["tokens_in"] += int((meta.get("tokens") or {}).get("in", 0) or 0)
-        result["tokens_out"] += int((meta.get("tokens") or {}).get("out", 0) or 0)
+        result["tokens_in"] = max(result["tokens_in"], int((meta.get("tokens") or {}).get("in", 0) or 0))
+        result["tokens_out"] = max(result["tokens_out"], int((meta.get("tokens") or {}).get("out", 0) or 0))
         result["latency_s_total"] += float(meta.get("model_latency_s", 0.0) or 0.0)
         if action is None:
             result["invalid_steps"] += 1
@@ -160,17 +189,17 @@ async def run_episode(env: Any, policy: Any, seed: int, cfg: EvalConfig, *, fami
         step_meta = {k: v for k, v in meta.items() if k in ("raw_action", "model_latency_s", "tokens", "note", "confidence")}
         if step_meta.get("note"):
             step_meta.setdefault("policy_note", step_meta["note"])
-        try:
-            obs, reward, terminated, truncated, info = await env.step(step_input, meta=step_meta)
-        except TypeError:  # an env whose step() has no meta kwarg
-            obs, reward, terminated, truncated, info = await env.step(step_input)
+        obs, reward, terminated, truncated, info = await env.step(step_input, meta=step_meta)
         result["steps"] += 1
+        if action is not None and info.get("error"):
+            result["invalid_steps"] += 1
         if terminated or truncated:
             break
-        if cfg.max_steps is not None and result["steps"] >= cfg.max_steps:
+        if cfg.max_steps is not None and not hasattr(env, "budget_override") and result["steps"] >= cfg.max_steps:
             break
     verdict = await env.verify()
     result.update(_verdict_fields(verdict))
+    result["episode_execution_s"] = time.perf_counter() - setup_done
     result["wall_s"] = time.perf_counter() - t0
     return result
 
@@ -184,21 +213,22 @@ async def run_eval(
 ) -> dict:
     """Run every (family, seed, repeat) with bounded concurrency; return the summary."""
     sem = asyncio.Semaphore(max(1, cfg.concurrency))
-    policies: dict[int, Any] = {}
+    active_policy_ids: set[int] = set()
     results: list[dict] = []
     t_start = time.perf_counter()
 
-    def policy_for(repeat: int) -> Any:
-        if repeat not in policies:
-            policies[repeat] = policy_factory(repeat)
-        return policies[repeat]
-
     async def one(family: str, seed: int, repeat: int) -> None:
         async with sem:
-            env = None
+            env = policy = None
+            res = {}
             try:
+                policy = policy_factory(repeat)
+                if id(policy) in active_policy_ids:
+                    policy = None
+                    raise ValueError("policy_factory returned an already active mutable policy")
+                active_policy_ids.add(id(policy))
                 env = await env_factory(family)
-                res = await run_episode(env, policy_for(repeat), seed, cfg, family=family, repeat=repeat)
+                res = await run_episode(env, policy, seed, cfg, family=family, repeat=repeat)
             except Exception as e:  # keep the sweep going; the episode counts as a failure
                 res = {
                     "task_id": f"{family}-{cfg.split}-{seed:06d}", "family": family, "seed": seed, "split": cfg.split,
@@ -208,26 +238,28 @@ async def run_eval(
                     "error": f"{type(e).__name__}: {e}",
                 }
             finally:
+                if policy is not None:
+                    usage = getattr(policy, "usage", {}) or {}
+                    res["tokens_in"] = max(res.get("tokens_in", 0), usage.get("in", 0))
+                    res["tokens_out"] = max(res.get("tokens_out", 0), usage.get("out", 0))
+                    active_policy_ids.discard(id(policy))
+                    if hasattr(policy, "aclose"):
+                        try:
+                            await policy.aclose()
+                        except Exception as e:
+                            res.setdefault("cleanup_errors", []).append(f"policy: {type(e).__name__}")
                 if env is not None and hasattr(env, "close"):
                     try:
                         await env.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        res.setdefault("cleanup_errors", []).append(f"env: {type(e).__name__}")
             results.append(res)
             if on_result is not None:
                 on_result(res)
 
     # Order: repeat-major so a partial run still covers every task once.
-    for repeat in range(max(1, cfg.n_seeds)):
-        policy_for(repeat)
     tasks = [one(f, s, r) for r in range(max(1, cfg.n_seeds)) for f in cfg.families for s in cfg.seeds]
     await asyncio.gather(*tasks)
-    for p in policies.values():
-        if hasattr(p, "aclose"):
-            try:
-                await p.aclose()
-            except Exception:
-                pass
     summary = summarize(results, cfg)
     summary["wall_s"] = time.perf_counter() - t_start
     return summary
@@ -252,7 +284,10 @@ def summarize(results: list[dict], cfg: EvalConfig) -> dict:
         rs = [r for r in results if int(r.get("repeat", 0)) == rep]
         per_repeat[str(rep)] = wilson_summary(sum(1 for r in rs if r.get("success")), len(rs))
     milestones = [float(r["milestones"]) for r in results if isinstance(r.get("milestones"), (int, float))]
+    from forkloop.metrics import failure_codes
+    all_failures = [failure_codes({"verdict": r}) for r in results]
     summary = {
+        "all_failure_codes": dict(Counter(code for codes in all_failures for code in codes)),
         "tag": cfg.tag, "world": cfg.world, "families": list(cfg.families), "split": cfg.split,
         "n_tasks": len(cfg.families) * len(cfg.seeds), "n_seeds": cfg.n_seeds, "best_of": cfg.best_of,
         "n_episodes": n, "n_success": k, "n_errors": sum(1 for r in results if r.get("error")),
@@ -403,6 +438,8 @@ class DefaultEnvFactory:
             kwargs["pool"] = self._pool
         if self._recorder is not None:
             kwargs["recorder"] = self._recorder
+        kwargs["history_k"] = self.cfg.policy.get("history_k", 8)
+        kwargs["budget_override"] = {"max_steps": self.cfg.max_steps} if self.cfg.max_steps is not None else {}
         kwargs.update(self.cfg.extra.get("env_kwargs") or {})
         env = forkloop.make(self._world if self._world is not None else self.cfg.world, **kwargs)
         if asyncio.iscoroutine(env):
@@ -410,14 +447,17 @@ class DefaultEnvFactory:
         return env
 
     async def close(self) -> None:
+        errors = []
         for obj in (self._pool, self._backend):
             if obj is not None and hasattr(obj, "close"):
                 try:
                     r = obj.close()
                     if asyncio.iscoroutine(r):
                         await r
-                except Exception:
-                    pass
+                except Exception as exc:
+                    errors.append(exc)
+        if errors:
+            raise RuntimeError(f"evaluation cleanup failed: {errors}") from errors[0]
 
 
 def make_policy_factory(args: argparse.Namespace) -> tuple[Callable[[int], Any], dict]:
@@ -430,10 +470,16 @@ def make_policy_factory(args: argparse.Namespace) -> tuple[Callable[[int], Any],
                 args.base_url, args.model, args.api_key, image_max_side=args.image_max_side,
                 temperature=args.temperature, max_tokens=args.max_tokens, prompt_style=args.prompt_style,
                 history_k=args.history_k, coord_space=args.coord_space, timeout_s=args.timeout_s,
-                seed=args.sampling_seed_base + repeat,
+                seed=args.sampling_seed_base + repeat, prev_screenshot=args.prev_shot,
+                system_prompt=Path(args.system_prompt_file).read_text() if getattr(args, 'system_prompt_file', None) else None,
+                instruction_note=getattr(args, 'instruction_note', None), nav_macro=getattr(args, 'nav_macro', False),
             )
 
-        desc = factory(0).describe()
+        desc = {"policy": "student", "model": args.model, "base_url": args.base_url,
+                "prompt_style": args.prompt_style, "coord_space": args.coord_space, "history_k": args.history_k,
+                "image_max_side": args.image_max_side, "max_tokens": args.max_tokens,
+                "prev_screenshot": args.prev_shot, "system_prompt_file": getattr(args, 'system_prompt_file', None),
+                "instruction_note": getattr(args, 'instruction_note', None), "nav_macro": getattr(args, 'nav_macro', False)}
         return factory, desc
     if args.policy == "scripted":
         cls = _load_dotted("forkloop.policies.scripted:ScriptedPolicy")
@@ -493,7 +539,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--max-tokens", type=int, default=512)
     p.add_argument("--history-k", type=int, default=8)
+    p.add_argument("--prev-shot", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--timeout-s", type=float, default=120.0)
+    p.add_argument("--system-prompt-file")
+    p.add_argument("--instruction-note")
+    p.add_argument("--nav-macro", action="store_true")
     return p
 
 

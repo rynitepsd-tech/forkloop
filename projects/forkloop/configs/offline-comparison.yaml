@@ -1,0 +1,20 @@
+# Plumbing demonstration only: neither policy completes the denial workflow.
+# Use `forkloop demo` to inspect positive and negative verifier controls.
+version: 1
+world: claims-ops-v1
+backend: fake
+family: resolve_denial
+split: train
+seeds: [200, 201]
+budget:
+  max_steps: 3
+  max_seconds: 30
+variants:
+  - name: Empty policy
+    policy: scripted
+    options:
+      actions: []
+  - name: One click then done
+    policy: scripted
+    options:
+      actions: ["click(10,10)"]

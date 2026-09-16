@@ -1,0 +1,24 @@
+WEBVTT
+
+NOTE
+Editorial walkthrough of retained evidence. Synthetic data; not a live replay.
+
+1
+00:00:00.000 --> 00:00:05.000
+An AI agent filed an insurance appeal. The website said success. The agent was wrong.
+
+2
+00:00:05.000 --> 00:00:11.000
+Its job: read the authorization code in OpenEMR, then submit one appeal in the payer portal.
+
+3
+00:00:11.000 --> 00:00:19.000
+Expected: AUTH-36G14538. Saved: AUTH-3614538. One missing G changed the value.
+
+4
+00:00:19.000 --> 00:00:25.000
+Forkloop checked the database. The appeal was submitted, but the authorization was wrong. WRONG_VALUE: task failed.
+
+5
+00:00:25.000 --> 00:00:33.000
+Forkloop tests what computer-use agents actually change. Reset with Solari, run the agent, check the database. Inspect the evidence on GitHub.

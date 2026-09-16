@@ -3,14 +3,20 @@
 # and leave the portal claims list open. Runs as the desktop session user (DISPLAY=:0) — Chrome
 # refuses to run as root. Field positions are for the 1280x720 layout and were read off real
 # screenshots (docs/spikes.md); if the layout changes, re-measure them.
-set -uo pipefail
+set -euo pipefail
 export DISPLAY="${DISPLAY:-:0}"
 PORTAL=http://localhost:8080
 OPENEMR="http://localhost/openemr/interface/login/login.php?site=default"
 PROFILE="$HOME/.config/forkloop-chrome"
 
-pkill -x chrome 2>/dev/null; pkill chrome 2>/dev/null || true
-sleep 2
+# Wait for the old profile owner to exit before starting the new browser.
+for i in $(seq 1 20); do
+  pkill -x chrome 2>/dev/null || true
+  pgrep -x chrome >/dev/null || break
+  sleep 0.5
+done
+pkill -9 -x chrome 2>/dev/null || true
+rm -f "$PROFILE/SingletonLock" "$PROFILE/SingletonSocket" "$PROFILE/SingletonCookie"
 # Deterministic layout: fixed position/size, no first-run dialogs. Bubbles (save password,
 # translate, sign-in) are disabled by the enterprise policy build.sh installs.
 # --disable-gpu is required: the Solari desktop has no usable GPU process ("Failed to send
@@ -23,7 +29,11 @@ nohup google-chrome --no-first-run --no-default-browser-check --user-data-dir="$
   --enable-logging=stderr --v=0 "$PORTAL/login" >"$HOME/chrome.log" 2>&1 &
 sleep 9
 WID=$(xdotool search --onlyvisible --class chrome | head -1 || true)
-[[ -n "$WID" ]] && wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz || true
+if [[ -z "$WID" ]]; then
+  echo "Chrome has no visible window; inspect the guest chrome.log before taking a golden snapshot" >&2
+  exit 1
+fi
+wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz
 sleep 1
 
 goto() {  # navigate by clicking the omnibox (keyboard focus is not guaranteed to be in Chrome)
@@ -43,4 +53,8 @@ click_type 684 476 pass
 xdotool mousemove 640 585 click 1; sleep 6
 # canonical initial screen
 goto "$PORTAL/claims"
-echo "browser setup finished: windows=$(xdotool search --onlyvisible --class chrome | wc -l)"
+xdotool search --onlyvisible --class chrome >/dev/null || {
+  echo "Chrome exited during browser setup; golden snapshot refused" >&2
+  exit 1
+}
+echo "browser setup finished (window present; application login requires live verification)"

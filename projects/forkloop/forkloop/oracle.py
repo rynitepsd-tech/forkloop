@@ -22,7 +22,7 @@ REASON_CODES = (
     "ORACLE_ERROR",
 )
 
-CHECK_KINDS = ("query", "count", "baseline_checksum", "ui_path_only", "forbidden_screens")
+CHECK_KINDS = ("query", "count", "baseline_checksum", "ui_path_only", "forbidden_screens", "preserve_fields")
 
 
 @dataclass
@@ -38,6 +38,7 @@ class Check:
     exempt_tables: Optional[list[str]] = None
     #: query only: compare with one of "eq" (default), "in", "ne", "ge", "le", "contains"
     op: str = "eq"
+    mutable_fields: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"id": self.id, "kind": self.kind, "reason_code": self.reason_code}
@@ -55,6 +56,8 @@ class Check:
             d["exempt_tables"] = list(self.exempt_tables)
         if self.op != "eq":
             d["op"] = self.op
+        if self.mutable_fields:
+            d["mutable_fields"] = list(self.mutable_fields)
         return d
 
     @staticmethod
@@ -64,6 +67,7 @@ class Check:
             params=list(d.get("params", [])), equals=d.get("equals"),
             reason_code=d.get("reason_code", "CHECK_FAILED"), allow=d.get("allow"),
             exempt_tables=d.get("exempt_tables"), op=d.get("op", "eq"),
+            mutable_fields=list(d.get("mutable_fields", [])),
         )
 
 
@@ -106,7 +110,7 @@ class OracleSpec:
             seen.add(c.id)
             if c.kind not in CHECK_KINDS:
                 raise ValueError(f"check {c.id}: unknown kind {c.kind!r}")
-            if c.kind in ("query", "count") and not (c.db and c.sql):
+            if c.kind in ("query", "count", "preserve_fields") and not (c.db and c.sql):
                 raise ValueError(f"check {c.id}: query needs db and sql")
             if c.reason_code not in REASON_CODES:
                 raise ValueError(f"check {c.id}: unknown reason code {c.reason_code!r}")
@@ -164,11 +168,13 @@ class Baseline:
     tables: dict[str, TableSnapshot] = field(default_factory=dict)    # "db.table" → snapshot
     watermarks: dict[str, int] = field(default_factory=dict)           # "db.table" → max pk at seed time
     ignore_columns: dict[str, list[str]] = field(default_factory=dict)  # db → columns left out of every row hash
+    preserved_rows: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     @staticmethod
     async def capture(dbs: dict[str, "DbAccess"], checksum_tables: dict[str, list[str]],
                       primary_keys: dict[str, str], watermark_tables: dict[str, list[str]],
-                      ignore_columns: Optional[dict[str, list[str]]] = None) -> "Baseline":
+                      ignore_columns: Optional[dict[str, list[str]]] = None,
+                      preservation_checks: Optional[list[Check]] = None) -> "Baseline":
         b = Baseline(ignore_columns={k: list(v) for k, v in (ignore_columns or {}).items()})
         for db_name, tables in checksum_tables.items():
             db = dbs[db_name]
@@ -180,11 +186,15 @@ class Baseline:
             for t in tables:
                 pk = primary_keys.get(f"{db_name}.{t}", "id")
                 b.watermarks[f"{db_name}.{t}"] = await db.max_pk(t, pk)
+        for c in preservation_checks or []:
+            if c.kind == "preserve_fields":
+                b.preserved_rows[c.id] = await dbs[c.db].query(c.sql, c.params)
         return b
 
     def to_dict(self) -> dict[str, Any]:
         return {"tables": {k: {"pk": v.pk, "rows": v.rows} for k, v in self.tables.items()},
-                "watermarks": dict(self.watermarks), "ignore_columns": dict(self.ignore_columns)}
+                "watermarks": dict(self.watermarks), "ignore_columns": dict(self.ignore_columns),
+                "preserved_rows": self.preserved_rows}
 
 
 @dataclass
@@ -276,6 +286,16 @@ def _norm(v: Any) -> Any:
     return v
 
 
+def _failure_reason(check: Check, detail: dict[str, Any]) -> str:
+    """An exact-count shortfall is missing work, not a duplicate side effect."""
+    if (check.kind == "count" and check.op == "eq" and check.reason_code == "DUPLICATE_SIDE_EFFECT"
+            and detail.get("passed") is False and "error" not in detail):
+        actual, expected = detail.get("actual"), detail.get("expected")
+        if actual is not None and expected is not None and float(actual) < float(expected):
+            return "NOT_DONE"
+    return check.reason_code
+
+
 class Oracle:
     """Evaluates an :class:`OracleSpec` against live DB state."""
 
@@ -290,18 +310,20 @@ class Oracle:
         passed_effects = 0
         for c in spec.effects:
             ok = await self._run_check(c, details)
+            details[c.id]["reason_code"] = _failure_reason(c, details[c.id])
             if ok:
                 passed_effects += 1
             else:
                 failed.append(c.id)
                 if reason == "OK":
-                    reason = c.reason_code
+                    reason = details[c.id]["reason_code"]
         for c in spec.invariants:
             ok = await self._run_check(c, details)
+            details[c.id]["reason_code"] = _failure_reason(c, details[c.id])
             if not ok:
                 failed.append(c.id)
                 if reason == "OK":
-                    reason = c.reason_code
+                    reason = details[c.id]["reason_code"]
         n_eff = len(spec.effects)
         milestones = (passed_effects / n_eff) if n_eff else (0.0 if failed else 1.0)
         reward = 1.0 if not failed else 0.0
@@ -310,6 +332,19 @@ class Oracle:
 
     async def _run_check(self, c: Check, details: dict[str, Any]) -> bool:
         try:
+            if c.kind == "preserve_fields":
+                baseline = self.ctx.baseline
+                if baseline is None or c.id not in baseline.preserved_rows:
+                    raise RuntimeError("preserve_fields requires a captured field baseline")
+                ignored = set(c.mutable_fields) | set(baseline.ignore_columns.get(c.db, []))
+                def project(rows):
+                    return [{k: _norm(v) for k, v in row.items() if k not in ignored} for row in rows]
+                before = project(baseline.preserved_rows[c.id])
+                after = project(await self.ctx.dbs[c.db].query(c.sql, c.params))
+                ok = before == after
+                details[c.id] = {"passed": ok, "mutable_fields": c.mutable_fields,
+                                 "before": before if not ok else None, "after": after if not ok else None}
+                return ok
             if c.kind in ("query", "count"):
                 rows = await self.ctx.dbs[c.db].query(c.sql, c.params)  # type: ignore[index,arg-type]
                 actual = None

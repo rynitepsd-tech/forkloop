@@ -28,6 +28,8 @@ import asyncio
 import base64
 import io
 import json
+import math
+import os
 import re
 import time
 from typing import TYPE_CHECKING, Any
@@ -36,6 +38,8 @@ import httpx
 from PIL import Image
 
 from . import action_parse as ap
+from .base import BranchablePolicy
+from .observation import OBSERVATION_SCHEMA, coordinate_size, observation_messages, http_messages
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; forkloop.policies.base is written elsewhere
     from .base import Observation
@@ -356,7 +360,7 @@ def prepare_image(png_bytes: bytes, image_max_side: int) -> tuple[str, tuple[int
     im = Image.open(io.BytesIO(png_bytes))
     im.load()
     orig = (im.width, im.height)
-    if im.mode not in ("RGB", "RGBA"):
+    if im.mode != "RGB":
         im = im.convert("RGB")
     scale = 1.0
     if image_max_side and max(orig) > image_max_side:
@@ -392,7 +396,9 @@ def _content_text(content: Any) -> str:
 # Policy
 # --------------------------------------------------------------------------- #
 
-class StudentPolicy:
+class StudentPolicy(BranchablePolicy):
+    branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step")
+
     """Vision-only GUI policy backed by an OpenAI-compatible ``/chat/completions`` endpoint.
 
     Parameters
@@ -420,6 +426,46 @@ class StudentPolicy:
         fallback screen size if the observation carries no ``width``/``height``.
     """
 
+    @staticmethod
+    def validate_options(options: dict, *, credentialed: bool = False) -> None:
+        """Validate static request settings without constructing a network client."""
+        from urllib.parse import urlsplit
+
+        url = urlsplit(options.get("base_url", ""))
+        if url.scheme not in ("http", "https") or not url.hostname:
+            raise ValueError("student base_url must be an absolute HTTP(S) endpoint")
+        if url.username or url.password or url.query or url.fragment:
+            raise ValueError("student endpoint must not contain URL credentials, query or fragment")
+        hosted = url.hostname.rstrip(".") == "api.openai.com"
+        loopback = url.hostname in ("localhost", "127.0.0.1", "::1")
+        if url.scheme != "https" and (hosted or credentialed and not loopback):
+            raise ValueError("credentialed non-loopback model endpoints require HTTPS")
+        for key, default, minimum in (("max_tokens", 512, 1), ("image_max_side", 1280, 0), ("history_k", 8, 0)):
+            value = options.get(key, default)
+            if type(value) is not int or value < minimum:
+                raise ValueError(f"{key} must be an integer >= {minimum}")
+        for key, default, minimum in (("timeout_s", 120.0, 0), ("temperature", 0.0, -1)):
+            value = options.get(key, default)
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= minimum:
+                raise ValueError(f"{key} must be finite and {'positive' if key == 'timeout_s' else 'nonnegative'}")
+        if options.get("temperature", 0) < 0:
+            raise ValueError("temperature must be nonnegative")
+        if options.get("prompt_style", "compact") not in PROMPT_STYLES:
+            raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}")
+        if options.get("coord_space", "auto") not in COORD_SPACES:
+            raise ValueError(f"coord_space must be one of {COORD_SPACES}")
+        extra = options.get("extra_body") or {}
+        if not isinstance(extra, dict):
+            raise ValueError("extra_body must be a mapping")
+        reserved = {"model", "messages", "n", "max_tokens", "max_completion_tokens"} & extra.keys()
+        if reserved or extra.get("stream"):
+            raise ValueError("extra_body cannot override model, observations, candidate count, token caps or enable streaming")
+        if hosted:
+            if options.get("max_tokens", 512) > 128000:
+                raise ValueError("OpenAI max_tokens exceeds the supported model output window")
+            if extra.get("service_tier", "default") != "default":
+                raise ValueError("The OpenAI spending guard supports service_tier=default only")
+
     def __init__(
         self,
         base_url: str,
@@ -439,19 +485,18 @@ class StudentPolicy:
         system_prompt: str | None = None,
         fara_allowed: tuple[str, ...] = FARA_DEFAULT_ALLOWED,
         transport: Any = None,
+        session_ledger: str | None = None,
         screen_size: tuple[int, int] | None = None,
         name: str | None = None,
         hosted_reasoning: bool = False,
-        prev_screenshot: bool = False,
+        prev_screenshot: bool = True,
         image_detail: str | None = None,
         history_notes: bool = False,
         nav_macro: bool = False,
         instruction_note: str | None = None,
     ) -> None:
-        if prompt_style not in PROMPT_STYLES:
-            raise ValueError(f"prompt_style must be one of {PROMPT_STYLES}, got {prompt_style!r}")
-        if coord_space not in COORD_SPACES:
-            raise ValueError(f"coord_space must be one of {COORD_SPACES}, got {coord_space!r}")
+        self.validate_options(locals(), credentialed=bool(api_key))
+        self.session_ledger = session_ledger or os.environ.get("FORKLOOP_SESSION_LEDGER")
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -495,7 +540,9 @@ class StudentPolicy:
         #: Hosted models default to "auto", which may downscale a 1280x720 screenshot enough to
         #: misread an authorization code (measured 2026-09-03: "G" read as "6", digits dropped).
         self.image_detail = image_detail
-        self._prev_data_url: str | None = None
+        self._previous_png = b""
+        self._current_png = b""
+        self._observed_step: int | None = None
         self.name = name or f"student:{model}:{prompt_style}"
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -503,6 +550,7 @@ class StudentPolicy:
         self._client = httpx.AsyncClient(
             base_url=self.base_url, headers=headers, timeout=httpx.Timeout(self.timeout_s), transport=transport
         )
+        self._owns_client = True
         self.n_requests = 0
         #: Cumulative usage for the episode, like TeacherPolicy (steps carry the running total).
         self.usage = {"in": 0, "out": 0}
@@ -511,7 +559,8 @@ class StudentPolicy:
     # -- lifecycle ---------------------------------------------------------- #
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        if self._owns_client:
+            await self._client.aclose()
 
     async def __aenter__(self) -> "StudentPolicy":
         return self
@@ -527,6 +576,7 @@ class StudentPolicy:
             "image_max_side": self.image_max_side, "temperature": self.temperature,
             "max_tokens": self.max_tokens, "history_k": self.history_k, "seed": self.seed,
             "nav_macro": self.nav_macro, "history_notes": self.history_notes,
+            "prev_screenshot": self.prev_screenshot, "observation_schema": OBSERVATION_SCHEMA,
             "instruction_note": self.instruction_note, "system_prompt_override": bool(self.system_prompt_override),
         }
 
@@ -559,39 +609,21 @@ class StudentPolicy:
         data_url, model_size, orig = prepare_image(obs.screenshot, self.image_max_side)
         screen = self._screen_size(obs, orig)
         coord_size = self._coord_from_size(model_size, screen)
-        system = self._formatted_override(coord_size) if self.system_prompt_override else build_system_prompt(
-            self.prompt_style, coord_size[0], coord_size[1], fara_allowed=self.fara_allowed
-        )
         history = list(getattr(obs, "history", None) or [])
-        if self.history_k >= 0:
-            history = history[-self.history_k:] if self.history_k > 0 else []
-        notes: list[str | None] | None = None
-        if self.history_notes and history:
-            # history[i] is the action taken at step (obs.step - len(history) + i)
-            base = int(getattr(obs, "step", 0) or 0) - len(history)
-            notes = [self._notes.get(base + i) for i in range(len(history))]
-        instruction = str(getattr(obs, "instruction", "") or "")
-        if self.instruction_note:
-            instruction = instruction.rstrip() + "\n\n" + self.instruction_note
-        text = build_user_text(instruction, history, self.prompt_style,
-                               step=getattr(obs, "step", None), notes=notes)
-        def img(url: str) -> dict[str, Any]:
-            part: dict[str, Any] = {"url": url}
-            if self.image_detail:
-                part["detail"] = self.image_detail
-            return {"type": "image_url", "image_url": part}
-
-        content: list[dict[str, Any]] = [{"type": "text", "text": text}]
-        if self.prev_screenshot and self._prev_data_url and history:
-            content.append({"type": "text", "text": f"Screen BEFORE your last action ({history[-1]}):"})
-            content.append(img(self._prev_data_url))
-            content.append({"type": "text", "text": "Screen NOW (act on this one):"})
-        content.append(img(data_url))
-        self._prev_data_url = data_url
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": content},
-        ]
+        step = int(getattr(obs, "step", 0) or 0)
+        base = step - len(history)
+        notes = [self._notes.get(base + i) for i in range(len(history))] if self.history_notes else None
+        previous = getattr(obs, "previous_screenshot", b"") or self._previous_png
+        urls = []
+        if self.prev_screenshot and step > 0 and previous:
+            urls.append(prepare_image(previous, self.image_max_side)[0])
+        urls.append(data_url)
+        canonical = observation_messages(
+            instruction=str(getattr(obs, "instruction", "") or ""), history=history, step=step,
+            screen=screen, coords=coord_size, style=self.prompt_style, history_k=self.history_k,
+            image_count=len(urls), system_template=self.system_prompt_override,
+            instruction_note=self.instruction_note, fara_allowed=self.fara_allowed, notes=notes)
+        messages = http_messages(canonical, urls, self.image_detail)
         ctx = {"model_size": model_size, "screen_size": screen, "coord_size": coord_size, "orig_size": orig}
         return messages, ctx
 
@@ -614,6 +646,8 @@ class StudentPolicy:
                 body.pop(k, None)
             body["max_completion_tokens"] = body.pop("max_tokens")
         body.update(self.extra_body)
+        if self._client.base_url.host.rstrip(".") == "api.openai.com":
+            body["service_tier"] = "default"
         return body, ctx
 
     # -- response handling -------------------------------------------------- #
@@ -717,15 +751,81 @@ class StudentPolicy:
         return format_prompt_override(self.system_prompt_override, coord_size, self.fara_allowed)
 
     async def _post(self, body: dict) -> dict:
+        from urllib.parse import urlparse
+        from forkloop.spending import SessionLedger
+        ledger = operation = None
+        if urlparse(self.base_url).hostname.rstrip(".") == "api.openai.com":
+            if not self.session_ledger:
+                raise ValueError("OpenAI calls require FORKLOOP_SESSION_LEDGER")
+            if body.get("model") != "gpt-5.6-luna":
+                raise ValueError("no verified conservative bound configured for this OpenAI model")
+            output_limit = body.get("max_completion_tokens", body.get("max_tokens"))
+            if type(output_limit) is not int or not 0 < output_limit <= self.max_tokens:
+                raise ValueError("explicit output-token cap missing or overridden")
+            n = body.get("n", 1)
+            if type(n) is not int or not 1 <= n <= 8:
+                raise ValueError("candidate count must be bounded at 1..8")
+            if body.get("service_tier", "default") != "default":
+                raise ValueError("The OpenAI spending guard supports service_tier=default only")
+            body = {**body, "service_tier": "default"}
+            # Verified model pricing (2026-09-15): include the 1.25x cache-write
+            # premium on top of the 2x long-context input rate. Reserve a full
+            # context per choice; do not assume automatic caching is a discount.
+            upper = n * (1_050_000 * .50 + output_limit * 1.80) / 1e6
+            ledger = SessionLedger(self.session_ledger)
+            operation = ledger.reserve("openai", upper, label="chat/completions:gpt-5.6-luna",
+                                       evidence={"max_output_tokens": output_limit, "n": n, "input_bound": 1050000,
+                                                 "cache_write_multiplier": 1.25})
         self.n_requests += 1
-        resp = await self._client.post("/chat/completions", json=body)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = await self._client.post("/chat/completions", json=body)
+            resp.raise_for_status()
+            data = resp.json()
+            self._tokens(data)  # count even a response with no usable choices
+            usage = data.get("usage") or {}
+            if ledger is not None:
+                if "prompt_tokens" in usage and "completion_tokens" in usage:
+                    inp, out = usage["prompt_tokens"], usage["completion_tokens"]
+                    details = usage.get("prompt_tokens_details") or {}
+                    cached = details.get("cached_tokens", 0)
+                    written = details.get("cache_write_tokens", 0)
+                    if (any(type(value) is not int or value < 0 for value in (inp, out, cached, written))
+                            or cached + written > inp):
+                        raise ValueError("invalid provider token usage; retaining full reservation")
+                    p_in, p_out = (.4, 1.8) if inp > 272000 else (.2, 1.2)
+                    cost = ((inp - cached - written) * p_in + cached * p_in * .1
+                            + written * p_in * 1.25 + out * p_out) / 1e6
+                    ledger.reconcile(operation, cost, status="response_usage", evidence={"usage": usage, "response_id": data.get("id")})
+                else:
+                    ledger.reconcile(operation, None, status="usage_unavailable")
+            return data
+        except BaseException as exc:
+            if ledger is not None and type(exc).__name__ != "BudgetExceeded":
+                # A network failure may happen AFTER a billable completion. Keep
+                # the full reservation; automatic retries are intentionally off.
+                ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
+            raise
 
     def _tokens(self, data: dict, n: int = 1) -> dict:
+        if not isinstance(data, dict):
+            raise ValueError("provider response must be an object")
         usage = data.get("usage") or {}
-        self.usage["in"] += int(usage.get("prompt_tokens") or 0)
-        self.usage["out"] += int(usage.get("completion_tokens") or 0)
+        if not isinstance(usage, dict):
+            raise ValueError("provider usage must be an object")
+        details = usage.get("prompt_tokens_details") or {}
+        if not isinstance(details, dict):
+            raise ValueError("provider token details must be an object")
+        inp, out = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+        cached, written = details.get("cached_tokens", 0), details.get("cache_write_tokens", 0)
+        if (any(type(value) is not int or value < 0 for value in (inp, out, cached, written))
+                or cached + written > inp):
+            raise ValueError("invalid provider token usage; retaining full reservation")
+        self.usage["in"] += inp - cached - written
+        if cached:
+            self.usage["cache_read"] = self.usage.get("cache_read", 0) + cached
+        if written:
+            self.usage["cache_write"] = self.usage.get("cache_write", 0) + written
+        self.usage["out"] += out
         return dict(self.usage)
 
     def _error_meta(self, exc: BaseException, latency: float, raw: str = "") -> dict:
@@ -737,10 +837,32 @@ class StudentPolicy:
 
     # -- Policy protocol ---------------------------------------------------- #
 
+    def reset(self) -> None:
+        self._queue = []
+        self._notes = {}
+        self._previous_png = self._current_png = b""
+        self._observed_step = None
+        self.usage = {"in": 0, "out": 0}
+
+    def observe(self, obs: Any) -> None:
+        """Advance visual memory on EVERY env step, including queued macro actions.
+
+        Rendering itself is pure; repeated rendering/proposals never advance memory.
+        Env observations carry the previous screen explicitly; this fallback supports
+        external observation adapters that still only supply the current screen.
+        """
+        step = int(getattr(obs, "step", 0) or 0)
+        if step == 0 and self._observed_step != 0:
+            usage = self.usage
+            self.reset()
+            self.usage = usage  # observations do not refund already charged requests
+        if step != self._observed_step:
+            self._previous_png, self._current_png = self._current_png, obs.screenshot
+            self._observed_step = step
+
     async def act(self, obs: Any) -> tuple[Any, dict]:
         t0 = time.perf_counter()
-        if int(getattr(obs, "step", 0) or 0) == 0:
-            self._queue = []  # a new episode never inherits a half-finished macro
+        self.observe(obs)
         if self._queue:
             d, label = self._queue.pop(0)
             return self._macro_step(d, label, None)
@@ -762,7 +884,7 @@ class StudentPolicy:
         except Exception as e:
             return None, self._error_meta(e, latency)
         meta["model_latency_s"] = latency
-        meta["tokens"] = self._tokens(data)
+        meta["tokens"] = dict(self.usage)
         if self.history_notes:
             self._notes[int(getattr(obs, "step", 0) or 0)] = note_from_reply(meta.get("raw_action") or "")
         return action, meta
@@ -774,21 +896,30 @@ class StudentPolicy:
         server returns fewer choices (some servers ignore ``n``).
         """
         n = max(1, int(n))
+        self.observe(obs)
         t0 = time.perf_counter()
         try:
             body, ctx = self.build_request(obs, n=n)
         except Exception as e:
             return [(None, self._error_meta(e, time.perf_counter() - t0)) for _ in range(n)]
-        if n > 1 and self.temperature <= 0.0:
-            body["temperature"] = 1.0  # sampling identical candidates is pointless
+        if self.temperature <= 0.0 and not self.hosted_reasoning:
+            body["temperature"] = 1.0  # sample alternatives even when only one is requested
+        if "seed" in body:
+            body["seed"] += 1
+        self.observe(obs)
+        candidate_base = self.snapshot_state()
         results: list[tuple[Any, dict]] = []
         try:
             data = await self._post(body)
             latency = time.perf_counter() - t0
             choices = data.get("choices") or []
-            tokens = self._tokens(data, max(1, len(choices)))
+            tokens = dict(self.usage)
             for i, ch in enumerate(choices[:n]):
+                self.restore_state(candidate_base)
                 action, meta = self.parse_choice(ch, ctx)
+                if self.history_notes:
+                    self._notes[int(obs.step)] = note_from_reply(meta.get("raw_action") or "")
+                meta["_policy_state"] = self.snapshot_state()
                 meta.update({"model_latency_s": latency, "tokens": tokens, "candidate_index": len(results)})
                 results.append((action, meta))
         except (httpx.HTTPError, asyncio.TimeoutError, OSError, ValueError) as e:
@@ -811,12 +942,17 @@ class StudentPolicy:
                 chs = d.get("choices") or []
                 if not chs:
                     return None, self._error_meta(RuntimeError("response has no choices"), lat)
+                self.restore_state(candidate_base)
                 a, m = self.parse_choice(chs[0], ctx)
-                m.update({"model_latency_s": lat, "tokens": self._tokens(d), "candidate_index": idx})
+                if self.history_notes:
+                    self._notes[int(obs.step)] = note_from_reply(m.get("raw_action") or "")
+                m["_policy_state"] = self.snapshot_state()
+                m.update({"model_latency_s": lat, "tokens": dict(self.usage), "candidate_index": idx})
                 return a, m
 
-            extra = await asyncio.gather(*(one(len(results) + i) for i in range(missing)))
+            extra = [await one(len(results) + i) for i in range(missing)]
             results.extend(extra)
+        self.restore_state(candidate_base)
         return results[:n]
 
 

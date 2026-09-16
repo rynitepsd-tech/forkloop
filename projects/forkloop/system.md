@@ -3,24 +3,26 @@
 This document explains every part of the product as it exists today. It is
 descriptive: if the code and this file disagree, the code is the truth and
 this file has a bug. The interface *spec* (what the parts promise each other)
-is `docs/contracts.md`; the plan that motivated all of it is
-`../../forkloop-plan.md` on the author's machine and is summarised in the
-README.
+is `docs/contracts.md`. The supported user paths are `forkloop demo`, setup
+diagnostics with `forkloop doctor`, matched evaluation with `forkloop compare`,
+and text/HTML evidence inspection with `report` and `compare-report`. Other
+families, search and training remain research paths. See the README and
+[dated verification record](docs/product-handoff.md) for exercised paths and limits.
 
 Contents
 
-1. Purpose and thesis
+1. Purpose, thesis, and current evaluation status
 2. Repository layout
 3. The two channels
 4. Core library (`forkloop/`)
    4.1 actions · 4.2 types · 4.3 backends (base, fake, solari) · 4.4 dbaccess ·
    4.5 oracle · 4.6 tasks · 4.7 world · 4.8 seed · 4.9 observe · 4.10 reset ·
    4.11 pool · 4.12 env · 4.13 search · 4.14 trajectories · 4.15 exporters ·
-   4.16 metrics · 4.17 policies · 4.18 bench · 4.19 util · 4.20 cli
+   4.16 metrics · 4.17 policies · 4.18 bench · 4.19 util · 4.20 cli · 4.21 report
 5. Worlds
    5.1 toy-counter · 5.2 claims-ops-v1 (portal, OpenEMR layer, task families,
    build scripts)
-6. Training ladder (`train/`)
+6. Training ladder (`train/`), frozen evaluation (6.1) and magnification diagnostic (6.2)
 7. Spikes (`spikes/`)
 8. Cookbook example
 9. Tests
@@ -32,22 +34,192 @@ Contents
 
 ## 1. Purpose and thesis
 
-Computer-use agents are trained inside environments that must be reset to a
-known state thousands of times. Existing frameworks (Gym-Anything, CUA-Gym,
-OSWorld) orchestrate Docker or QEMU with per-application reset scripts.
-Solari desktops expose `snapshot()`, `revert(id)` (rewind the same machine)
-and `create(from_snapshot=id)` (independent copies). Forkloop's thesis: with
-those three calls the environment *runtime* becomes trivial — build the world
-once, snapshot it, then every `reset()` is one `revert()` and every search
-branch is one fork — and the hard part becomes the *world* and the *oracle*.
+Computer-use agents need repeatable task state. Prior work includes
+[Gym-Anything / CUA-World](https://arxiv.org/abs/2604.06126) and
+[OSWorld](https://github.com/xlang-ai/OSWorld); Forkloop does not claim to
+invent software environments or execution-based evaluation.
+[Solari](https://getsolari.com) desktops provide `snapshot()`, `revert(id)`
+and `create(from_snapshot=id)`. These simplify the restore stage, not the
+whole runtime: reset also seeds, prepares the world, checks health, captures
+baselines and opens a stable initial screen (§4.10). The first allocation
+forks/builds a golden; healthy reused workers normally revert.
 
-The headline artifact the plan calls for is a learning curve: a vision-only
+The original research plan called for a learning curve: a vision-only
 ~4B policy, fine-tuned on oracle-verified teacher trajectories, improving on
 held-out episodes of a cross-application claims workflow (payer portal +
-OpenEMR), with every reward decided by deterministic SQL and every reset done
-by `revert()`. This repository contains everything needed to produce that
-artifact; the measurements themselves have not been taken yet (README
-"Status", `docs/limitations.md`).
+OpenEMR), with every reward decided by deterministic SQL and task state reset
+through the snapshot-backed pipeline. This repository contains the training
+and evaluation components, but not the intended positive learning-curve evidence.
+Historical base/SFT-v1/SFT-v2 development runs each scored 0/30.
+The v3 adapter has now been trained and evaluated on a larger frozen set of
+saved observations. It improves exact reading and immediate action selection
+there; complete-workflow success was measured at **0/2 for both base and v3**
+in the paired development evaluation. No positive learning curve is established.
+
+### Current product — September 15 recovery
+
+New Solari allocations are paused by `require_solari_lifetime_bound`, including
+the historical standalone spike allocators. The guard is independent of ledger
+state and pricing acknowledgments. Doctor reports the capability hold without
+advertising a fictitious per-create upper bound; offline workflows and cleanup
+remain available. The source release's report regressions construct their own
+offline evidence and no longer require private historical screenshots.
+
+The product now accepts two built-in or trusted custom policies through a
+versioned configuration. `policy_config.py` resolves identities, prompt content
+and constructor options; `comparison.py` records the full best-of-one plan before
+allocation, alternates policy order by seed, and compares recorded task/reset
+state. Every planned cell remains visible. Setup, provider and interrupted
+attempts are not silently counted as model failures; incomplete comparisons
+cannot nominate a leader. `comparison_html.py` presents those denominators,
+changed settings, equivalence checks and links to episode evidence.
+
+`forkloop compare-report --format html --bundle DIRECTORY --crop-top PIXELS`
+regenerates a new HTML-only sharing directory. It excludes raw controller JSON,
+logs and original screenshot files. Every exported episode is freshly rendered
+with the selected crop, not copied from potentially uncropped prior HTML.
+Screenshot pixels and free text still require human review; this is not a secret
+scanner or anonymization guarantee.
+
+The interrupted September 15 memory experiment retained one comparable pair
+out of four planned, with A and B each 0/2 scored and one additional A attempt
+excluded after a backend action error. Navigation retained two comparable pairs:
+two compact-prompt failures and two workflow-prompt successes. Original plans
+and interrupted records are unchanged. This is incomplete development evidence,
+not a winning-policy or held-out reliability claim.
+
+Recovery found two session desktops still reported running about ten hours
+after creation; both were explicitly killed, and a read-only inventory confirmed
+no remaining active session machines. The five-hour reservation assumption
+therefore cannot be treated as a verified provider lifetime cap. Priced elapsed
+time is not an invoice, and confirmed cleanup does not erase uncertain charges.
+
+### Current product — offline evidence integration, September 10 session
+
+`forkloop report PATH --format html --out FILE.html` now generates a
+self-contained, script-free report from the canonical retained artifacts.
+The worked example exposes `WRONG_VALUE`, the expected/persisted authorization,
+all declared check results, scoped exemptions and six preserved screenshots;
+142 unavailable references remain explicitly unavailable. No live query or
+model call is made. Default text reporting and run filters remain supported.
+
+Five controller-constructed offline scenarios exercise the real portal HTTP
+routes, reset/recording and oracle with SQLite stand-ins: correct appeal accepted,
+wrong authorization rejected, wrong-record edit rejected, duplicate rejected,
+and abrupt interruption left unscored. They do not measure policy navigation.
+The exact-one invariant remains exact-one; count shortfalls now carry
+`NOT_DONE` instead of a misleading duplicate code. Incomplete invariant evidence
+can no longer become a clean side-effect summary.
+
+The retained model results below are unchanged. The next product evaluation is
+a human reviewing the report against a concrete policy-comparison decision,
+not another paid learning experiment. No external usage or demand is established.
+
+### Current state — September 7, 2026, after the live paired comparison and the stopped magnification diagnostic
+
+Three evaluation sessions ran on September 6–7 against the same frozen weights;
+the results of record, in order, are
+[frozen-v3-evaluation-results.md](docs/frozen-v3-evaluation-results.md)
+(saved observations plus an incomplete live attempt),
+[live-paired-v3-results.md](docs/live-paired-v3-results.md)
+(the completed live paired comparison), and
+[document-magnification-results.md](docs/document-magnification-results.md)
+(a diagnostic stopped before model scoring). The
+[training handoff](docs/lambda-v3-handoff.md)
+records how the weights were produced; the
+[evaluation readiness handoff](docs/evaluation-readiness-handoff.md)
+records the frozen package. Their run proposals are historical.
+
+**Preserved weights.** The main adapter completed **411/440 planned optimizer
+steps, or 1.869169 epochs**, on 25 teacher episodes (1,758 examples). It is
+not a completed two-epoch run and was never resumed. Base:
+`microsoft/Fara1.5-4B`, revision `776a33ae5b2ad503796a97ae20fdc66f61d2feea`;
+adapter SHA-256 `97b1f2d4581332ce679f555834c7ac842c54d585fe22799c702bcb64b3a5018d`.
+
+**Saved observations (frozen v3 evaluation).** Both models completed all 40
+frozen cases: 80 requests, 40 matched pairs. Teacher-reached states from 20
+development episodes, not independent navigation.
+
+| Metric | Base | Frozen v3 adapter |
+| --- | ---: | ---: |
+| Exact authorization emitted in a recognized structured field | 8/20 | 14/20 |
+| Exact authorization selected for typing | 2/20 | 14/20 |
+| Exact mapped runtime type action | 2/20 | 14/20 |
+| Navigation agreement with the teacher's recorded action | 8/20 | 13/20 |
+| Incorrect runtime typing on authorization states | 3/20 | 6/20 |
+
+The adapter typed on all 20 authorization states (base on five); its six
+errors are single-glyph confusions or dropped characters (seeds 102, 105, 109,
+116, 121, 138). Fixed mapped actions do not prove persisted form entry.
+
+**Live paired comparison (September 6, 22:00–23:00 UTC).** After
+`SolariMachine._ready` was repaired to redial the control channel after every
+transport error inside one monotonic deadline, and `lambda_development_eval.py`
+became a paired sequencer on one reverted golden machine, all four planned
+cells completed: 2/2 matched pairs on development seeds 200 and 201, zero
+missing, zero recovery used. Neither model succeeded (0/2 each). The adapter
+submitted the seed-200 appeal — correct patient, document, appeal
+form, reason and one submitted appeal — but failed verification by transcribing
+`AUTH-3614538` for `AUTH-36G14538` from the PDF at 75% viewer zoom; five later
+round-trips repeated the same value. On seed 201 it found the correct patient,
+rejected the decoy letter, then an in-VM Chrome renderer crash ("Aw, Snap!",
+error code 5) logged it out and it issued 67 consecutive waits. Base never got
+past the OpenEMR login/menu bar on either seed. Reset equivalence held for
+both pairs (identical task fingerprints, 14 checksummed tables, watermarks).
+
+The portable worked example retains this seed-200 episode's 74 recorded steps
+and **6/148 referenced screenshots**. It is selected live failure evidence, not
+a full visual replay. Missing screenshots are not reconstructed. All observed
+checks passing except the value check does not imply global application safety:
+checksums cover configured tables and OpenEMR audit evidence is a coarse tripwire.
+
+**Magnification diagnostic (September 7, 01:10–02:15 UTC) — stopped before
+scoring.** The plan was to re-present the 20 saved authorization cases to the
+frozen adapter with the source PDF at the viewer's default 70% fit versus 150%
+set through the viewer's own zoom readout, on states reconstructed by the
+controller from recorded provenance. The protocol was frozen
+(`runs/magnification-20260906/protocol.md`), the geometry fixed on neutral
+seed 107 (measured text row height 7 px → 16 px, authorization line fully in
+the pane), and seed 101 prepared. Then Chrome's renderer crashed on OpenEMR
+page loads 13 times during controller navigation — login, finder, chart and
+Documents alike, typically 17–30 s after a login; a fresh Chrome process
+crashed just the same — exceeding the protocol's 12-crash session limit with
+1/20 scored seeds prepared. No model request was made, no GPU was launched,
+and the hypothesis remains untested (0/0 matched pairs, not zero successes).
+No agent, reset-pipeline or product code was changed; the crash handling that
+was added lives only in the controller preparation harness and is recorded
+per attempt. Historical crash frequency for comparison: 2 of 45 teacher
+episodes on 2026-09-04.
+
+Scripts introduced in that historical session: `scripts/magnification_common.py`
+(label-free PDF-toolbar detection, text-size measurement, zoom/page/positioning
+action sequences), `scripts/magnification_observations.py` (session-owned
+golden fork/attach, per-seed reconstruction and captures, exercised end to end
+on seeds 107 and 101), `scripts/build_magnification_package.py` and
+`scripts/compare_magnification.py` (scaffolding validated offline only: the
+builder produced a `verify_dataset`-clean package from the one prepared seed,
+the comparator was checked on synthetic rows and rejects pairs whose server
+telemetry is absent; neither has processed real model output).
+
+**Resources and closure.** Every session's GPU instance is provider-confirmed
+terminated (`9c39b779…`, `bc9308f2…`); the magnification session launched
+none. Lambda reservations retained pending invoice: $12.4362 and $11.844 (the
+conservative compute estimates are $2.03 and $2.94). Solari cumulative
+accounted upper is **$8.308**, as reported by the September 7 magnification
+receipt; this is pending reservation accounting, not a compute invoice. It was
+below the $10 ceiling and above the former
+$8 threshold under explicit authorization. No session-owned Solari machine
+remains; the golden snapshot and the two pre-existing Lambda
+filesystems are preserved. OpenAI and other paid services: $0 in all three
+evaluation sessions. Former instance IPs are historical, not reusable hosts.
+
+**Separately authorized research next step.** Run a short disposable check of OpenEMR page-load stability on
+a fresh fork before any further Solari-based work; if the renderer crash rate
+is back at the September 4 level, rerun the magnification preparation and then
+the GPU scoring step; if not, the renderer-crash problem seen on seed 201 and
+throughout the magnification session must be characterised on its own. The
+adapter, frozen inputs and all artifacts remain preserved; seeds 100500–100529
+remain sealed. Another paid run needs fresh authorization.
 
 ## 2. Repository layout
 
@@ -63,7 +235,8 @@ projects/forkloop/
     bench/{reset_benchmark,cost_model}.py + bench/local_baseline/ (docker-compose baseline)
     util/{sql,minipdf}.py
     actions.py types.py tasks.py oracle.py dbaccess.py world.py seed.py observe.py
-    reset.py pool.py env.py search.py trajectories.py metrics.py cli.py
+    reset.py pool.py env.py search.py trajectories.py metrics.py report.py fixed_metrics.py spending.py cli.py
+    policies/observation.py · exporters/observations.py  shared v3 multimodal observation contract
   worlds/
     toy_counter/{world.yaml,world.py}
     claims_ops_v1/{world.yaml,world.py,seed_world.py,build.sh,browser_setup.sh}
@@ -71,7 +244,7 @@ projects/forkloop/
     claims_ops_v1/openemr/    install.sh, shim_schema.sql, base_data, openemr_sql helpers
     claims_ops_v1/tasks/      common.py + one module per family
   train/                    make_sft, train_lora, eval, plot, bakeoff, wilson, box_setup.sh (one-command GPU box setup), README, examples/
-  scripts/                  inspect_episode (failure triage), episode_table, compare_teachers, audit_probe (replay + OpenEMR log dump),
+  scripts/                  inspect_episode (wrapper over forkloop.report), episode_table, compare_teachers, audit_probe (replay + OpenEMR log dump),
                             chrome_crash_probe, solari_verify_fork (re-check revert/snapshot/disk on a golden fork), gui_episode,
                             student_click_check (one fork, one student click, the four coordinate-space values + a crosshair PNG),
                             classify_failures (a run's failed episodes into the bake-off classes: invalid/parse, wrong-record,
@@ -80,9 +253,20 @@ projects/forkloop/
                             verdict.details.ui_milestones, plus the trajectory rungs login_page / auth_typed; --png draws
                             several runs side by side, e.g. docs/images/staircase-f3-ladder.png)
   spikes/                   _common.py, spike_00..06, run_all.sh
-  tests/                    211 offline tests (+ conftest.py that scrubs FORKLOOP_GOLDEN_* so the suite is safe with the env sourced)
-  docs/                     HANDOFF (read first), contracts, spikes (results ledger incl. the SFT ladder table), solari-repro, solari-message,
-                            cost, limitations, buildlog, student-2026-09-05/06 (student ledgers), images/ (charts)
+                            frozen evaluation: build_saved_evaluation, stage_evaluation_package, evaluation_contract,
+                            run_inference_only, saved_fixed_eval, compare_saved_evaluation, lambda_serve,
+                            lambda_development_eval, lambda_score_development, compare_live_evaluation,
+                            gpu_inference_watchdog, start_live_guard, evaluation_watchdog,
+                            lambda_provision, live_paired_readiness (see §6.1);
+                            magnification diagnostic: magnification_common, magnification_observations,
+                            build_magnification_package, compare_magnification (see §6.2)
+  tests/                    offline contract/regression tests and portable GPU-environment checks (see §9);
+                            conftest.py scrubs FORKLOOP_GOLDEN_* so fake tests cannot use a live golden
+  docs/                     worked-example/ (one recorded live episode + its report; the README's entry point), contracts,
+                            HANDOFF and later handoffs (research diary), spikes (results ledger incl. the SFT ladder table),
+                            solari-repro, solari-message, cost, limitations, buildlog, student-2026-09-05/06 (student ledgers),
+                            images/ (charts), lambda-v3-handoff, evaluation-readiness-handoff, frozen-v3-evaluation-results,
+                            live-paired-v3-results, document-magnification-results
 examples/desktop-snapshot-revert-py/   the cookbook example (outside the project dir)
 ```
 
@@ -94,7 +278,7 @@ them apart by construction:
 | | Agent channel | Controller channel |
 | --- | --- | --- |
 | Who | the policy being evaluated (teacher or student) | forkloop on the researcher's machine |
-| In | `Observation`: screenshot PNG, instruction, step index, last-k actions, screen size | DB rows, exec output, health, snapshot ids |
+| In | `Observation`: current and preceding screenshot PNGs, instruction, step index, last-k actions, screen size | DB rows, exec output, health, snapshot ids |
 | Out | one `Action` per step (click/type/key/scroll/drag/wait/done) | SQL scripts, files, commands, snapshot/revert/kill |
 | Implemented by | `Machine.screenshot/click/type_text/press/...` | `Machine.exec/read_file/write_file/snapshot/revert/kill` |
 
@@ -187,7 +371,8 @@ alive) and `snapshot()` works on forks (20.8 s). `reset-bench` on the
 golden the same night: `revert(golden)` 10/10 on one machine id, full reset
 p50 100.9 s; `create(from_snapshot)` 10/10, p50 92.0 s — so revert is the
 pool's reset mode (`--pool-mode revert` is the CLI default; fork stays the
-fallback), and best-of-N search runs for real. Still ignored: `disk_gb`
+fallback). Historical best-of-N runs preceded the v3 isolation repair and do
+not validate the current search implementation. Still ignored in those measurements: `disk_gb`
 (3.9 GB disk), `cpu`/`mem_mb` on forks (2 vCPU / 4 GB); `recordingUrl` never
 populates. Restores are bimodal — ≈ 22 s or 70–160 s (max 353 s) — and the
 two modes are identical for revert and fork, so the slow half is the host
@@ -222,12 +407,16 @@ exempt_tables), `OracleSpec` (effects, invariants), `Verdict` (reward,
 milestones, reason_code, failed, details). `Oracle.evaluate` runs every
 check (so `failed` is complete), sets `reason_code` to the first failure,
 `reward = 1.0` iff nothing failed, `milestones` = fraction of effects passed.
+For exact-count checks configured as `DUPLICATE_SIDE_EFFECT`, a shortfall is
+now classified `NOT_DONE`; the check still fails and exact-one acceptance is
+unchanged. Excess counts remain duplicates. Historical verdicts are not rewritten.
 
 Kinds:
 
 - `query` / `count`: first column of the first row compared with `equals`
   using `op` (`eq`, `ne`, `in`, `ge`, `le`, `contains`) after light
   normalisation (numeric strings ≡ ints).
+- `preserve_fields`: capture selected query rows at reset and require the same rows/fields at verification, excluding only explicit `mutable_fields` and configured bookkeeping columns. Family 1 protects the target appointment beyond its allowed date/time changes; family 2 protects insurance and claim rows beyond requested changes.
 - `baseline_checksum`: `Baseline.capture` records `{table: {pk: md5(row)}}`
   for every table in `oracle.checksum_tables` and the max primary key of each
   append-only table (`watermark_tables`). `diff_baseline` reports
@@ -333,17 +522,21 @@ cap. Two modes:
 If no golden snapshot is configured, the first worker builds the world
 (`world.build`) under a lock and snapshots it; a second worker that raced on
 the same miss reverts (or re-forks) to the snapshot the first one built. On
+the fake backend the world's `golden_snapshot_env` is ignored (its snapshots
+are directories of this process; a Solari id left in the environment made
+every offline reset fail with "unknown snapshot" until 2026-09-07). On
 Solari this implicit build is refused — you run `forkloop build-world`
 explicitly because it takes minutes. `create` retries 429/503/timeouts
 (240 s per call) with backoff — capped at 15 s for 429s
 (`concurrency_backoff_max_s`), because a 1→60 s doubling turned Solari's
 slot-release lag after a kill into 130–240 s restores — and on a 429 it
-first re-lists and kills orphans (`reap_orphans`: `forkloop=1` machines no
-worker owns, including leaks from a timed-out create). Reaping kills
-*every* such machine on the account, so a pool that shares the account with
-a live parent pool — the per-branch pools of `best_of_n` — is created with
-`reap_orphans_enabled=False` (on 2026-09-03 a branch pool killed the
-episode's main worker at start-up). Every event (`create_retry`, `reaped`,
+first re-lists and kills orphans. `reap_orphans` filters on `forkloop=1` and
+**this pool's `run_id`**, checks the returned metadata again, and excludes
+worker-owned machines; it can clean leaks from an ambiguous create without
+reaping another run. Branch pools also set `reap_orphans_enabled=False`.
+The CLI `forkloop reap` instead uses the caller's session ledger by default;
+account-wide Forkloop cleanup requires explicit `--all-sessions`.
+Every event (`create_retry`, `reaped`,
 `restored` with seconds, `golden_built`, `revert_failed_replaced_machine`,
 `revert_unsupported_fell_back_to_fork` with the error text) is kept in
 `events` and echoed to stderr as `[pool HH:MM:SS] …` unless
@@ -372,14 +565,14 @@ stable_after_action, max_invalid, ...)`.
   never in the reward; the base `World` returns None; errors are recorded,
   not raised). Added 2026-09-05 for the student staircase.
 - `checkpoint()`/`restore(cp)` snapshot and revert the machine *and* the
-  env's own state (step, history, invalid count, clock) for search.
+  env's own state (step, charged-action count, history, invalid count, elapsed execution clock and both screenshots) for search. Waits advance observation history without consuming charged actions. `act_with_deadline` bounds policy calls by remaining trajectory time; `step` verifies expiry before applying another action.
 - `run_episode(env, policy, seed)` is the plain loop.
 
 ### 4.13 `search.py`
 
 `best_of_n(env, policy, n, seed, branch_prob, confidence_threshold,
 max_branch_points, mode)`. At an uncertain step: checkpoint, gather `n`
-candidates (`policy.propose` if available, else repeated `act`), dedupe,
+candidates from the explicit policy checkpoint **before** the initial `act`, with a separate post-choice state attached to each candidate, dedupe,
 then either
 
 - `revert` mode: for each candidate, `env.restore(cp)`, roll out to the end
@@ -389,6 +582,8 @@ then either
   with orphan reaping off, attach a sub-env directly to the already-seeded
   state, roll out, then close both the sub-env and its pool (the branch's
   fork must not outlive the branch).
+
+`BranchablePolicy` declares mutable decision fields; branch clones deep-copy those fields and share network clients and monotonic usage counters deliberately. Unsupported policies fail before resource creation. Fork sub-environments inherit the parent's budget overrides, invalid-action limit, stability settings and history. Candidate generation obeys remaining trajectory time. Failed branches finish sibling cleanup before propagating errors. In fork mode the parent VM remains at the branch point: adoption is terminal recorded output, not a live VM transfer. The revised isolation path is fake-backend tested, not revalidated through paid search.
 
 The best verdict (reward, then milestones) wins; the main recorder adopts the
 winning branch's steps (copying screenshots) and finishes with its verdict;
@@ -438,17 +633,11 @@ expected values omitted unless asked).
 
 ### 4.16 `metrics.py`
 
-`wilson(k, n)` and `summarize_run(run_dir)` → success rate, milestone score,
-median steps/wall/reset, cost per success (VM hours × hourly rate + tokens ×
-prices), invalid-action rate, wrong-record / duplicate / collateral rates,
-reason-code histogram, per-family and per-split breakdowns, all rates with
-95% Wilson intervals. `format_table` prints it. Rates, steps and walls are
-over the selected attempt per seed; `cost_*` and `tokens` count every
-attempt (`n_attempts`, `n_superseded`), so `cost_per_success_usd` is the
-whole run's spend over verified seeds. Token prices come from
-`MODEL_PRICES_PER_M` by the `model` in `run.json` (Anthropic and OpenAI
-GPT-5.6 entries); the hosted OpenAI path reports no cache reads, so its
-cost is an upper bound.
+`wilson(k, n)` and `summarize_run(run_dir)` report success, milestones and invalid actions with Wilson intervals. Secondary failures come from the complete verdict, including collateral/safety checks. Selected-attempt rates are separate from all-attempt token and timing totals.
+
+`accounting.json` records experiment-wide policy usage even on failure and after branch adoption. Usage is cumulative: maximum over repeated step counters, never their sum; accounting includes losing branches and discarded output. Legacy runs without this file may still omit failed calls and are flagged. Model response token usage is authoritative usage; multiplying it by a price is a cost calculation, not an invoice.
+
+Summary VM costs estimate execution plus recorded reset/setup and fork lifetimes. Unknown idle/storage/failed setup costs remain explicitly incomplete. `spending.py` provides the independent SQLite reservation ledger used before every authorized paid request/create: process-safe atomic reservations, service-specific stop/ceiling limits, no refunds for uncertain calls, and persistent resource IDs. OpenAI Luna calls have explicit token caps and zero HTTP retries. Solari creates reserve the full Starter maximum lifetime plus setup, request a 30-minute kill timeout, and retain invoice-pending reservations after confirmed cleanup. September pricing expires October 1. This guard does not authorize other paid paths such as Anthropic or GPU rental.
 
 ### 4.17 policies
 
@@ -486,7 +675,7 @@ cost is an upper bound.
   screenshot (the env keeps at least that many actions since 2026-09-04; before,
   `collect` left the env at its default of 8 and `--history-k 16` showed 8),
   `--history-notes` puts the model's own reasoning line next to each previous
-  action — its only memory across turns, since the history is compact actions
+  action — optional additional memory across turns alongside paired screenshots and compact actions
   (`note_from_reply`; measured need in `docs/spikes.md` 2026-09-04) —, `--instruction-note`
   appends a policy-side text to every instruction the model sees (the world and
   the manifests are untouched; used by the 2026-09-05 login probes,
@@ -496,8 +685,7 @@ cost is an upper bound.
   by a no-user rule, the v5 world conventions appended), every one of these knobs
   is recorded in `run.json` under `policy_options`; the module-level helpers `fara_allowed_actions(nav_macro)` and
   `format_prompt_override(text, coord_size, allowed)` do the tool-enum and placeholder work so `train/train_lora.py`
-  renders the same system prompt at training time (2026-09-05: verified byte-for-byte, 3,150 prompt tokens for the
-  same screenshot in training and in the vLLM probe), and a history-based loop warning (three near-identical pointer
+  renders system text at training time. That earlier single-screen comparison did not prove full input parity. The v3 repair shares `policies/observation.py`: task/history text, then labeled previous/current images; step zero has only current. Historical pointer coordinates are converted from desktop pixels to the configured model space. Rendering is pure; `observe()` advances on every action including queued macro actions. Complete message/image tests and the real cached HF processor now verify the inference prefix, all images and target masking, and a history-based loop warning (three near-identical pointer
   actions, three waits, an alternating pair, or five consecutive scrolls in
   one direction whatever their coordinates) appends a "do not repeat" line. The model's reasoning precedes the action inside `raw_action`
   (`policy_note` stays empty), which is what `scripts/inspect_episode.py`
@@ -538,23 +726,101 @@ OpenEMR).
 
 ### 4.20 `cli.py`
 
-`forkloop worlds | task | build-world | run | collect | export | metrics |
-reset-bench | reap`. `--backend fake|solari` (env `FORKLOOP_BACKEND`),
+`forkloop worlds | task | build-world | run | collect | export | metrics | report |
+ledger | reset-bench | reap | demo | doctor | compare | compare-report`. `--backend fake|solari` (env `FORKLOOP_BACKEND`),
 `--policy scripted|random|teacher|student`, `--best-of N --search-mode
 revert|fork`, `--seeds 0-99,200`, `--concurrency`, `--pool-mode
 revert|fork`, `--max-steps/--max-seconds` (recorded as `budget_override` in
 `run.json`), `--reset-retries N` (re-queue a seed whose reset failed, after
 `--reset-retry-wait-s`), `--retry-failed N` (after the pass, re-run every
-seed below 1.0 up to N more times on a fresh fork; §4.14), and the student
+seed below 1.0 up to N more times through the selected reset mode; §4.14), and the student
 knobs `--student-url --system-prompt-file --history-k --history-notes --prev-shot
 --image-detail --effort --nav-macro --instruction-note` (`--nav-macro` expands Fara's
 `visit_url` / `history_back`; `--instruction-note` appends a policy-side text to every
 instruction the model sees, §4.17). All of them are written to `run.json` under
 `policy_options` (2026-09-05), since the world and the manifests do not change with
 them. `_policy()` takes `family/seed/attempt` context so
-tests can swap in attempt-aware policies. `reap --dry-run` lists the
-account's forkloop machines. `reset-bench` hands the benchmark its own argv
-(`argparse.REMAINDER` used to swallow the leading `--world`).
+tests can swap in attempt-aware policies. `reap --dry-run` lists only the
+selected session's machines, unless `--all-sessions` is explicit. `reset-bench` hands the benchmark its own argv
+(`argparse.REMAINDER` used to swallow the leading `--world`). `report PATH`
+(§4.21) explains a recorded run or episode; add `--format html --out FILE`
+to export HTML (default text unchanged, existing run filters preserved).
+`ledger PATH --create --solari-usd N --openai-usd M` creates a session
+reservation ledger (§4.16) for Solari creates and guarded OpenAI calls,
+and prints its per-service summary
+(without `--create` it only prints). `build-world` requests a 30-minute
+kill-on-idle window, not a hard lifetime. A new golden build completed in the
+prior September 15 session. Recovery found two later evaluation machines still
+reported running after about ten hours; both were killed, and the invalid
+reservation bound now blocks further Solari reservations in that ledger.
+
+The student spending guard recognizes `api.openai.com` (including its absolute
+DNS spelling with a trailing dot) and only `gpt-5.6-luna`; arbitrary compatible
+endpoints, Anthropic and GPU rental are not covered. `compare` accepts trusted
+custom Python factories through versioned config; direct `Env`/`run_episode`
+integration remains available. See contracts §14–15 for comparison and recovery.
+An empty `--policy scripted` run on fake claims-ops returns `NOT_DONE` and exit 1.
+
+### 4.21 `report.py`
+
+`episode_report(ep_dir, turns)` and `run_report(run_dir, all_attempts)` render
+what a run left on disk — `run.json`, `manifest.json`, `verdict.json`,
+`steps.jsonl`, `reset.json`, `accounting.json`, `baseline-digest.json`,
+`shots/` — into text. `report_html.html_report` uses the same loader and
+check explanations for static HTML; nothing is recomputed against a machine. The
+report identifies backend, retained evidence and recording timestamps. Live
+artifacts, fake simulations and labeled `constructed_control` scenarios must
+not be conflated: reward 1 means the recorded checks passed on that backend,
+not necessarily a policy navigating real applications. An episode report prints the
+instruction, the manifest's controller-only `expected` block (for the reader;
+it was never sent to the policy), every effect and invariant check as
+`ok`/`FAIL` with expected/actual or the structural evidence (rows outside the
+allow-list, unaudited rows with the newest audit rows, forbidden pages,
+preserved-field before/after), a `side effects` line, the UI-milestone rungs,
+the `type` steps whose text matches a value the oracle compared (with their
+screenshot paths, or `(not preserved)`), the `done` step, reset stage timings,
+token totals and the last N raw model turns. New evaluations classify a
+`DUPLICATE_SIDE_EFFECT` exact-count shortfall as `NOT_DONE`; the report annotates
+both new and legacy shortfall verdicts as "not a duplicate".
+`side_effect_failures()` is the rule the run table's "side-effect failures"
+column uses (`COLLATERAL_EDIT`, `DIRECT_DB_WRITE`, `FORBIDDEN_SCREEN`,
+`WRONG_RECORD`, and `DUPLICATE_SIDE_EFFECT` only when the count exceeds the
+requirement). A run report is one row per selected attempt plus success with
+its Wilson interval and the reason-code histogram; `--failed` / `--all` append
+episode reports. Both shapes of verdict (with and without per-check
+`reason_code` and `ui_milestones`) render. `docs/worked-example/` is a copy of
+one live episode with its report and interpretation; `scripts/inspect_episode.py`
+is now a wrapper over this module.
+
+HTML embeds decoded/re-encoded PNGs only from referenced paths below the
+episode's `shots/` directory, rejecting traversal, symlinks and invalid images.
+Text is escaped, selected identity fields are exposed, infrastructure references
+are redacted and PNG metadata is stripped. The file has no scripts, external
+assets or analytics. Native disclosure controls work with a keyboard.
+HTML exports can use `--crop-top PIXELS` to omit top image rows from sharing copies,
+with the crop disclosed in the report and each frame caption. Source PNGs remain
+unchanged. The worked example uses 114 pixels to remove browser chrome containing
+a session token. This is an explicit reviewed crop, not automatic redaction of
+arbitrary screenshot contents.
+Unknown origin/date/identity and missing frames/checks are shown as unavailable.
+Run-report missing rewards are separate from measured failures and excluded
+from the recorded-outcome denominator. Owners must still inspect free text
+and screenshot pixels before sharing other recordings; this is not universal
+secret detection or new evidence of live execution.
+
+`metrics.summarize_run` tolerates a `run.json` whose `session_ledger` path does
+not exist on this machine (copied run directories) and records
+`session_spend: {"unavailable": path}` instead of raising.
+
+`forkloop demo --out runs/offline-controls` produces
+separate normal Recorder runs for known offline scenarios, marked `backend=fake`,
+`evidence_kind=constructed_control` and an explanatory `evidence_note`.
+The legitimate-success reference exercises the portal/controller and verifier,
+not independent visual navigation; negative and missing-verdict cases show how
+failure and absent outcome evidence differ. The README describes the recurring matched-policy
+comparison job and a prospective first-user feedback session; neither is adoption
+evidence. Interest, assisted use, independent use, repeat use and a changed research
+decision require separate observations, none claimed here.
 
 ## 5. Worlds
 
@@ -666,7 +932,7 @@ OpenEMR login), and 0/30 on `resolve_denial_easy`.
 Per-episode ids live in a block of 1000 starting at `500000 + seed*1000`, so
 episodes never collide with each other or with the base data (100001+).
 
-## 6. Training ladder (`train/`)
+## 6. Training ladder (`train/`) and frozen evaluation
 
 `make_sft.py` turns verified episodes (`reward == 1.0`, selected attempts only) into one record per valid step,
 sorted by `task_id` so `--limit 25/50/94` are nested prefixes. Since 2026-09-05/06 it also has
@@ -677,11 +943,13 @@ file that leaks one; the stats file records `episodes_filtered_seed`), and `--wi
 `recipe: v2-reasoning` and stores the teacher's reasoning line from `raw_action` (everything before the trailing
 compact action line, untruncated) in each record; without it the recipe is `v1-actions-only`.
 
+The v3 exporters reject missing, out-of-episode or noncontiguous screenshots and preserve the original source episodes. Records carry `schema_version: forkloop.observation.v3`, `image_roles`, `image_steps`, `screen_size`, and `history_coordinate_space: screen`. `recipe: v2-reasoning` denotes the unchanged **target** format, not the input schema. `data/sft_f3_25_v3.provenance.json` hashes the dataset, every source file and every image. All 25 first authorization-entry examples have the exact value visible in the preceding source screenshot, confirmed by local OCR; none has it in the current screenshot.
+
 `train_lora.py` (transformers + peft LoRA r=16 on every attention/MLP projection of the language model; Qwen3.5-based
 VLMs including Fara 1.5; imports without torch) renders each record as the chat the student is **served** with:
 `--prompt-style fara --coord-space norm1000` rescales targets and history into Fara's 1000×1000 space, and
 `--system-prompt-file`, `--instruction-note`, `--nav-macro` reproduce `StudentPolicy`'s system prompt (placeholders,
-tool enum with `visit_url`) and the note appended to the instruction. Labels mask every prompt token; the assistant
+tool enum with `visit_url`) and the note appended to the instruction. The loader processes every image. The collator tokenizes the exact inference prefix separately from its assistant continuation, because joint tokenization can merge a boundary newline and change the final prompt token. Labels mask every prompt token; the assistant
 turn is the tool call (v1) or the reasoning line then the tool call (v2), rendered by the Fara chat template as
 `<think>\n\n</think>\n\n` + content, so the served model, whose generation prompt ends in `<think>\n`, learns to close
 the think block and reply the way base Fara replies (prose, then `<tool_call>`; the parser handled 2,432 such
@@ -692,21 +960,28 @@ and 60 in v2). The collate pads per-token extras (transformers 5's `mm_token_typ
 them, which is what made batch sizes above 1 crash. `train_summary.json` records every hyperparameter, the loss
 curve, token statistics and peak VRAM; `train_log.jsonl` has one line per `--log-steps`.
 
-Measured throughput (`docs/spikes.md`, 2026-09-05/06): forward+backward with gradient checkpointing is
+**Historical single-image** throughput (`docs/spikes.md`, 2026-09-05/06): forward+backward with gradient checkpointing is
 6.9 s per example on an RTX A6000 (19–21 GB at batch 1, 30–34 GB at batch 2) and 3.0 s on an H100 80 GB
 (59 GB at batch 4); without checkpointing a single 3.3k-token example needs 74 GB. Attention is `sdpa` on both the
 text and the vision tower (verified; flash-attn 2 is not installed, `eager` is 1.5× slower). A 25-episode rung
-(1,758 records, 2 epochs, effective batch 8) is 440 optimiser steps: 5.5 h on the A6000, 2.3 h on the H100.
+(1,758 records, 2 epochs, effective batch 8) is 440 optimiser steps: 5.5 h on the A6000, 2.3 h reported on the H100 (the separate rounded 3 s/example figure implies 2.93 h; neither predicts paired-image throughput).
+
+**Measured paired-image v3 training:** the main H100 run completed 411/440 steps
+and 1.869169 epochs in 22,852.34 seconds including final save (380.87 minutes),
+with 55.60 seconds per optimizer step and 25.303 GB peak PyTorch allocation.
+The original 380-minute wall cap was checked at optimizer boundaries. The
+remaining 29 steps were not run; no result assumes they would fix the errors.
+See the training handoff and its preserved `train_summary.json` for loss,
+gradient, checkpoint, and environment receipts.
 
 `train/box_setup.sh <commit>` sets a fresh Lambda-style box up in one command: python3.11 from apt (the image ships
 3.10), the repo cloned on the local disk (tolerating run directories rsynced in first), a `venv` for training and a
 separate `venv-vllm` (vLLM pins its own torch; its JIT needs `ninja` on PATH), `HF_HOME` on the persistent NFS mount
 and a `~/forkloop-env.sh` to source. The runs referenced by the SFT records (≈ 1.9 GB of PNGs for the two family-3
-teacher runs) travel with the repo by rsync; record paths are rewritten to the box prefix with `sed` and both hashes
-are kept in the run's `run.json`.
+teacher runs) travel with the repo by rsync; historical jobs rewrote paths with `sed`. For v3, relocate only JSON `images` fields with the handoff command and preserve the original provenance and hash; do not rewrite instructions or targets.
 
 `eval.py` (held-out episodes through the real `Env`, N sampling seeds, Wilson CIs, optional best-of-N,
-`eval_summary.json`) exists, but the ladder rungs so far were evaluated with `forkloop collect` and the exact fair
+`eval_summary.json`) exists. The historical v1/v2 ladder rungs were evaluated with `forkloop collect` and the exact fair
 flags of the base run (`--nav-macro`, `fara_no_user_v1.md`, the credentials note, 120 steps / 900 s, greedy,
 retries off) so every row shares one serving stack: the checkpoint's merged model under vLLM on the GPU box,
 reached from the Mac through an SSH tunnel (`--student-url http://127.0.0.1:8011/v1`, ≈ 0.8 s per call). Results
@@ -717,6 +992,84 @@ ablation row) 0/30 with the staircase flipped (0/30 logins, 19/30 appeals filed 
 benchmark, `--demo` synthetic placeholders), `bakeoff.py` (base success, action-format validity, tokens/step, VRAM,
 LoRA smoke → markdown table), `wilson.py`, `README.md` (rungs 1, 2, 2.5, 3 with commands and GPU guidance).
 
+### 6.1 Frozen v3 evaluation path
+
+`build_saved_evaluation.py` constructs a deterministic, provenance-checked set
+of teacher-reached observations. The executed package is
+`runs/evaluation-readiness-20260906/saved-dev-v3`: 20 authorization and 20
+navigation cases, with original adjacent screenshots and controller-only
+labels. `stage_evaluation_package.py` packages source, frozen adapter, cases,
+images and dependency receipts with a payload manifest. The final archive is
+`runs/evaluation-readiness-20260906/inference-only-final.tar.gz`; earlier package
+revisions are superseded. Input cases SHA-256:
+`7b881466820d672bb6d1dd3d51a73c6af2693ff488c5bb79584fde43050ed1b9`.
+
+`evaluation_contract.py` supplies frozen identities, dataset verification and
+the audited policy. `run_inference_only.py` verifies the complete payload and
+nine critical package versions, starts the pinned base then the same base with
+the adapter, and terminates its own serving processes under a stage deadline.
+`lambda_serve.py` uses Transformers/PEFT, bf16 and SDPA, binds loopback, serializes
+generation and records base/source/adapter identity, request/prompt hashes,
+image grids, token counts, raw output, latency and CUDA allocation. This is the
+executed v3 serving path; historical vLLM timings are not its measurements.
+
+`saved_fixed_eval.py` makes one greedy request per case. `fixed_metrics.py`
+separates exact structured reading, selected typing and mapped runtime typing;
+it retains wrong strings and character edits, parse errors, unsupported actions,
+ambiguity and truncation. Navigation agreement uses the frozen action/tolerance
+rule. `compare_saved_evaluation.py` requires matching input and model-serving
+identities before aggregation and retains missing/unmatched cases. The full
+40-pair result is in `runs/frozen-v3-eval-20260906/fixed-download/fixed-results/`.
+
+On the Mac, `gpu_inference_watchdog.py` binds one explicitly authorized Lambda
+instance and a lifetime-inclusive reservation/deadline to provider termination.
+`start_live_guard.py` includes prior pending Solari ledgers and launches
+`evaluation_watchdog.py`, which cleans only resources tagged to the new ledger.
+`lambda_development_eval.py` requires a fresh ledger-bound heartbeat and matching
+server identity at startup, checks remaining time before each seed, and reserves
+the full operation cost through the backend before each allocation. It implements seeds
+200–202, best-of-one, bounded model/action/time budgets, and stops a variant on
+technical failure. `lambda_score_development.py` separates persisted authorization
+from exact text typing and inspects actual safety assertions rather than treating
+zero appeals as duplicate side effects. `compare_live_evaluation.py` requires
+matching task/reset semantics for completed pairs.
+
+The first live attempt stopped after base seed 201 failed readiness
+(`runs/frozen-v3-eval-20260906/live-comparison-incomplete.json`). The repaired
+path then completed the paired comparison: `SolariMachine._ready` redials the
+control channel after every transport error inside one monotonic deadline,
+`refresh_lifetime()` re-arms the 30-minute kill window before every cell,
+`lambda_development_eval.py --plan trained:200,base:200,base:201,trained:201`
+runs one `WorkerPool(mode='revert', fallback_to_fork=False)` machine reverted to
+golden before each episode with a fresh `Env` and policy per cell, and
+`compare_live_evaluation.py` checks task fingerprints and reset equivalence.
+`lambda_provision.py` launches exactly one Lambda instance with a persisted
+request, inventory reconciliation by unique name and a bounded capacity wait;
+`live_paired_readiness.py` is the no-model revert-cycle diagnostic. Evidence:
+`runs/live-paired-v3-20260906{,-trained,-base}`.
+
+### 6.2 Document-magnification diagnostic (prepared, not scored)
+
+`magnification_common.py` holds label-free screen geometry: the PDF viewer
+toolbar band detector (60,60,60 band ≥40 rows with the readout box at x=720),
+a text row-height measurement inside the PDF canvas, and the action sequences
+for zoom-by-readout, page-by-field and fixed inner positioning.
+`magnification_observations.py` reconstructs each saved authorization case on a
+session-owned golden fork (or attaches to one by id), navigating from recorded
+provenance only — pid, claim number, document name/page/hash, with the expected
+value stripped before the harness runs — and captures the document at the
+default fit zoom, at the magnified zoom, and the appeal form with the field
+focused; every controller action, screenshot hash, DB identity check and
+renderer crash is recorded. It has a calibration gate (one neutral seed,
+operator decision file) and bounded, recorded controller-only retries.
+`build_magnification_package.py` writes a `verify_dataset`-compatible package
+with two cases per seed (case id = sha256 of episode:step:magnification-v1:
+condition) and symmetric exclusions; `compare_magnification.py` pairs by seed,
+requires identical text input, form image, model identity and server telemetry
+(missing telemetry is a validity failure), and reports the frozen metrics with
+corrected/broken/unchanged counts and the live-follow-up gate. The last two are
+validated offline only. Protocol and evidence: `runs/magnification-20260906/`.
+
 ## 7. Spikes (`spikes/`)
 
 Six standalone scripts answering the plan's day-1 questions against real
@@ -725,7 +1078,8 @@ Solari: revert latency (20×, health + stable screenshot), fork independence,
 across revert, screenshot→click→screenshot latency, MariaDB consistency after
 snapshot with and without a read lock. Each prints a table and appends a
 JSON line to `spikes/results.jsonl`; `run_all.sh` runs them in order;
-`docs/spikes.md` holds the empty result tables and decision rules.
+`docs/spikes.md` holds dated measurements and decision rules, including earlier
+Free-plan failures and later Starter re-verification; it is not an empty plan.
 
 ## 8. Cookbook example
 
@@ -736,7 +1090,19 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 9. Tests
 
-211 tests, all offline, ~1 minute (`tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the environment so the fake backend never sees a real snapshot id):
+The table below is the historical 211-test inventory, not a current full-suite
+count. Additional v3 tests cover observation/processor parity, isolation,
+reward preservation, spending, training progress, readiness deadlines and
+frozen evaluation. `tests/conftest.py` deletes `FORKLOOP_GOLDEN_*` from the
+environment so the fake backend never sees a real snapshot id.
+
+The frozen inference session ran the required portable subset on the recorded
+H100 environment: **17 passed**, covering `test_fixed_metrics.py`,
+`test_saved_evaluation.py`, `test_solari_readiness_deadline.py`,
+`test_evaluation_live_guards.py` and `test_lambda_serving_serialization.py`.
+The last check, previously skipped on the Mac for missing Torch, passed there.
+Two provider-watchdog tests passed on the Mac. No new full-suite count or
+complete-workflow success is inferred from these checks.
 
 | File | Covers |
 | --- | --- |
@@ -750,24 +1116,27 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 ## 10. One episode, end to end
 
-1. `forkloop collect --policy teacher --best-of 2` builds a `SolariBackend`, a
+1. `forkloop collect --policy teacher --best-of 1` builds a `SolariBackend`, a
    `WorkerPool(mode=revert)` sized to the plan cap, and a `Recorder`.
 2. `Env.reset(seed)` → `world.generate(family, seed, split)` (pure) →
-   `pool.acquire()` → `ResetController.reset`: `revert(golden)` + reconnect +
-   … (in `--pool-mode fork`, the mode every real run has used so far, this is
-   `kill` + `create(from_snapshot=golden)` instead; `--retry-failed` repeats
-   the whole episode on a fresh fork for seeds that end below 1.0) +
-   health poll; seeding SQL and PDF files over the controller channel;
-   HTTP/DB health; baseline hashes and watermarks; ctrl+l/URL/Return; wait
-   for two identical screenshots. `reset.json` records every stage.
-3. The teacher receives the instruction and screenshot, writes a confidence
+   `pool.acquire()` → `ResetController.reset`: restore the golden (first
+   allocation forks/builds it; healthy reused workers revert and reconnect;
+   fork mode replaces the machine). The completed paired v3 evaluation used
+   one reused machine, not fork mode for every cell. Then seed SQL/files,
+   `before_episode`, health, baseline hashes/watermarks, initial screen and
+   stable-screen capture. Retries repeat this pipeline according to pool mode.
+   `reset.json` records every stage; task-state equivalence is checked rather
+   than assuming clock pixels or all VM bytes are identical.
+3. The teacher receives the instruction and ordered previous/current screenshots
+   (current-only at step zero), writes a confidence
    line and one or more tool calls; the policy hands the env one `Action`.
 4. `Env.step` applies it on the agent channel, waits, screenshots, records
-   the step. If confidence is low, `best_of_n` checkpoints, tries the
-   alternatives by reverting, and adopts the winner.
+   the step. With separately enabled search, `best_of_n` can checkpoint, try
+   alternatives and adopt the winner. The frozen evaluation used best-of-one;
+   revised paid-search behavior is not currently validated.
 5. On `done` (or budget), the oracle recomputes hashes, runs the checks, and
    writes `verdict.json` with a reason code. The worker is released; the next
-   `reset` reverts the same machine.
+   `reset` reverts the same machine or creates a clean fork according to mode.
 6. `forkloop metrics` summarises; `forkloop export --format sft` produces the
    per-step training set; `train/` takes it from there.
 
@@ -775,12 +1144,12 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 
 | | Offline (this repo's tests) | Solari desktop | GPU box | Anthropic API |
 | --- | --- | --- | --- | --- |
-| Core loop, oracle, recorder, search | fake backend | real (best-of-2 fork search verified 3/3 on 2026-09-03) | — | — |
+| Core loop, oracle, recorder, search | fake backend; v3 isolation/clock/accounting contracts | current frozen run best-of-one; historical best-of-2 fork search 3/3 on 2026-09-03 predates the isolation repair | — | — |
 | Portal | in-process (TestClient) | systemd on :8080 | — | — |
 | OpenEMR | SQLite shim of 10 tables | **real 8.3.0 on :80, built and verified** (sandbox) | — | — |
 | Teacher | not run | drives the desktop | — | computer-use toolset |
-| Student | mocked transport | drives the desktop (base Fara 1.5 4B measured 2026-09-04: 0/30 on family 3, three ways; 2026-09-05 with the fair conventions: 30/30 logins, 0/30; base 9B same flags 0/30 with 4/30 charts, 8 s per call, `docs/student-2026-09-06.md`; 2026-09-06 through vLLM on the GPU box: base 0/30, ckpt-25 v1 0/30, ckpt-25 v2 0/30, `docs/spikes.md` ladder table) | **vLLM 0.28 on the rented box, reached through an SSH tunnel** (0.8–1.7 s per call); or mlx-vlm on the M5 Max Mac (bf16, 9 GB resident, 1.5 s per 1280×720 call alone, ≈ 3.7 s median with two episodes sharing it) | — |
-| LoRA training | `--smoke` needs torch | — | **measured**: RTX A6000 6.9 s/example (ckpt-25 v1, 5.5 h, $6), H100 80 GB 3.0 s/example (ckpt-25 v2, 2.3 h, $7.5); `train/box_setup.sh` | — |
+| Student | mocked transport and fixed-metric tests | live paired: 2/2 matched pairs on seeds 200/201, 0/2 success for both models; adapter reached submission on 200 with a one-character misread; magnification prep stopped by renderer crashes (§1) | v3: pinned Transformers/PEFT server on H100 PCIe over SSH; all 40 fixed observations per model completed, with results in §1. Historical v1/v2 used vLLM; older Mac probes used mlx-vlm. The evaluation GPU is now terminated. | — |
+| LoRA training | import/contract tests; real smoke needs Torch/GPU | — | v3 H100: 411/440 steps, 1.869169 epochs, 380.87 minutes, 25.303 GB peak allocation (§6); adapters and receipts preserved locally. Older v1/v2 throughput is historical. | — |
 | Reset benchmark | simulator numbers (labelled) | **revert and fork bars measured on the desktop golden** (n=10 each, p50 100.9 s / 92.0 s, 0 failures; earlier fork-only: sandbox 19.1 s, desktop 25.0 s) | — | — |
 
 ## 12. Verified external facts
@@ -800,4 +1169,4 @@ independence, kill both. Comments sit on the lines where the gotchas bite.
 | Told which word is the password (`--instruction-note`), base Fara 1.5 4B does the two-field login (30/30 episodes); without the critical-points prompt text it never calls `ask_user_question`; past the login it navigates OpenEMR by invented URLs and drops the session; OpenEMR 8.3 logs `login` rows with `success` 0/1 and `http-request-update` rows whose base64 `comments` are the request path; Chrome's post-login "Aw, Snap!" (error code 5) persists with `--disable-gpu` | measured live 2026-09-05, `docs/student-2026-09-06.md`, `runs/fara15-4b-fair-f3-s200-229` |
 | mlx-vlm 0.6.17 (mlx 0.32.2) loads `microsoft/Fara1.5-4B` (`Qwen3_5ForConditionalGeneration`) from the bf16 safetensors without conversion, needs `jinja2` for the chat template, applies the template's `<think>` default (the model closes it at once; `enable_thinking=false` gives identical output), parses `<tool_call>` into `tool_calls` only when the request carries `tools`, and leaves `<\|im_end\|>` in `content` | measured 2026-09-04 (`runs/logs/mlx-server-fara15-4b.log`) |
 | Computer-use toolset `computer_toolset_20260801` GA, member names, batch semantics, result shapes | platform.claude.com computer-use docs |
-| Gym-Anything / CUA-World includes OpenEMR; small models collapse on high complexity; 200-step budgets help on OpenEMR | arxiv 2604.06126 |
+| Gym-Anything converts software into agent environments; its CUA-World collection motivates realistic long-horizon software tasks. This is related work, not a matched rate comparison to Forkloop. | [Gym-Anything / CUA-World](https://arxiv.org/abs/2604.06126) |

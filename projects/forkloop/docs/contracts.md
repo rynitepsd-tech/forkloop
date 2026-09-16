@@ -15,10 +15,12 @@ where Solari's wire format forces camelCase.
 | Channel | Who | Surface | Never carries |
 | --- | --- | --- | --- |
 | **Agent** | the policy under evaluation | screenshot in, `Action` out (mouse/keyboard only) | shell, files, DB credentials, expected values, task metadata beyond the instruction |
-| **Controller** | forkloop on the researcher's machine | `exec`, `files`, `snapshot`, `revert`, `create(from_snapshot)`, DB queries | anything that ends up inside a screenshot the agent sees |
+| **Controller** | forkloop on the researcher's machine | `exec`, `files`, `snapshot`, `revert`, `create(from_snapshot)`, DB queries | raw controller responses, manifests and oracle labels passed directly to the policy |
 
-Reward code and expected values live only on the controller. The VM contains
-the world, never the answer key.
+Reward code and answer-key metadata live only on the controller. The VM contains
+the world, including seeded application documents whose values the policy must
+read through screenshots; the controller's labels are never passed directly to
+the policy.
 
 ---
 
@@ -244,6 +246,13 @@ Standard reason codes (world generators must use these when they apply):
 `WRONG_ATTACHMENT`, `PROVIDER_CHANGED`, `WRONG_SLOT`, `BUDGET_EXCEEDED`,
 `INVALID_ACTION_LIMIT`.
 
+For a failed `kind=count`, `op=eq` check configured with
+`DUPLICATE_SIDE_EFFECT`, a count below the required value is classified
+`NOT_DONE`; a count above remains `DUPLICATE_SIDE_EFFECT`. The exact-count
+assertion still fails in both cases. This corrects new evaluations without
+rewriting historical manifests or verdicts. Legacy shortfall labels are
+annotated by the report and excluded from detected duplicate side effects.
+
 **Baseline checksum.** After seeding, the controller computes for every table
 in both DBs `md5(row)` per primary key (`SELECT pk, <all cols> ORDER BY pk`).
 After the episode it recomputes. A row counts as *changed* if its hash differs
@@ -462,7 +471,9 @@ runs/<run_id>/
 
 Exporters read only this layout. `sft_pairs` emits one example per step of
 every episode with `verdict.reward == 1.0`:
-`{"images": ["shots/000_before.png"], "instruction": ..., "history": [...last k raw actions...], "target": "<raw_action>"}`.
+`schema_version: forkloop.observation.v3`. At step i>0, `images` contains the original `shot_before` for steps i-1 and i, in that order; at step 0 it contains only current. `image_roles`, `image_steps`, `screen_size`, and `history_coordinate_space: screen` are required v3 metadata. The exporter rejects missing/gapped/out-of-episode images. History is the last k executed contract actions (including invalid raw actions and waits), with k=0 meaning none.
+
+`policies/observation.py` constructs the shared user content: task/history text, label for the previous screen/action, previous image, label for current, current image. Pointer history is converted from desktop pixels to the requested model coordinate system exactly once. The loader processes all images; the HF processor consumes them in that order. Targets/reasoning and controller metadata never enter prompt construction. The training collator tokenizes the exact inference prefix, then its assistant continuation separately to preserve the generation-boundary token IDs, masks all prompt/padding tokens and retains only continuation labels. No silent fallback template is allowed. Input rendering is pure; observation state advances once per environment step, including macro boundaries.
 
 **Attempts.** `collect --retry-failed N` re-runs every seed whose reward is
 below 1.0 up to N more times, each on a fresh reset (a new fork in fork mode),
@@ -481,13 +492,76 @@ scripts — skips superseded attempts unless asked for `include_superseded=True`
 the selected attempt, `n_attempts`, and the `attempts` list). Reset failures
 (`--reset-retries`) are retried inside an attempt and do not consume one.
 
+**Readers.** `forkloop report <run>|<episode>` (`forkloop/report.py`) renders
+the directory as text without touching a machine: `run.json` supplies the
+provenance banner (`backend`, `model`, `policy_options`, `budget_override`),
+`manifest.json` the instruction, `expected` and the oracle spec (allow-lists,
+exempt tables, reason codes), `verdict.json` the checks, `steps.jsonl` the
+typed values and screenshot paths, `reset.json` the stage timings,
+`accounting.json` the token totals and optional `baseline-digest.json` the
+checksummed table names and count. The digest is retained by the research evaluator,
+not the standard CLI recorder; its absence means unavailable scope, not zero
+checksummed tables. An explicitly empty recorded table map means zero.
+It tolerates verdicts written before per-check
+`reason_code` and `ui_milestones` existed and screenshots that were not
+preserved. A run copied to another machine may reference a `session_ledger`
+path that does not exist there; `metrics.summarize_run` then reports
+`session_spend: {"unavailable": path}`.
+
+`forkloop report PATH --format html --out FILE.html` uses the same canonical
+loader and check explanations with a static HTML presentation in
+`forkloop/report_html.py`. Text remains the default, including its existing
+`--failed`, `--all`, `--all-attempts` and `--turns` options. HTML requires a
+non-symlink `.html` destination; it creates parent directories and replaces that
+explicit destination. Reports exit 0 on successful inspection/export even when
+the recorded task failed; invalid CLI arguments exit 2. `run` instead exits 0
+for reward 1 and 1 for a rejected task.
+
+The export embeds only referenced PNGs beneath the episode's `shots/` directory,
+rejecting absolute paths, traversal, symlinks and non-PNG files. Images are decoded
+and re-encoded without metadata, bounded to 20 MiB / 16 million pixels per image.
+HTML's optional `--crop-top PIXELS` (default 0) removes that many top pixels from
+each exported image, never from source files. The report and frame captions
+disclose the crop. A crop consuming a whole image makes that image unavailable;
+it never falls back to an uncropped copy. Negative values and use with text output
+are rejected. The worked example uses 114 pixels to omit browser chrome containing
+a session token; this is a reviewed sharing derivative, not automatic secret detection.
+Artifact text is escaped; no raw artifact data enters executable HTML/JavaScript.
+The document has no scripts, network dependencies or analytics and a restrictive
+Content Security Policy. Displayed identity fields are selected explicitly;
+infrastructure URLs, common credential forms and private paths are redacted from
+text. Credential-free loopback app URLs without query strings or fragments remain
+visible as task evidence; URL userinfo and query-bearing URLs are omitted. This
+is not universal secret detection: owners must review screenshots and free text
+before sharing arbitrary recordings.
+
+The HTML presents recorded origin/revision/date (or unavailable), task and
+canonical reward/reason, expected/persisted authorization, all declared effects
+and invariants, query/allow-list/exemption details, diagnostic milestones, and
+preserved frame references. It does not reconstruct missing frames or re-grade
+application state. An absent/errored check is unavailable, never a pass; the
+side-effect summary is incomplete when invariant evidence is missing. Missing
+rewards are counted separately and excluded from the run report's recorded-outcome
+rate. That directory-local rate is not a general policy reliability estimate.
+Baselines report captured table names, not universal table/column coverage.
+
+`forkloop demo --out runs/offline-controls` emits five
+separate normal Recorder runs: correct appeal, wrong authorization, wrong-record
+appeal, duplicate appeal and an interrupted recording without a verdict. Each is
+`backend=fake`, `evidence_kind=constructed_control`; these metadata fields and the
+description are retained in both run and episode metadata. Portal HTTP requests,
+SQLite state, the actual reset pipeline and `Env.verify` produce results. The
+interrupted child process exits after a recorded wait, before verification; its
+supervising process removes temporary fake machines. No verdict is synthesized
+or deleted. Existing control destinations are refused rather than overwritten.
+
 ---
 
 ## 11. Env (`forkloop/env.py`)
 
 ```python
 env = forkloop.make("claims-ops-v1", backend=backend, family="resolve_denial", split="train", pool=pool, recorder=recorder)
-obs, info = await env.reset(seed=123)      # obs: Observation(screenshot: bytes, instruction: str, step: int, history: list[str])
+obs, info = await env.reset(seed=123)      # obs: Observation(screenshot: bytes, previous_screenshot: bytes, instruction: str, step: int, history: list[str])
 obs, reward, terminated, truncated, info = await env.step(action)
 verdict = await env.verify()                # idempotent after termination
 await env.close()
@@ -495,16 +569,16 @@ await env.close()
 
 `reward` is 0.0 on every non-terminal step. On `done` or budget exhaustion the
 env verifies and returns `verdict.reward`. `info` never contains `expected`,
-`seeding`, or the oracle spec. A sync wrapper `forkloop.sync.Env` exists for
-notebooks. A Gymnasium `gym.Env` adapter is provided if `gymnasium` is
-importable; it is optional.
+`seeding`, or the oracle spec. Custom Python policies implement `Policy` and use
+the async `run_episode` entry point; no `forkloop.sync.Env` implementation is
+provided.
 
 Reset protocol (fixed order):
 1. acquire a worker from the pool (revert to golden or fresh from_snapshot)
 2. `seed` — write files, run portal_sql (sqlite3, in a transaction), run
    openemr_sql (mysql, in a transaction), run post_commands
 3. health — both apps 200, `SELECT 1` on both DBs, expected row counts
-4. baseline checksums (controller memory only)
+4. baseline checksums and `preserve_fields` query rows (controller memory only)
 5. initial screen — focus browser, `ctrl+l`, type URL, `Return`, wait for two
    consecutive identical screenshot hashes (≤ 15 s), else `ResetError`
 6. return `Observation`
@@ -518,8 +592,7 @@ Reset protocol (fixed order):
 `duplicate_side_effect_rate`, `collateral_edit_rate`, with Wilson 95% CIs on
 rates. `forkloop/metrics.py` computes them from a run directory.
 
-Cost: `cost_total_usd = cost_vm_usd + cost_tokens_usd`. VM cost is
-`wall_seconds / 3600 × vm_hour_usd` (default 0.134, Starter 2 vCPU/4 GB with
+Estimated cost: `cost_total_usd = cost_vm_usd + cost_tokens_usd`. VM estimate includes recorded execution + setup + fork lifetime, divided by 3600 × `vm_hour_usd` (default 0.134, Starter 2 vCPU/4 GB with
 screen). Token cost prices the episode's usage with `MODEL_PRICES_PER_M[model]`
 (input, output per 1M; cache reads at 0.1× input, cache writes at 1.25×), where
 `model` comes from `run.json` (`collect` writes it, alongside `effort`, `pool_mode`, `concurrency`, `cpu`/`mem_mb` and
@@ -530,15 +603,124 @@ unknown model prices tokens at zero and the table says so (`model priced as`).
 With `collect --retry-failed`, `summarize_run` reports rates, steps and walls
 over the *selected* attempt per seed, while `cost_*` and `tokens` count every
 attempt (`n_attempts`, `n_superseded`): `cost_per_success_usd` is the whole
-run's spend over verified seeds, `cost_per_episode_usd` is spend per attempt.
+run's estimated recorded cost over verified seeds, `cost_per_episode_usd` is estimated recorded cost per attempt. These are not spend guards: `accounting_complete` and `cost_authoritative` are false; unknown idle/storage/failed setup and unpriced tokens are labeled. The ledger is independent and authoritative for reservation enforcement.
 
 The `tokens` field on a `steps.jsonl` line is the policy's **cumulative** usage
 for the episode (`{"in", "out", "cache_read", "cache_write", "retries"}`; `retries` counts transient API errors — 429/5xx/529/connection — that the policy retried with backoff instead of surfacing as an invalid step), so batched
 actions from one model call repeat the same numbers; an episode's usage is the
-maximum over its steps, never the sum (`metrics.episode_tokens`).
+maximum over its steps, never the sum (`metrics.episode_tokens`). New `accounting.json` counters supersede trajectory counters and include all branches and discarded calls; historical branch counters are scanned but missing usage remains a known gap.
 
 The teacher caches its prompt: one breakpoint on the system text and one moving
 breakpoint on the last block of the newest user message, and screenshot pruning
 runs with hysteresis (`prune_hysteresis`, default 4 beyond `keep_images`) so the
 cached prefix survives several turns between prunes. Expect `cache_read` to
 dominate `in` from the second call of an episode on.
+
+
+## 13. Isolation, preservation and spend contracts (2026-09-06)
+
+- `EnvCheckpoint` restores step and charged-action count separately, invalid count, elapsed trajectory time, full action history and both screenshots. Waits do not consume charged actions. Policy waits and proposal generation obey the remaining wall limit. Total experiment usage/resource time never rewinds.
+- Branchable policies declare decision-state fields. Clone only those fields; share network clients intentionally, and keep experiment usage monotonic. Each candidate includes its post-choice state. Fork environments inherit all relevant trajectory settings. Revert winners restore both environment and policy state. Fork winners are terminal recorder adoption; the parent VM remains at the checkpoint.
+- Evaluation constructs a fresh policy per episode, including concurrent repeats, and closes it in `finally`. Pool cleanup errors propagate with machine handles retained. Pool restart has one queue entry per worker; automatic orphan cleanup is restricted to the current `run_id`.
+- A row-level checksum allowance is not field-level authorization. `preserve_fields` compares baseline rows excluding only explicit mutable and configured bookkeeping columns. Family 2 additionally checks the requested OpenEMR plan and resubmitted member; family 1 checks category, target end date and consistent duration. All failures include reason codes for complete safety aggregation.
+- Every paid operation in the overnight probe reserves a conservative upper bound in the same persistent `SessionLedger` before network initiation. Independent service ceilings/stops are OpenAI $20/$18, Solari $10/$8, GPU $0. Unknown failed/timeout costs retain reservations. Response usage and priced usage are distinguished from invoices; Solari measured lifetime estimates are not authoritative charges. No automatic account billing changes or cross-service budget transfers.
+- `heldout_seeds` 100500–100529 is reserved for one future final evaluation. Seeds 200–229 are development cases regardless of old directory labels. No final cases belong in training exports or overnight probes.
+
+## 14. Supported policy comparison and setup interface
+
+`forkloop compare --config FILE --out NEW_DIRECTORY` accepts YAML or JSON with
+`version: 1`, a world, backend, family, split, unique nonnegative integer seeds,
+positive action/time budget overrides, and exactly two differently named variants.
+Each variant chooses a built-in `policy` or a trusted `factory: module:callable`.
+Custom factories require a `revision`; options are JSON-compatible keyword
+arguments. `api_key_env` names an environment variable, never a credential value.
+`system_prompt_file` is resolved relative to the configuration and its content is
+captured in identity. Each instance receives independent nested options. Async
+factories are awaited before validating the returned policy.
+
+`--check` validates without allocating machines or calling models. Trusted custom
+module imports can have side effects. Identity includes declared policy/version,
+options, a configuration fingerprint and the constructor's source-file fingerprint
+when available; it does not attest remote weights or the complete transitive code.
+`doctor` is local by default; `--remote` permits read-only Solari metadata checks,
+not endpoint inference, allocation, account-credit verification or application health.
+
+The recorder schema is `forkloop.comparison.v1`. `protocol.json` records all
+planned cells before allocation. Each seed receives one A and one B attempt,
+with A/B and B/A order alternating across seeds. The controller fixes world,
+family, split, task seed, budgets, history capacity and reset strategy. It uses
+a fresh policy per cell and never selects a successful retry. The policy channel
+remains screenshots, task instruction and action history, never the oracle.
+
+`cells/*.json` retain attempt status, identity/protocol/task fingerprints,
+effective budget, baseline/reset evidence, paths and errors. Ordinary Recorder
+episodes live under `runs/A/episodes/` and `runs/B/episodes/`. `execution.json`
+retains orchestration state and infrastructure events. Protocol/attempt/episode
+records are primary evidence; regenerated summary JSON/text/HTML are derived views.
+An execution record left `running` by process death does not prove a controller
+is still alive. Offline reporting does not relabel or resume the original run.
+
+Comparable pairs require scored episode evidence and matching recorded task,
+budget, baseline table hashes, watermarks, preserved-row digests and reset
+semantics. Pixel equality is diagnostic, not required. Missing/corrupt evidence,
+provider/setup exceptions and incomplete attempts remain visible and unscored.
+A provider-raised timeout propagates as infrastructure failure; only the
+controller's own expired episode deadline is a task wall-budget stop.
+Incomplete/non-comparable evidence cannot recommend a leader. Small complete
+samples remain descriptive, not statistically established reliability or deployment
+advice. `compare` exits 2 for incomplete/non-comparable evidence, 1 for a
+comparable B regression when `--fail-on-regression` is requested, otherwise 0.
+
+`compare-report` reads artifacts without live calls. HTML output normally stays
+inside the comparison directory to preserve relative links. `--format html
+--bundle NEW_DIRECTORY [--crop-top PIXELS]` exports only regenerated HTML:
+`comparison.html` and linked episode reports. It never copies raw JSON, logs or
+source PNG files, never overwrites an existing destination, and never changes
+primary evidence. All planned cells remain represented. Crop pixels must be
+nonnegative; crops consuming a frame omit it rather than exposing the original.
+Image content and arbitrary free text still require human review before sharing.
+
+## 15. Session recovery and current spending bounds
+
+New Solari desktop and sandbox allocations are refused by a release-wide
+capability hold before any reservation or provider allocation. This also applies
+to the historical spike helpers. The guard is not stored in a session ledger and
+has no environment/configuration override: a fresh ledger, larger budget or
+pricing acknowledgment cannot establish provider lifetime enforcement.
+`doctor` emits a failed `solari.lifetime` check and only reports hourly prices,
+not a finite per-create cost bound. Offline controls, reports, metadata inspection
+and existing-resource cleanup remain available.
+
+`reap` requires an explicit session ledger or `FORKLOOP_SESSION_LEDGER`, unless
+the caller deliberately passes `--all-sessions`. Ownership is a saved machine ID
+or exact `spend_operation` metadata matching a Solari operation in that ledger.
+This also recovers uncertain creates and survives moving the ledger file.
+`--dry-run` performs metadata reads only. Actual cleanup kills selected active
+machines, preserves uncertain billing and queries again for survivors; survivors
+produce exit 1. It never clears budget holds or changes account billing settings.
+
+`SessionLedger.retain_exposure` monotonically retains an observed cost estimate
+without inventing an invoice or increasing authorization. Exposure exceeding the
+reserved bound persistently blocks subsequent reservations for that service,
+including reservations marked for cleanup. Existing remote resources can still
+be killed without allocating new ones. Later reconciliation cannot silently erase
+the violation. Summary and doctor expose the blocked state, without exporting raw
+operation evidence in doctor output. Never recreate a ledger to bypass the hold.
+
+The built-in September pricing review expires October 1. An explicit
+`FORKLOOP_SOLARI_PRICING_FILE` JSON review requires exactly: `source` (the official
+pricing URL), `plan: "starter"`, `acknowledged: true`, `reviewed_on`, `valid_until`,
+`cpu_hour_usd`, `memory_gb_hour_usd`, `screen_hour_usd`, `max_session_hours`,
+`storage_starts_on`, `storage_gb_month_usd`, and `storage_free_gb`. Dates are ISO;
+rates are positive finite numbers; the review window is at most 31 days. A review
+cannot postpone the published storage start or authorize unbounded snapshot
+retention once storage billing begins. Updating rates does not clear a ledger hold.
+
+`timeout_ms` is an idle timeout, not an absolute runtime limit. September 15
+recovery observed two machines still reported running around ten hours after
+creation, invalidating the assumed five-hour cap for those reservations. Provider
+lifetime enforcement remains unresolved; pending accounting is not a guaranteed
+upper bound when marked blocked. Explicit shutdown and inventory checks remain
+necessary. The guarded OpenAI route uses the standard service tier, validates
+integer usage, and includes cache-write/long-context premiums. Other providers,
+arbitrary compatible endpoints and GPU rental require separate controls.

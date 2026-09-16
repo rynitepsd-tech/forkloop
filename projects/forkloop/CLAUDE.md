@@ -2,11 +2,11 @@
 
 Guidance for Claude Code (and humans) working in this directory. Keep it short; the long-form explanation is `system.md`, the interface spec is `docs/contracts.md`.
 
-**Starting a fresh session? Read [`docs/HANDOFF.md`](docs/HANDOFF.md) first** — current state, what is blocked, what to do next, and the setup steps (the `venv` symlink does not survive a session).
+**Starting a fresh session?** Read `README.md` and the latest section of `docs/product-handoff.md` first. Supported offline commands include `demo`, fake `doctor`/`compare`, `compare-report`, and episode `report`. New Solari allocations are disabled by a release-wide lifetime capability hold, including spike helpers; no new ledger or pricing review bypasses it. The September 15 ledger and uncertain charges must be preserved. Metadata inspection and cleanup remain available. Historical handoffs are research diaries, not instructions to restart spending.
 
 ## What this is
 
-A Python 3.11 library + two worlds + training scripts. `reset()` on a Solari desktop is one `revert()`; `fork()` is one `create(from_snapshot=...)`. A deterministic SQL oracle computes rewards. No LLM is ever in the reward path.
+A Python 3.11 library + two worlds + training scripts. Snapshot restore is one stage of reset, followed by deterministic seeding, world preparation, health checks, baseline capture and initial-screen setup. A deterministic SQL oracle computes rewards. No LLM is ever in the reward path.
 
 ## Commands
 
@@ -18,6 +18,8 @@ pytest tests/test_core_toy.py -x         # fastest signal for core changes
 pytest tests/test_claims_ops_world.py    # oracle + world on the fake backend
 forkloop worlds                          # sanity check the CLI installs
 forkloop task --family resolve_denial --seed 42 --full   # inspect a generated manifest
+forkloop report docs/worked-example/episodes/resolve_denial-train-000200-018067   # explain a recorded episode
+forkloop ledger runs/<session>/session-ledger.sqlite --create --solari-usd 10     # before any paid Solari call
 ```
 
 Tests hang rather than fail when a pool worker is not released; if `pytest` stalls, run with `-o faulthandler_timeout=40 -x -v`.

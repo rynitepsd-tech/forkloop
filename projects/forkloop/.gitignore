@@ -14,3 +14,11 @@ build/
 dist/
 .env
 venv-mlx/
+# Private experiment artifacts are not part of the source or sharing release.
+data/
+checkpoints/
+spikes/out/
+docs/worked-example/episodes/
+docs/worked-example/run.json
+docs/overnight-handoff.md
+docs/archive/

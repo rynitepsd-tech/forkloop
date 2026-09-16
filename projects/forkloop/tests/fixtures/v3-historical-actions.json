@@ -1,0 +1,98 @@
+[
+  {
+    "source": "runs/lambda-v3-20260906/base-development-isolated.json",
+    "source_sha256": "e43910c28495c8eb99c78e51a2d850cdd9dc377e95631bf4c8c1ea4c9cdf9492",
+    "result": {
+      "index": 1,
+      "seed": 140,
+      "step": 51,
+      "action": {
+        "type": "wait",
+        "seconds": 0.1
+      },
+      "expected_action": {
+        "type": "type",
+        "text": "AUTH-61H18482"
+      },
+      "correct_action": false,
+      "authorization_example": true,
+      "meta": {
+        "raw_action": "I have already located the authorization number in the patient\u2019s documents while viewing Charlotte Fairweather\u2019s Documents in OpenEMR. Storing it now will prevent losing it as I switch back to OpenEMR and then return to the payer portal to submit the appeal.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"For claim C-60140, the authorization number found in Charlotte Fairweather\\u2019s documents is AUTH-61H18482.\"}}\n</tool_call>\n",
+        "note": "",
+        "thoughts": "I have already located the authorization number in the patient\u2019s documents while viewing Charlotte Fairweather\u2019s Documents in OpenEMR. Storing it now will prevent losing it as I switch back to OpenEMR and then return to the payer portal to submit the appeal.",
+        "finish_reason": "stop",
+        "model_image_size": [
+          1280,
+          720
+        ],
+        "screen_size": [
+          1280,
+          720
+        ],
+        "coord_space": "norm1000",
+        "parsed": {
+          "type": "wait",
+          "seconds": 0.1
+        },
+        "model_latency_s": 4.787055334018078,
+        "tokens": {
+          "in": 4157,
+          "out": 123
+        }
+      },
+      "request_sha256": "b73cd0bfb2985d61dc574d66b818867d552eac3277263e91037bb88ad7f4ee60",
+      "image_sha256": [
+        "d2364801c686196784c3af16bd077418640aaaba71a4f5e6720eae4c97671dd7",
+        "4cdf416150121d91f907e9c05111fe984e47cc045b193074dfb422be01b93b91"
+      ]
+    }
+  },
+  {
+    "source": "runs/lambda-v3-20260906/trained-development.json",
+    "source_sha256": "5bb67069d583708517b16945b08b236286a2765e1ee9cd988b7203d18c1321a2",
+    "result": {
+      "index": 3,
+      "seed": 141,
+      "step": 87,
+      "action": {
+        "type": "type",
+        "text": "AUTH-57A40946"
+      },
+      "expected_action": {
+        "type": "type",
+        "text": "AUTH-57A40046"
+      },
+      "correct_action": false,
+      "authorization_example": true,
+      "meta": {
+        "raw_action": "\n</think>\n\nThe authorization number is **AUTH-57A40946**. The appeal form already has the correct reason selected, and the authorization field is focused.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"text\": \"AUTH-57A40946\"}}\n</tool_call>\n",
+        "note": "",
+        "thoughts": "</think>\n\nThe authorization number is **AUTH-57A40946**. The appeal form already has the correct reason selected, and the authorization field is focused.",
+        "finish_reason": "stop",
+        "model_image_size": [
+          1280,
+          720
+        ],
+        "screen_size": [
+          1280,
+          720
+        ],
+        "coord_space": "norm1000",
+        "parsed": {
+          "type": "type",
+          "text": "AUTH-57A40946"
+        },
+        "model_latency_s": 3.6964297500089742,
+        "tokens": {
+          "in": 4158,
+          "out": 75
+        }
+      },
+      "request_sha256": "a4c1cbc4822525f6d7dcfd7a7f5eb51a0a878cf3d34ad13ead8932d21679b190",
+      "image_sha256": [
+        "aa6f042d38284644560bc85afd3f3cbdd953c46059829ded7809f9bf4e42e0b1",
+        "adb09c16c3d394a593119039d3eb584325a609fe77e9135598df5a6eb30a3425"
+      ]
+    }
+  }
+]

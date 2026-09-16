@@ -60,7 +60,12 @@ def _b64png(png: bytes) -> str:
     return base64.standard_b64encode(png).decode("ascii")
 
 
-class TeacherPolicy:
+from .base import BranchablePolicy
+
+
+class TeacherPolicy(BranchablePolicy):
+    branch_state_fields = ("messages", "queue", "executed", "turns", "instruction", "last_confidence", "last_text", "scale")
+
     name = "teacher"
 
     def __init__(self, *, model: str = DEFAULT_MODEL, max_tokens: int = 4096, effort: str = "high",
@@ -228,7 +233,8 @@ class TeacherPolicy:
             try:
                 resp = await self._call_model(obs)
             except Exception as e:  # noqa: BLE001
-                return None, {"raw_action": "", "error": f"{type(e).__name__}: {e}", "model_latency_s": time.monotonic() - t0}
+                return None, {"raw_action": "", "error": True, "note": f"request failed: {type(e).__name__}: {e}",
+                              "tokens": dict(self.usage), "model_latency_s": time.monotonic() - t0}
             self.turns += 1
             content = list(getattr(resp, "content", []) or [])
             self.messages.append({"role": "assistant", "content": [self._block_to_param(b) for b in content]})

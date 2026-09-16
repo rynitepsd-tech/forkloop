@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="prompt style the student will be served with (must match eval)")
     p.add_argument("--history-k", type=int, default=8, help="previous actions shown in the user turn")
     p.add_argument("--max-image-side", type=int, default=1280, help="resize screenshots so max(w, h) <= this")
-    p.add_argument("--coord-space", default="auto", choices=["auto", "image", "norm1000", "norm999"],
+    p.add_argument("--coord-space", default="auto", choices=["auto", "image", "screen", "norm1000", "norm999"],
                    help="coordinate space of the targets; auto = norm1000 for fara, image otherwise")
     p.add_argument("--epochs", type=float, default=1.0)
     p.add_argument("--lr", type=float, default=1e-4)
@@ -259,40 +259,20 @@ def build_messages(record: dict, style: str, history_k: int, image_size: tuple[i
     prompt of ``StudentPolicy(system_prompt=..., instruction_note=..., nav_macro=...)`` so the
     training chat is byte-for-byte the chat the model sees at evaluation.
     """
+    from forkloop.policies.observation import coordinate_size, observation_messages
     from forkloop.policies.action_parse import parse_compact, scale_coords, to_compact
-    from forkloop.policies.student import (build_system_prompt, build_user_text, fara_allowed_actions,
-                                           format_prompt_override)
 
-    cw, ch = _coord_size(coord_space, style, image_size)
     rec = dict(record)
-    # Targets are stored in screen pixels; if the model's coordinate space differs, rescale them.
     screen = tuple(rec.get("screen_size") or (1280, 720))
-    if (cw, ch) != tuple(screen):
-        act, _ = parse_compact(str(rec["target"]))
-        if act is not None:
-            rec["target"] = to_compact(scale_coords(act, screen, (cw, ch)))
-        hist = []
-        for h in rec.get("history") or []:
-            a, _ = parse_compact(str(h))
-            hist.append(to_compact(scale_coords(a, screen, (cw, ch))) if a is not None else h)
-        rec["history"] = hist
-    allowed = fara_allowed_actions(nav_macro)
-    if system_prompt_template:
-        system = format_prompt_override(system_prompt_template, (cw, ch), allowed)
-    else:
-        system = build_system_prompt(style, cw, ch, fara_allowed=allowed)
-    history = list(rec.get("history") or [])
-    history = history[-history_k:] if history_k > 0 else []
-    instruction = str(rec.get("instruction", ""))
-    note = (instruction_note or "").strip()
-    if note:
-        instruction = instruction.rstrip() + "\n\n" + note  # StudentPolicy.build_messages does exactly this
-    user_text = build_user_text(instruction, history, style, step=rec.get("step"))
+    coords = coordinate_size(coord_space, style, image_size, screen)
+    act, _ = parse_compact(str(rec["target"]))
+    if act is not None:
+        rec["target"] = to_compact(scale_coords(act, screen, coords))
+    prompt = observation_messages(
+        instruction=str(rec.get("instruction", "")), history=list(rec.get("history") or []), step=rec.get("step"),
+        screen=screen, coords=coords, style=style, history_k=history_k, image_count=len(rec["images"]),
+        system_template=system_prompt_template, instruction_note=instruction_note, nav_macro=nav_macro)
     target = target_text(rec, style)
-    prompt = [
-        {"role": "system", "content": [{"type": "text", "text": system}]},
-        {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": user_text}]},
-    ]
     full = prompt + [{"role": "assistant", "content": [{"type": "text", "text": target}]}]
     return prompt, full, target
 
@@ -317,11 +297,19 @@ class SFTExamples:
 
     def __getitem__(self, idx: int) -> dict:
         rec = self.records[idx]
-        image = load_image(rec["images"][0], self.max_image_side)
+        from forkloop.policies.observation import OBSERVATION_SCHEMA
+        if rec.get("schema_version") == OBSERVATION_SCHEMA:
+            expected = ["current"] if rec["step"] == 0 else ["previous", "current"]
+            if rec.get("image_roles") != expected or len(rec["images"]) != len(expected):
+                raise ValueError("v3 observation is missing or reorders required screenshots")
+            if rec.get("history_coordinate_space") != "screen":
+                raise ValueError("v3 history must store desktop coordinates")
+        images = [load_image(path, self.max_image_side) for path in rec["images"]]
+        image = images[-1]
         prompt, full, target = build_messages(rec, self.style, self.history_k, image.size, self.coord_space,
                                               system_prompt_template=self.system_prompt_template,
                                               instruction_note=self.instruction_note, nav_macro=self.nav_macro)
-        return {"image": image, "prompt_messages": prompt, "full_messages": full, "target": target}
+        return {"image": image, "images": images, "prompt_messages": prompt, "full_messages": full, "target": target}
 
 
 # --------------------------------------------------------------------------- #
@@ -351,15 +339,26 @@ def make_collate(processor):
             prompt_text = processor.apply_chat_template(ex["prompt_messages"], tokenize=False, add_generation_prompt=True)
             full_text = processor.apply_chat_template(ex["full_messages"], tokenize=False, add_generation_prompt=False)
             if not full_text.startswith(prompt_text):
-                full_text = prompt_text + ex["target"] + eos
-            enc_full = processor(text=[full_text], images=[ex["image"]], return_tensors="pt")
-            enc_prompt = processor(text=[prompt_text], images=[ex["image"]], return_tensors="pt")
+                raise ValueError("assistant template does not extend the inference generation prefix")
+            enc_prompt = processor(text=[prompt_text], images=ex["images"], return_tensors="pt")
             n_prompt = int(enc_prompt["input_ids"].shape[1])
-            ids = enc_full["input_ids"][0]
-            am = enc_full["attention_mask"][0]
+            # Tokenize the exact inference prefix, then its continuation. Fara's
+            # template ends generation at '<think>\n'; tokenizing the full turn
+            # merges that newline with the target's first newline. Masking by
+            # separately measured length silently changes the last prompt token.
+            suffix = full_text[len(prompt_text):]
+            continuation = tokenizer(suffix, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+            if not len(continuation):
+                raise ValueError("example has no supervised target tokens")
+            ids = torch.cat([enc_prompt["input_ids"][0], continuation])
+            am = torch.cat([enc_prompt["attention_mask"][0], torch.ones_like(continuation)])
             labels = ids.clone()
             labels[:n_prompt] = -100
-            extras = {k: v for k, v in enc_full.items() if k not in ("input_ids", "attention_mask")}
+            extras = {k: v for k, v in enc_prompt.items() if k not in ("input_ids", "attention_mask")}
+            for key in ("mm_token_type_ids", "token_type_ids"):
+                if key in extras:
+                    value = extras[key]
+                    extras[key] = torch.cat([value, torch.zeros((1, len(continuation)), dtype=value.dtype)], dim=1)
             encs.append((ids, am, labels, extras))
             n_img = int((ids == image_token_id).sum()) if image_token_id is not None else -1
             stats_rows.append({"seq_len": int(ids.shape[0]), "prompt_len": n_prompt,
@@ -534,6 +533,10 @@ def train(args: argparse.Namespace) -> dict:
     losses: list[float] = []
     stop = False
     epoch = 0
+    examples_seen = 0
+    completed_epochs = 0
+    initial_adapter = {n: p.detach().cpu().clone() for n, p in model.named_parameters() if p.requires_grad} if args.smoke else {}
+    gradient_norms = []
 
     def _save(tag: str) -> Path:
         p = out_dir / tag
@@ -546,7 +549,10 @@ def train(args: argparse.Namespace) -> dict:
 
     with log_path.open("a", encoding="utf-8") as log:
         while not stop:
-            for batch in loader:
+            for epoch_micro, batch in enumerate(loader, start=1):
+                current_batch_size = int(batch["input_ids"].shape[0])
+                group_start = ((epoch_micro - 1) // args.grad_accum) * args.grad_accum
+                group_size = min(args.grad_accum, micro_per_epoch - group_start)
                 batch = {k: (v.to(device) if hasattr(v, "to") else v) for k, v in batch.items()}
                 if use_cuda and autocast_dtype is not None:
                     ctx = torch.autocast("cuda", dtype=autocast_dtype)
@@ -554,17 +560,23 @@ def train(args: argparse.Namespace) -> dict:
                     ctx = torch.autocast("cpu", dtype=torch.bfloat16) if autocast_dtype == torch.bfloat16 and not use_cuda else _NullCtx()
                 with ctx:
                     out = model(**batch)
-                    loss = out.loss / args.grad_accum
+                    if not bool(torch.isfinite(out.loss)):
+                        raise FloatingPointError("nonfinite training loss")
+                    loss = out.loss / group_size
                 loss.backward()
                 micro += 1
-                running += float(loss.item()) * args.grad_accum
+                examples_seen += current_batch_size
+                running += float(out.loss.item())
                 running_n += 1
                 if args.smoke and micro <= 8:
                     rows = getattr(collate, "stats_rows", [])[-args.batch_size:]
-                    print(f"[train_lora] smoke micro {micro}: loss={float(loss.item()) * args.grad_accum:.4f} "
+                    print(f"[train_lora] smoke micro {micro}: loss={float(out.loss.item()):.4f} "
                           f"tokens={rows} peak_vram_gb={torch.cuda.max_memory_allocated() / 1e9 if use_cuda else 0:.2f}")
-                if micro % args.grad_accum == 0 or micro == micro_per_epoch * (epoch + 1):
-                    torch.nn.utils.clip_grad_norm_(params, args.max_grad_norm)
+                if epoch_micro % args.grad_accum == 0 or epoch_micro == micro_per_epoch:
+                    grad_norm = float(torch.nn.utils.clip_grad_norm_(params, args.max_grad_norm, error_if_nonfinite=True))
+                    gradient_norms.append(grad_norm)
+                    if args.smoke and grad_norm <= 0:
+                        raise RuntimeError("smoke has zero adapter gradients")
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
@@ -575,7 +587,8 @@ def train(args: argparse.Namespace) -> dict:
                     elapsed = time.time() - t_start
                     if global_step % args.log_steps == 0 or global_step == 1 or global_step == total_steps:
                         rec = {"step": global_step, "loss": mean_loss, "lr": scheduler.get_last_lr()[0],
-                               "elapsed_s": elapsed, "s_per_step": elapsed / global_step, "epoch": epoch}
+                               "elapsed_s": elapsed, "s_per_step": elapsed / global_step,
+                               "epoch": examples_seen / len(records), "examples_seen": examples_seen, "grad_norm": grad_norm}
                         if use_cuda:
                             rec["peak_vram_gb"] = torch.cuda.max_memory_allocated() / 1e9
                         log.write(json.dumps(rec) + "\n")
@@ -590,6 +603,8 @@ def train(args: argparse.Namespace) -> dict:
                         print(f"[train_lora] wall-clock budget of {args.max_minutes} min reached")
                         stop = True
                         break
+            if epoch_micro == micro_per_epoch:
+                completed_epochs += 1
             epoch += 1
             if not stop and epoch >= math.ceil(args.epochs):
                 stop = True
@@ -598,7 +613,9 @@ def train(args: argparse.Namespace) -> dict:
     elapsed = time.time() - t_start
     summary = {
         "model": args.model, "data": str(data_path), "records": len(records), "prompt_style": args.prompt_style,
-        "steps": global_step, "planned_steps": total_steps, "epochs_completed": epoch,
+        "steps": global_step, "planned_steps": total_steps, "epochs_completed": completed_epochs,
+        "epoch_fraction": examples_seen / len(records), "examples_seen": examples_seen,
+        "gradient_norms": gradient_norms,
         "final_loss": losses[-1] if losses else None, "first_loss": losses[0] if losses else None,
         "elapsed_s": elapsed, "s_per_step": (elapsed / global_step) if global_step else None,
         "peak_vram_gb": (torch.cuda.max_memory_allocated() / 1e9) if use_cuda else None,
@@ -612,6 +629,11 @@ def train(args: argparse.Namespace) -> dict:
         "system_prompt_file": args.system_prompt_file, "instruction_note": args.instruction_note, "nav_macro": args.nav_macro,
         "losses": losses,
     }
+    if args.smoke:
+        changed = {n: float((p.detach().cpu() - initial_adapter[n]).abs().max()) for n, p in model.named_parameters() if n in initial_adapter}
+        summary["adapter_weight_change"] = {"tensors": len(changed), "changed_tensors": sum(v > 0 for v in changed.values()), "max_abs_delta": max(changed.values())}
+        if not any(v > 0 for v in changed.values()):
+            raise RuntimeError("smoke adapter weights did not change")
     rows = getattr(collate, "stats_rows", [])
     if rows:
         def _agg(key: str) -> dict:

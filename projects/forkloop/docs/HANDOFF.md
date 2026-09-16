@@ -1,6 +1,10 @@
-# Handoff — Forkloop, as of 2026-09-06 (after the fair-conventions student session)
+# Historical handoff — before the overnight evidence repair
 
-Read this first, then `CLAUDE.md`. The deep references are `docs/contracts.md`
+**For the current product, read [product-handoff.md](product-handoff.md), the [README](../README.md) and [system.md](../system.md).** This file and the locally retained `overnight-handoff.md` are historical research records, not current authorization or an execution checklist. The old suggestion to train v2 was superseded; v3 training and paired evaluation subsequently happened. The saved base/SFT-v1/SFT-v2 results remain 0/30 each.
+
+Historical commands below are archived context; some overwrite old artifacts or incur charges. Use only the current handoff commands.
+
+Historical introduction: The deep references are `docs/contracts.md`
 (every interface), `system.md` (every module), `docs/spikes.md` (every real
 measurement), `docs/limitations.md` (everything unproven or broken), and
 **`docs/overnight-2026-09-04.md`** (the ledger of the 2026-09-04 overnight session:
@@ -32,12 +36,12 @@ cloned at `~/Desktop/Solari/repo`, project under `projects/forkloop/`.
 
 ## First five minutes
 
-**Recreate the `venv` before anything else** (it does not survive reliably
-between sessions):
+**Historical setup advice, superseded:** inspect and preserve the existing `venv`. The destructive recreation command has been removed:
 
 ```bash
 cd ~/Desktop/Solari/repo/projects/forkloop
-rm -rf venv && python3.11 -m venv venv && ./venv/bin/pip install -q -e ".[dev,world,teacher]"
+./venv/bin/python --version
+./venv/bin/python -m pytest
 ```
 
 Credentials and snapshot ids live outside the repo in `~/.config/forkloop/env`

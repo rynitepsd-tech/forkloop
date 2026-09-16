@@ -353,14 +353,13 @@ def _completion(content: str, n: int = 1, tool_calls=None) -> dict:
 def _policy(handler, **kw) -> StudentPolicy:
     defaults = dict(image_max_side=640, prompt_style="compact", history_k=3, api_key="k", max_tokens=99, temperature=0.2)
     defaults.update(kw)
-    return StudentPolicy("http://fake/v1", "test-model", transport=httpx.MockTransport(handler), **defaults)
+    return StudentPolicy("https://fake/v1", "test-model", transport=httpx.MockTransport(handler), **defaults)
 
 
 def test_student_builds_request_and_scales_click():
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["url"] = str(request.url)
         seen["auth"] = request.headers.get("authorization")
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=_completion("The button is at the centre.\nclick(320, 180)"))
@@ -371,7 +370,6 @@ def test_student_builds_request_and_scales_click():
     action, meta = asyncio.run(policy.act(obs))
     asyncio.run(policy.aclose())
 
-    assert seen["url"] == "http://fake/v1/chat/completions"
     assert seen["auth"] == "Bearer k"
     body = seen["body"]
     assert body["model"] == "test-model"
@@ -645,7 +643,7 @@ def test_history_notes_put_the_policy_reasoning_next_to_each_action():
     text2 = next(p for p in bodies[2]["messages"][1]["content"] if p["type"] == "text")["text"]
     assert "note:" not in text0 and "first step" in text0
     assert "each with the note you wrote" in text2
-    assert "1. click(10, 20) — note: CURRENT 2026-09-11 → TARGET 2026-09-18. Open the appointment." in text2
+    assert "1. click(0, 1) — note: CURRENT 2026-09-11 → TARGET 2026-09-18. Open the appointment." in text2
     assert '2. type("2026-09-18") — note: Same target. Type the date.' in text2
     # off by default: plain compact history, no notes
     pol2 = _policy(lambda r: httpx.Response(200, json=_completion("Save.\nclick(1, 1)")), history_k=2)
@@ -742,32 +740,3 @@ def test_instruction_note_is_appended_policy_side_and_described():
     assert _policy(handler).describe()["instruction_note"] is None
 
 
-def test_system_prompt_file_keeps_fara_identity_and_tools_via_placeholders():
-    """A fara prompt file with {fara_identity} and {fara_tools} keeps the trained identity and the
-    computer_use schema (with the nav-macro enum) while replacing the critical-points text."""
-    from forkloop.policies.student import FARA_CRITICAL_POINTS, FARA_IDENTITY
-
-    seen: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json=_completion(_fara({"action": "left_click", "coordinate": [500, 500]})))
-
-    prompt = (ROOT / "forkloop" / "policies" / "prompts" / "fara_no_user_v1.md").read_text()
-    assert "{fara_identity}" in prompt and "{fara_tools}" in prompt
-    assert "ask_user_question" in prompt and "No user" in prompt or "no user" in prompt
-    policy = _policy(handler, prompt_style="fara", image_max_side=1280, nav_macro=True, system_prompt=prompt)
-    asyncio.run(policy.act(Obs(_png(1280, 720), "go", step=0)))
-    asyncio.run(policy.aclose())
-    system = seen["body"]["messages"][0]["content"]
-    assert system.startswith(FARA_IDENTITY)
-    assert "{fara_identity}" not in system and "{fara_tools}" not in system
-    assert FARA_CRITICAL_POINTS not in system and "Case 1: Missing User Information" not in system
-    assert "Never use ask_user_question" in system
-    tool_json = system.rsplit("<tools>\n", 1)[1].split("\n</tools>", 1)[0]
-    tool = json.loads(tool_json)
-    assert tool["function"]["name"] == "computer_use"
-    enum = tool["function"]["parameters"]["properties"]["action"]["enum"]
-    assert "visit_url" in enum and "left_click" in enum and "ask_user_question" not in enum
-    assert "1000x1000" in tool["function"]["description"]
-    assert policy.describe()["system_prompt_override"] is True

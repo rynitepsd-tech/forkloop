@@ -188,7 +188,11 @@ async def test_best_of_n_revert_mode_finds_solution(world, backend, tmp_path):
     delta = task.expected["a"] - task.expected["a0"]
     step = A_PLUS if delta > 0 else A_MINUS
 
-    class TwoHeaded:
+    from forkloop.policies.base import BranchablePolicy
+
+    class TwoHeaded(BranchablePolicy):
+        branch_state_fields = ("calls",)
+
         """Greedy plan: wrong first click, then the right clicks. propose() offers the right first click."""
 
         name = "two"
@@ -211,7 +215,7 @@ async def test_best_of_n_revert_mode_finds_solution(world, backend, tmp_path):
 
         async def propose(self, obs, n):
             a = Action.parse(step)
-            return [(a, {"raw_action": a.to_compact()})][:n]
+            return [(a, {"raw_action": a.to_compact(), "_policy_state": self.snapshot_state()})][:n]
 
     v = await best_of_n(env, TwoHeaded(), 2, 21, family="reach_target", branch_prob=0.0, confidence_threshold=0.5, mode="revert")
     assert v.reward == 1.0, v.to_dict()
@@ -344,17 +348,17 @@ def test_row_hash_script_ignores_app_maintained_columns(tmp_path):
 
 
 async def test_pool_reaps_an_orphan_when_the_cap_bites(world, backend):
-    """A machine left behind by an earlier process (different run_id) holds a slot of the cap
-    and is invisible at pool start; the pool must kill it when create() answers 429."""
+    """A machine left behind by this run holds a slot of the cap
+    and is invisible at pool start; the pool reaps only its own failed creates."""
     pool = WorkerPool(backend, world, size=1, mode="fork")
     await pool.start()  # nothing to reap yet
-    orphan = await backend.create(metadata={"forkloop": "1", "run_id": "run-dead", "world": world.name})
+    orphan = await backend.create(metadata={"forkloop": "1", "run_id": pool.run_id, "world": world.name})
     stray = await backend.create(metadata={"forkloop": "1", "run_id": "run-dead2", "world": world.name})
     assert backend.concurrency_cap == 2  # both slots are now taken by strays
     env = Env(world, backend, family="reach_target", pool=pool, settle_s=0)
     obs, info = await env.reset(1)
     assert info["reset"]["ok"]
-    assert not orphan.alive and not stray.alive
+    assert not orphan.alive and stray.alive
     assert any(e["event"] == "create_retry" for e in pool.events)
     assert any(e["event"] == "reaped" and orphan.id in e["ids"] for e in pool.events)
     await env.close()

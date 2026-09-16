@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forkloop"
-version = "0.1.0"
-description = "Snapshot-native training worlds for vision-only GUI agents on Solari desktops: reset = revert(), fork = create(from_snapshot)."
+version = "0.2.0"
+description = "Matched computer-use policy evaluation across OpenEMR and a payer portal, with Solari resets and deterministic database evidence."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Ryder Slade" }]
-keywords = ["computer-use", "reinforcement-learning", "solari", "gui-agents", "snapshots"]
+keywords = ["computer-use", "evaluation", "solari", "gui-agents", "healthcare", "regression"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",

@@ -42,6 +42,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from forkloop.exporters.observations import image_fields
+from forkloop.policies.observation import OBSERVATION_SCHEMA
 from forkloop.policies.action_parse import to_compact  # noqa: E402
 
 
@@ -68,6 +70,7 @@ class Episode:
 
 @dataclass
 class Stats:
+    schema_version: str = OBSERVATION_SCHEMA
     runs: list[str] = field(default_factory=list)
     episodes_seen: int = 0
     episodes_missing_files: int = 0
@@ -191,6 +194,8 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
     """One record per (valid) step of an episode. ``instruction`` replaces the manifest's stored text
     (``--rerender-instructions``: the current generator wording for the same seed)."""
     m = ep.manifest
+    if ep.bad_lines:
+        raise ValueError("cannot export an episode with malformed step records")
     base = {
         "instruction": str(m.get("instruction", "")) if instruction is None else instruction,
         "task_id": ep.task_id,
@@ -203,7 +208,7 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
     }
     out: list[dict] = []
     history: list[str] = []
-    for step in ep.steps:
+    for index, step in enumerate(ep.steps):
         if stats is not None:
             stats.steps_seen += 1
         target = _target_for(step)
@@ -227,7 +232,7 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
         image_path = (ep.episode_dir / shot).resolve()
         rec = dict(base)
         rec.update({
-            "images": [str(image_path)],
+            **image_fields(ep.episode_dir, ep.steps, index),
             "history": list(history[-history_k:]) if history_k > 0 else [],
             "target": target,
             "step": int(step.get("i", len(out))),

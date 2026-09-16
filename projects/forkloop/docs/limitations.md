@@ -1,165 +1,158 @@
-# Limitations and what is not yet proven
+# Limitations and verification boundaries — 2026-09-10
 
-This file is deliberately blunt. Every claim in the README that is not backed
-by a number in `docs/spikes.md`, `bench/reset_summary.json`, or a run
-directory should be read as *design intent*, not result.
+The supported user path is **evaluate a policy on `resolve_denial`, inspect
+`forkloop report`** ([README](../README.md), [contracts](contracts.md)). Other task
+families, search and training remain research paths. Offline inspection and
+constructed controls do not establish live setup reliability, model performance
+or adoption. The [dated verification record](product-handoff.md) identifies the
+installation, commands, tests and browser behavior actually exercised, including
+optional dependencies and live paths that were not checked.
 
-## Measured on 2026-09-01 (Free-plan key, headless sandboxes)
+## Evidence hierarchy and present result
 
-- **Desktops are plan-gated**: `create_desktop` → 402. Every number below is
-  from headless `base` sandboxes (same snapshot API, no screen). The agent
-  channel (screenshots, mouse, keyboard) remains unexercised.
-- *(Superseded 2026-09-03: `revert()` and fork snapshots now work — `docs/spikes.md` top sections. Kept for the record.)*
-- **`revert()` is not available on this account**: 409 `Not revertable` on a
-  running sandbox *and* on a paused one, for the newest snapshot and an older
-  one. A failed revert on a *running* sandbox left it `Not found` — treat
-  `revert()` as destructive until Solari confirms the semantics. The pool's
-  `fork` mode (`kill` + `create(from_snapshot=golden)`) is the working reset
-  on this plan: ≈ 18 s to first command. `snapshot()` takes 14–20 s and stores
-  a full ≈ 6 GB disk image. Fresh create from template: 0.6 s.
-- The `base` sandbox is Debian 12 (not Ubuntu), root, systemd as PID 1, with
-  a 4 GB disk. The world build requests `disk_gb: 10` but the block device
-  stayed 4 GB (the request is ignored on this plan or needs a larger
-  template); after the OpenEMR install the golden image is ~89% full.
-  PHP 8.3 comes from packages.sury.org.
-- **Golden world built and verified headless** (`docs/spikes.md`): the
-  browser profile / window layout half of the world (`browser_setup.sh`) has
-  still never run — it needs a desktop.
+- **Retained live failure:** the [worked example](worked-example/) is the adapter's
+  seed-200 appeal, `WRONG_VALUE`: `AUTH-3614538` instead of `AUTH-36G14538`.
+  It retains all 74 recorded steps but only **6/148 referenced screenshots**.
+  Missing visual evidence is not reconstructed or assumed clean.
+- **Completed paired live comparison:** base **0/2**, frozen v3 adapter **0/2** on
+  development seeds 200/201; four completed cells, two matched pairs. Adapter 200
+  submitted the wrong value; adapter 201 hit a Chrome renderer crash. This is not
+  a demonstrated positive workflow learning curve. [Result of record](live-paired-v3-results.md).
+- **Saved observations:** 40 cases per model from teacher-reached development
+  states. Exact authorization selected for typing improved 2/20 → 14/20 and
+  navigation agreement 8/20 → 13/20. These are diagnostic outputs, not independent
+  navigation or proof of persisted entry. [Frozen results](frozen-v3-evaluation-results.md).
+- **Magnification:** preparation stopped before model scoring because of renderer
+  crashes. **0/0 matched pairs** is missing evidence, not a zero-success estimate;
+  the proposed intervention is untested. [Stopped diagnostic](document-magnification-results.md).
+- **Offline controls:** `forkloop demo --out runs/offline-controls`
+  emits separate Recorder runs labeled `backend=fake`,
+  `evidence_kind=constructed_control` and an explanatory `evidence_note`. The
+  legitimate-success reference and negative scenarios use known controller state
+  and portal HTTP facilities with fake OpenEMR/SQLite, not policy navigation.
+  An interrupted case has no verdict; absent evidence is not success or a scored
+  policy failure. Controls show verifier behavior, not application reliability.
 
-## Measured on 2026-09-02 (Starter, desktops)
+Older `spikes.md`, student ledgers and handoffs are historical records. In
+particular the locally retained `overnight-handoff.md` predates v3 GPU training;
+its proposed smoke is not the current next step. Old Free-plan failures are not
+statements about later Starter capabilities.
 
-- `revert()` was refused on desktops too (409) until 2026-09-03; it now works (10/10 on the golden, p50 100.9 s, same machine id) but is no faster than a fork because restores of the 8.5 GB golden are bimodal on the host side (≈ 22 s or 70–160 s, both methods). Fork p50 the same day: 92.0 s.
-- The desktop's 4 GB disk cannot be enlarged; the build purges VS Code and
-  LibreOffice to fit OpenEMR (golden image ends ~95% full — episodes have
-  ~200 MB of headroom; the uploads and documents they write are small).
-- The OpenEMR PHP session does not survive into the snapshot; the OpenEMR
-  family starts on the login page and the instruction carries `admin / pass`.
-  The portal's 30-day signed cookie does survive.
-- The SDK presses a key list sequentially; chords must be a single
-  `"ctrl+a"` string (backend does this). Keyboard focus after a fork is not
-  guaranteed to be in Chrome: navigation clicks the omnibox first.
-- **Family 1 was never blocked server-side (re-measured 2026-09-02).** The
-  "only Administrator" provider list had two causes, both now understood:
-  (1) Chrome's renderer crashed on every authenticated OpenEMR page ("Aw,
-  Snap! Error code: 5") because the Solari `default` desktop has no working
-  GPU process (`Failed to send GpuControl.CreateCommandBuffer` in
-  `chrome.log`); `--disable-gpu` fixes it; `browser_setup.sh` now starts Chrome with it and the
-  `before_episode` stage relaunches Chrome when a golden lacks it (≈ 8 s, only
-  on pre-v6 goldens).
-  (2) OpenEMR's calendar narrows the Providers box to the logged-in user's
-  `pc_username` session value; the seeded providers are all there and one
-  click on "All Users" (≈ (63, 567) at 1280×720) shows seven provider
-  columns. Verified with an authenticated curl fetch (all seven `<option>`s,
-  the provider dropdown of `add_edit_event.php` lists them too) and with
-  screenshots through the agent channel. **A reschedule was driven end to end
-  through the GUI on 2026-09-03** (GPT-5.6 Luna v5, `runs/luna-v5-fam12-s0-2`,
-  seed 0 verified). Seed 1 exposed an instruction ambiguity — "the next
-  Monday" read as next Monday from today rather than after the appointment —
-  fixed in the generator text (manifests for family 1 change from this commit).
-- **`snapshot()` is refused on forked machines.** A desktop created with
-  `from_snapshot` returns 409 `Not snapshottable` (three attempts, state
-  `running`); a fresh desktop snapshots fine. So golden images can only be
-  produced on the original build machine (hence the from-scratch rebuild for
-  the `--disable-gpu` fix), and `env.checkpoint()` — the branch point of
-  `best_of_n` in both `revert` and `fork` modes — could not run on this account
-  until 2026-09-03. Now it can: `collect --best-of 2 --search-mode fork` verified
-  family-3 seed 0 through a real branch point (`runs/luna-v5-f3-bo2-smoke`).
-  Still open: checkpoint snapshots (`cp-*`) are not always deleted afterwards
-  (`search.snapshot_delete_errors` in the verdict records why); each is a full
-  disk image on the account until deleted by hand.
-- **`cpu` and `mem_mb` are ignored on `from_snapshot` creates** (measured
-  2026-09-03, `runs/teacher-f3-s10-14-8gb`): `create_desktop(from_snapshot=…,
-  cpu=4, mem_mb=8192)` returns a machine with 2 vCPUs and 4031 MB (`sys.txt`).
-  The shape is fixed by the snapshot, like the disk. A bigger-desktop
-  experiment therefore needs a golden rebuilt at the bigger shape
-  (`forkloop build-world --cpu 4 --mem-mb 8192`), one more 7–9 GB snapshot,
-  and a second env var; it has not been done.
-- **Forks can vanish mid-episode** (2026-09-03, five of eight probe forks
-  within 2.5 min of creation, one host): the SDK raises `Not connected`, the
-  reconnect gets 404, the machine is gone. `SolariMachine._call` re-dials and
-  retries once; a dead VM surfaces as `BackendError` and the episode is lost.
-  `collect --reset-retries` only covers resets, not mid-episode deaths — a
-  seed whose machine dies is recorded as an error and must be re-run by hand.
-- Attachment upload through the GTK file chooser has not been exercised.
-- An OpenEMR page reload (F5) on the tabs UI drops the session; agents that
-  reload will have to log in again (credentials are in the instruction).
+## Training happened; workflow improvement remains unproven
 
-## Not yet measured (needs more time or a key)
+The [v3 training handoff](lambda-v3-handoff.md) records an H100 run completing
+**411/440 planned optimizer steps, 1.869169 epochs**, on 25 demonstrations / 1,758
+examples, in 380.87 minutes including final save. The remaining 29 steps were not
+run. Paired-image GPU forward/backward, checkpoint saving and subsequent serving
+therefore are no longer merely proposed or processor-only claims. This does not
+make the unfinished two-epoch run complete or establish student workflow success.
 
-- **Spikes 1–6 have not run** (they need a desktop). `docs/spikes.md` holds
-  the questions, commands, and empty tables. Revert latency on a desktop,
-  parallel fork independence (needs 2 concurrent machines), memory/window
-  survival, `record=True` with `from_snapshot`, and MariaDB consistency after
-  a live snapshot are still *unverified*.
-  The reviewer's claim that recording is rejected with snapshot-restored
-  machines is likewise untested; forkloop never depends on native recording.
-- **The teacher has run on family 3 only** (11/17 verified over seeds 0–14 plus pilot 4, `runs/teacher-*`; every failure is the 60-action budget after Chrome tab crashes or PDF-viewer confusion — see `docs/spikes.md`);
-  families 1 and 2 have not been driven by it yet. `forkloop metrics` now prices
-  model tokens (`MODEL_PRICES_PER_M`, model read from `run.json`) on top of VM
-  time: pilot 4 is $2.10 per verified episode, of which $2.08 is Opus tokens
-  (≈ 250–530k input tokens per episode) and $0.015 is the desktop. Token cost
-  is ~140× the VM cost, so the teacher's price, not Solari's, sets the cost of
-  data; nothing in the harness uses prompt caching yet.
-  The student needs a GPU box serving a model.
-- **Chart 1 and Chart 2 do not exist.** `train/plot.py --demo` renders
-  clearly labelled synthetic placeholders so the pipeline can be checked.
-  No learning curve has been produced; no teacher trajectory has been
-  collected; no student checkpoint exists.
-- **Bake-off not run.** Which 4B model grounds best on this UI is an open
-  question; `train/bakeoff.py` produces the table once endpoints exist.
+Historical base vLLM, SFT-v1 and SFT-v2 runs each scored **0/30** on repeatedly used
+seeds 200–229; local MLX fair 4B and 9B runs also scored 0/30. They are not a matched
+control for later paired-image v3 evaluation. Teacher success and navigation
+milestones are not student learning gains. Final seeds 100500–100529 remain sealed.
+Any further paid stability/magnification experiment needs fresh authorization;
+see the stopped diagnostic rather than restarting the superseded training proposal.
 
-## Known design limits
+## Oracle and isolation scope
 
-- **OpenEMR audit tripwire is coarse.** The portal writes an `audit_log` row
-  keyed by the exact row it changed, so `ui_path_only` is precise there.
-  OpenEMR's `log` table keys by patient, so for OpenEMR the check is
-  "there is a log row for this patient after seeding". A direct DB write
-  that also inserts a plausible log row would pass. Inside the VM the agent
-  has no shell, so this is a tripwire, not the primary defence.
-- **Checksums are scoped, not global.** `world.yaml` lists the tables that
-  are checksummed (everything the UI can plausibly touch: patients, claims,
-  appeals, resubmissions, insurance, appointments, documents, users). OpenEMR
-  has ~300 other tables that are not diffed. A UI action that only touches
-  an unlisted table is invisible to the oracle. Add tables to
-  `oracle.checksum_tables` as you discover them.
-- **Attachment tasks are hard for a 4B policy.** Uploading a file from
-  OpenEMR to the portal requires a download plus a GTK file chooser. The
-  attachment requirement is a difficulty knob (`require_attachment`) that
-  is off for most training seeds and on for a minority of held-out seeds.
-- **Scroll is emulated with keys.** The Solari SDK's `mouse.scroll` takes a
-  button code, so the backend implements scroll as Page_Down/Page_Up
-  (vertical) and arrow keys (horizontal). Pages that intercept those keys
-  will behave differently from a real wheel.
-- **`triple_click` and `left_mouse_down/up` are not in the action schema.**
-  The teacher maps triple-click to double-click and rejects raw mouse
-  down/up (drag is supported).
-- **Fake backend is a simulator.** It proves the snapshot/revert/fork
-  *semantics* (directory copies) and lets the full loop run offline, but it
-  has no browser. Its screenshots are synthetic (toy world) or blank
-  (claims-ops). Never quote its timings as Solari numbers; the benchmark
-  labels them.
-- **Concurrency is the bottleneck on Starter.** Two machines total means
-  fork-mode search has width 2 at most and `collect` runs two episodes at a
-  time. Depth-first search with `revert()` (width 1) is the default for
-  that reason.
-- **Synthetic data only.** Names, member IDs, NPIs, documents are generated.
-  There is no PHI anywhere. Solari Starter/Pro are not HIPAA plans and
-  nothing here should ever be pointed at real patient data.
-- **Teacher cost is real money.** Each teacher step sends a screenshot;
-  `keep_images` prunes history to the last 8 images, and the system prompt
-  is cached, but a 40-step episode is still on the order of 100–300K input
-  tokens at Opus pricing. Measure before scaling.
-- **No GRPO.** Rung 3 is described in `train/README.md` but not
-  implemented; the oracle already provides the reward signal it would need.
+- **Reward is backend-specific.** Reward 1 means all recorded configured effects
+  and invariants passed. On fake it means simulated state passed, not a live GUI
+  task. On Solari it is scoped application database verification, not global safety.
+- **Checksums are scoped.** The world lists 14 checksummed tables across the two
+  applications; roughly 300 other OpenEMR tables are not diffed. Unlisted changes
+  can be invisible. Reports expose the allow-list and exemptions; they do not
+  expand this scope by rendering a green check.
+- **Audit is a tripwire.** Portal audit rows identify changed rows. OpenEMR evidence
+  is coarser and patient-keyed, with decoded SQL evidence for some bookkeeping.
+  Direct writes plus plausible forged audit rows can evade this check. The policy
+  interface has no shell or SQL channel, but this is not a hostile-code sandbox or
+  cryptographic proof of UI-only writes.
+- **Secondary failures matter.** An incorrect value can coexist with collateral
+  edits, wrong-record writes or duplicate appeals. Read all checks, not only the
+  primary reason. A count below the required one is incompletion, not duplication.
+- **Other families are not revalidated live after repair.** Insurance-plan,
+  visit-category and field-preservation controls use real portal HTTP facilities
+  with fake OpenEMR state. Real family-1/2 edit-form bookkeeping may need narrowly
+  evidenced allow-list changes; historical success is not verification of the repair.
+- **Revised search is not live-validated.** Branch state, budgets, waits and cleanup
+  have historical fake regressions; the current paid paired evaluation used
+  best-of-one. Earlier successful live search predates those repairs.
+- **Reset is a pipeline.** Restore/fork is followed by seeding, world preparation,
+  health, baseline capture and initial/stable screen. The paired live run checked
+  task fingerprints, checksummed tables and watermarks; one pair's screenshots
+  differed in clock pixels. Equal seeds are not a byte-identical-VM guarantee.
+- **Cleanup scopes differ.** Automatic pool orphan reaping checks its own `run_id`;
+  `forkloop reap` defaults to the selected session ledger. Account-wide cleanup
+  requires `--all-sessions`. Never reap a still-running session. Failed kills and
+  pending charges must not be discarded merely to report cleanup.
 
-## Things that might simply be wrong
 
-- The `SandboxClient.create_desktop(template=..., from_snapshot=...)`
-  combination: the SDK accepts both; the gateway may reject `template` when
-  `from_snapshot` is set. The backend omits `template` whenever
-  `from_snapshot` is given for that reason.
-- Whether the control WebSocket survives `revert()`: the backend reconnects
-  and re-polls `health()` after every revert, so either answer works, but
-  the reset timing includes that reconnect.
-- Whether `commands.run` executes as root in the `default` desktop
-  template. `build.sh` is invoked with `sudo` explicitly.
+The HTML export is a reader of artifacts, not a new oracle. Missing check evidence
+is visibly incomplete; missing rewards are excluded from the run report's
+recorded-outcome rate and counted separately. Six retained frames do not make a
+74-step replay. Text escaping, a script-free document and screenshot path/PNG
+validation address malicious artifact content; URL/path/credential redaction
+is not universal secret detection. Review screenshots and free text before sharing
+other recordings. Historical world-column exclusions are not independently
+enumerated by a baseline digest's table names.
+
+## Operational limits
+
+New Forkloop Solari allocations are disabled by a release-wide capability hold,
+including the historical spike allocators. A fresh ledger or pricing review
+cannot clear it. The supported offline workflow and existing-resource cleanup
+remain available. No verified hard lifetime bound was found in the provider API;
+idle timers and local watchdogs do not provide one across every failure.
+
+- **No fresh-account claim.** The prior September 15 session completed a new
+  golden build on the existing account; recovery confirmed that snapshot is
+  present. This was not repeated and does not prove installation on another account.
+- **Guard is narrow.** Solari creates admit Starter and the September 2026 price
+  bounds, failing closed on/after 2026-10-01. The student endpoint guard covers exact
+  host `api.openai.com` and `gpt-5.6-luna`; arbitrary compatible endpoints, Anthropic
+  and GPU rental are not guarded by that path. A ledger is not universal spending
+  protection. See [cost](cost.md).
+- **Observed lifetime-bound failure.** Recovery found two session desktops still
+  reported running around ten hours after creation. Both were killed; no selected
+  machines remained active. The requested timeout is idle-based, not a hard
+  deadline. Accounting retains larger observed exposure and blocks new Solari
+  reservations in that ledger. Neither explicit cleanup nor a pricing review
+  establishes a reliable provider lifetime cap. See the current cost record.
+- **Costs are not invoices.** Response token counts are authoritative usage; priced
+  dollars are a calculation. Legacy runs can omit failed calls, idle and storage.
+  Solari/Lambda pending reservations remain until billing reconciliation even after
+  provider-confirmed termination. Do not interpret `actual_usd: 0` as free compute.
+- **Desktop instability affects outcomes.** Historical restores were bimodal
+  (~22 s or 70–160 s). Chrome renderer crashes interrupted the adapter and stopped
+  magnification preparation; in-episode crash symptoms can end as `NOT_DONE` or
+  `BUDGET_EXCEEDED`, not a distinct infrastructure exception. Inspect the trace.
+- **Fake is not a browser.** Directory snapshots and SQLite stand-ins exercise
+  controller semantics. Claims-ops screenshots are blank; only toy-counter has a
+  rendered simulator. Never quote fake timings as Solari performance.
+- **Bounded observation memory.** Previous/current screenshots preserve evidence
+  for the audited first authorization-entry steps, not arbitrary longer gaps.
+  Decoy selection, exact reading and retention still require policy competence.
+- **Actions have limits.** Scroll uses Page Up/Down or arrow keys, not real wheel
+  events. Triple-click maps to double-click in the teacher; raw mouse-down/up are
+  unsupported (drag is supported). Attachment tasks add download/file-chooser work.
+- **Starter concurrency is two machines.** Fork search and parallel collection
+  compete for that cap; a local endpoint does not remove the VM constraint.
+- **Synthetic data only.** Nothing here is a PHI deployment or HIPAA assurance.
+  No GRPO implementation or demonstrated positive held-out learning curve is supplied.
+
+## Product evidence is separate
+
+The README's recurring job is a matched policy comparison yielding an inspectable
+failure and a next experiment, or a concrete reason not to use this environment.
+The audience is a hypothesis. Interest, an assisted first session, independent use,
+repeat use and a changed research decision are different evidence levels. None is
+claimed here; a runnable control, teacher success or model benchmark is not adoption.
+
+The September 15 comparison is incomplete: navigation has two comparable pairs
+out of four planned (A 0/2, B 2/2); memory has one comparable pair out of four
+planned (A and B each 0/2 scored, with another A attempt excluded for a backend
+action error). Completed, excluded, unfinished and missing cells remain visible.
+The positive navigation observations are development evidence, not a winner,
+held-out result, learning curve or adoption claim. The public comparison edition
+contains check summaries; full cropped episode HTML is retained locally.

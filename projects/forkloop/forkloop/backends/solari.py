@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+import hashlib
+import datetime as dt
 from typing import Any, Optional
 
 from ..types import ExecResult, MachineInfo, SnapshotInfo
@@ -51,34 +53,60 @@ class SolariMachine:
         self.alive = True
 
     # ---------------------------------------------------------- lifecycle
+    async def _ready(self, timeout_s: float, *, connect: bool = False,
+                     force_reconnect: bool = False) -> None:
+        """One monotonic deadline covers every dial, RPC, backoff and reconnect.
+
+        A control channel the guest dropped (``_on_close`` leaves ``_ws=None``) can
+        never become healthy by polling: every ``call()`` raises "Not connected".
+        Right after a restore the guest accepts one vsock control connection at a
+        time and the host may be tearing down a sibling session, so the channel
+        can drop more than once (2026-09-06: seed-201 fork spun 85 s on that
+        error after its single redial). Redial after every transport error, and
+        once after a non-transport health error. SDK reconnect() is a no-op on an
+        open socket, so close first. Never swallow caller cancellation or equate
+        an open WS with health.
+        """
+        last = None
+        dial = "connect" if connect else ("reconnect" if force_reconnect else None)
+        health_redials = 0
+        try:
+            async with asyncio.timeout(timeout_s):
+                while True:
+                    try:
+                        if dial == "connect":
+                            await self._d.connect()
+                        elif dial == "reconnect":
+                            await self._d.close()
+                            await self._d.reconnect()
+                        dial = None
+                        async with asyncio.timeout(min(10.0, timeout_s)):
+                            if self.kind != "desktop":
+                                result = await self._d.commands.run("true", timeout_ms=10_000)
+                                ready = result.exitCode == 0
+                            else:
+                                result = await self._d.health()
+                                ready = bool(getattr(result, "ready", False))
+                        if ready:
+                            self.readiness_redials = health_redials
+                            return
+                        last = result
+                    except Exception as exc:
+                        last = exc
+                        if self._is_connection_error(exc) or health_redials == 0:
+                            health_redials += 1
+                            dial = "reconnect"
+                    if dial is None:  # a dial paces itself (SDK handshake retry); polls back off
+                        await asyncio.sleep(0.5)
+        except TimeoutError as exc:
+            raise BackendError(f"machine {self.id} readiness deadline {timeout_s}s expired "
+                               f"(last={last!r}, redials={health_redials})") from exc
+
     async def connect(self, *, wait_ready_s: float = 60.0) -> None:
-        await self._d.connect()
-        await self.wait_ready(wait_ready_s)
+        await self._ready(wait_ready_s, connect=True)
 
     async def wait_ready(self, timeout_s: float = 60.0) -> None:
-        t0 = time.monotonic()
-        last = None
-        while time.monotonic() - t0 < timeout_s:
-            try:
-                if self.kind != "desktop":
-                    # sandboxes have no health(); a successful command is "ready"
-                    r = await self._d.commands.run("true", timeout_ms=10_000)
-                    if r.exitCode == 0:
-                        return
-                    last = r
-                else:
-                    h = await self._d.health()
-                    if getattr(h, "ready", False):
-                        return
-                    last = h
-            except Exception as e:  # noqa: BLE001 - transient right after restore
-                last = e
-                try:
-                    await self._d.reconnect()
-                except Exception:  # noqa: BLE001
-                    pass
-            await asyncio.sleep(0.5)
-        raise BackendError(f"desktop {self.id} not ready after {timeout_s}s (last={last!r})")
+        await self._ready(timeout_s)
 
     async def healthy(self) -> bool:
         try:
@@ -90,6 +118,13 @@ class SolariMachine:
             return False
 
     async def snapshot(self, name: Optional[str] = None) -> str:
+        from ..spending import load_solari_pricing
+        pricing = load_solari_pricing(getattr(self.backend, "pricing_file", None))
+        if dt.date.today() >= pricing.storage_starts_on:
+            raise BackendError(
+                "snapshot creation refused: Solari now bills retained storage and this SDK has no "
+                "provider-enforced snapshot expiry. A compute pricing review does not bound indefinite storage; "
+                "use an existing golden snapshot in fork mode (no branch snapshots).")
         try:
             return await self._d.snapshot(name)
         except Exception as e:  # noqa: BLE001
@@ -97,32 +132,17 @@ class SolariMachine:
 
     async def revert(self, snapshot_id: str) -> None:
         try:
-            await self._d.revert(snapshot_id)
-        except Exception as e:  # noqa: BLE001
-            raise _wrap_error(e)
-        # Right after a restore the guest accepts only one control connection for a
-        # brief window (see solari_core/transport.py). The old channel is dead, so
-        # close it and dial again until a command succeeds.
-        t0 = time.monotonic()
-        while True:
-            try:
-                await self._d.close()
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                await self._d.connect()
-                await self.wait_ready(5.0)
-                return
-            except Exception as e:  # noqa: BLE001
-                if time.monotonic() - t0 > self.backend.revert_ready_timeout_s:
-                    raise RevertTimeoutError(
-                        f"machine {self.id} not reachable {self.backend.revert_ready_timeout_s:.0f}s after revert: {e}") from e
-                await asyncio.sleep(0.3)
+            async with asyncio.timeout(self.backend.revert_ready_timeout_s):
+                await self._d.revert(snapshot_id)
+                await self._ready(self.backend.revert_ready_timeout_s, force_reconnect=True)
+        except (TimeoutError, BackendError) as exc:
+            raise RevertTimeoutError(f"machine {self.id}: revert/readiness deadline expired: {exc}") from exc
+        except Exception as exc:
+            raise _wrap_error(exc)
 
     async def kill(self) -> None:
         if not self.alive:
             return
-        self.alive = False
         try:
             await self._d.kill()
         except Exception as e:  # noqa: BLE001
@@ -131,6 +151,21 @@ class SolariMachine:
                 await self.backend.kill_machine(self.id)
             except Exception:  # noqa: BLE001
                 raise _wrap_error(e)
+        self.alive = False  # failed cleanup remains retryable
+        self.backend.record_resource_closed(self.id)
+
+    async def refresh_lifetime(self, timeout_ms: int = 30 * 60_000) -> Any:
+        """Re-arm the provider kill-on-timeout window (``POST /sandboxes/:id/timeout``).
+
+        A machine reused across episodes keeps its 30-minute guard; the controller
+        must re-arm it before each episode, so an abandoned machine still dies.
+        """
+        if not 0 < timeout_ms <= 30 * 60_000:
+            raise BackendError("kill-on-timeout refresh must stay within 30 minutes")
+        try:
+            return await self._d.set_timeout(timeout_ms)
+        except Exception as e:  # noqa: BLE001
+            raise _wrap_error(e)
 
     # ---------------------------------------------------------- channel resilience
     #: Times the control channel dropped mid-episode and was re-dialled.
@@ -145,24 +180,8 @@ class SolariMachine:
                 or "Not connected" in str(e) or "connection is closed" in str(e).lower())
 
     async def _reconnect(self) -> None:
-        """The control WebSocket drops now and then (close code 1000/1006, measured 2026-09-02/03).
-        Close it and dial again until health answers, then let the caller retry once."""
-        t0 = time.monotonic()
-        while True:
-            try:
-                await self._d.close()
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                await self._d.connect()
-                await self.wait_ready(5.0)
-                self.reconnects += 1
-                return
-            except Exception as e:  # noqa: BLE001
-                if time.monotonic() - t0 > self.reconnect_timeout_s:
-                    raise BackendError(f"machine {self.id}: control channel lost and not recovered "
-                                       f"after {self.reconnect_timeout_s:.0f}s: {e}") from e
-                await asyncio.sleep(0.5)
+        await self._ready(self.reconnect_timeout_s, force_reconnect=True)
+        self.reconnects += 1
 
     async def _call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         """Run one channel operation; on a dropped channel reconnect and retry it once."""
@@ -248,7 +267,8 @@ class SolariBackend:
                  plan: Optional[str] = None, concurrency_cap: Optional[int] = None,
                  ready_timeout_s: float = 90.0, revert_ready_timeout_s: float = 240.0,
                  call_timeout_ms: Optional[int] = None,
-                 kind: Optional[str] = None) -> None:
+                 kind: Optional[str] = None, session_ledger: Optional[str] = None,
+                 pricing_file: Optional[str] = None) -> None:
         #: "desktop" (GUI, paid plans) or "sandbox" (headless; Free plan). Env FORKLOOP_SOLARI_KIND.
         self.kind = (kind or os.environ.get("FORKLOOP_SOLARI_KIND", "desktop")).lower()
         if self.kind not in ("desktop", "sandbox"):
@@ -263,16 +283,57 @@ class SolariBackend:
         #: After ``revert()`` the guest can take the slow restore mode (70–160 s measured 2026-09-03);
         #: 90 s discarded a healthy machine and flipped a whole run to fork mode (runs/luna-v7-fam1-s0-9).
         self.revert_ready_timeout_s = revert_ready_timeout_s
-        from solari_sandbox import SandboxClient  # type: ignore
+        try:
+            from solari_sandbox import SandboxClient  # type: ignore
+        except ImportError as exc:
+            raise BackendError("Solari SDK unavailable; install solari-sandbox>=0.2.0 and solari-desktop>=0.2.0") from exc
 
         self._client = SandboxClient(api_key=self.api_key, base_url=self.base_url, call_timeout_ms=call_timeout_ms)
         self.counters: dict[str, int] = {"create": 0}
+        self.session_ledger = session_ledger or os.environ.get("FORKLOOP_SESSION_LEDGER")
+        self.pricing_file = pricing_file or os.environ.get("FORKLOOP_SOLARI_PRICING_FILE")
+        self.resources: dict[str, dict] = {}
+
+    def record_resource_closed(self, machine_id: str) -> None:
+        resource = self.resources.get(machine_id)
+        if not resource or resource.get("closed"):
+            return
+        from ..spending import SessionLedger
+        elapsed = time.time() - resource["started_at"]
+        resource.update(closed=True, lifetime_seconds=elapsed,
+                        estimated_compute_usd=elapsed / 3600 * resource["hourly_usd"])
+        # An observed lifetime can exceed the assumed provider cap. Retain that
+        # larger exposure and block further spending; never call it an invoice.
+        ledger = SessionLedger(self.session_ledger)
+        ledger.retain_exposure(resource["operation"], resource["estimated_compute_usd"],
+                               evidence={"machine_id": machine_id, **resource})
+        ledger.reconcile(resource["operation"], None, status="resource_closed_usage_pending",
+                         evidence={"machine_id": machine_id, **resource})
 
     async def create(self, *, template: Optional[str] = None, from_snapshot: Optional[str] = None,
                      resolution: str = "1280x720", cpu: int = 2, mem_mb: int = 4096,
                      record: Optional[bool] = None, metadata: Optional[dict[str, str]] = None,
                      timeout_ms: int = 30 * 60_000, disk_gb: Optional[int] = None) -> SolariMachine:
-        meta = {"forkloop": "1", **(metadata or {})}
+        from ..spending import SessionLedger, load_solari_pricing
+        if not self.session_ledger:
+            raise BackendError("Solari creates require FORKLOOP_SESSION_LEDGER; initialize it with forkloop ledger --create")
+        if self.plan != "starter":
+            raise BackendError("guarded Solari execution supports SOLARI_PLAN=starter only; verify the account plan manually")
+        if type(timeout_ms) is not int or not 0 < timeout_ms <= 30 * 60_000 or record:
+            raise BackendError("guarded probes require <=30 minute kill-on-idle timeout and no recording")
+        try:
+            pricing = load_solari_pricing(getattr(self, "pricing_file", None))
+            hourly = pricing.hourly(cpu, mem_mb, desktop=self.kind == "desktop")
+        except ValueError as exc:
+            raise BackendError(str(exc)) from exc
+        ledger = SessionLedger(self.session_ledger)
+        operation = ledger.reserve("solari", pricing.reservation(hourly), label="machine_create",
+                                   evidence={"cpu": cpu, "mem_mb": mem_mb, "timeout_ms": timeout_ms,
+                                             "hourly_usd": hourly, "storage_usd": 0,
+                                             "pricing": pricing.public_info()})
+        started = time.time()
+        meta = {"forkloop": "1", **(metadata or {}), "spend_operation": operation,
+                "forkloop_session": hashlib.sha256(str(ledger.path.resolve()).encode()).hexdigest()[:16]}
         try:
             if self.kind == "sandbox":
                 d = await self._client.create(
@@ -285,19 +346,29 @@ class SolariBackend:
                     from_snapshot=from_snapshot, resolution=resolution, cpu=cpu, mem_mb=mem_mb,
                     disk_gb=None if from_snapshot else disk_gb, record=record, metadata=meta, timeout_ms=timeout_ms,
                     lifecycle={"onTimeout": "kill"})
-        except Exception as e:  # noqa: BLE001
+        except BaseException as e:  # a timeout can leave a billed remote resource
+            ledger.reconcile(operation, None, status="create_uncertain",
+                             evidence={"error_type": type(e).__name__, "metadata": meta})
             raise _wrap_error(e)
         self.counters["create"] += 1
+        self.resources[d.id] = {"operation": operation, "started_at": started,
+                                "hourly_usd": hourly, "closed": False}
+        ledger.reconcile(operation, None, status="resource_running",
+                         evidence={"machine_id": d.id, **self.resources[d.id]})
         m = SolariMachine(d, self, parse_resolution(resolution), meta, kind=self.kind)
+        # Include failure cleanup within the post-create readiness deadline.
+        deadline = asyncio.get_running_loop().time() + self.ready_timeout_s
+        cleanup_s = min(5.0, self.ready_timeout_s / 4)
         try:
-            await m.connect(wait_ready_s=self.ready_timeout_s)
-        except Exception:
-            # A machine that never became ready still counts against the concurrency cap
-            # (measured 2026-09-03: one such leak turned every later create into a 429).
+            await m.connect(wait_ready_s=self.ready_timeout_s - cleanup_s)
+        except BaseException:
+            # Cancellation must also clean up; failed cleanup stays pending in
+            # the ledger for the session watchdog's gateway-only retry.
             try:
-                await m.kill()
-            except Exception:  # noqa: BLE001
-                pass
+                async with asyncio.timeout_at(min(deadline, asyncio.get_running_loop().time() + cleanup_s)):
+                    await m.kill()
+            except Exception as exc:
+                self.resources[d.id]["cleanup_error"] = type(exc).__name__
             raise
         return m
 
@@ -345,6 +416,7 @@ class SolariBackend:
 
     async def kill_machine(self, machine_id: str) -> None:
         await self._client.kill(machine_id)
+        self.record_resource_closed(machine_id)
 
     async def close(self) -> None:
         try:

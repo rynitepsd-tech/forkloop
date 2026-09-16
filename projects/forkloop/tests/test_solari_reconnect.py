@@ -1,4 +1,5 @@
-"""SolariMachine re-dials a dropped control channel and retries the operation once (no network)."""
+"""SolariMachine re-dials a dropped control channel (close + reconnect, since the 2026-09-06
+readiness repair) and retries the operation once (no network)."""
 
 from __future__ import annotations
 
@@ -14,12 +15,15 @@ class ConnectionError(Exception):  # noqa: A001 - mirrors solari_core.errors.Con
 class StubDesktop:
     def __init__(self, fail_first: int = 1):
         self.id = "d1"
-        self.calls = {"connect": 0, "close": 0, "click": 0, "health": 0}
+        self.calls = {"connect": 0, "reconnect": 0, "close": 0, "click": 0, "health": 0}
         self.fail_first = fail_first
         self.mouse = SimpleNamespace(click=self._click)
 
     async def connect(self):
         self.calls["connect"] += 1
+
+    async def reconnect(self):
+        self.calls["reconnect"] += 1
 
     async def close(self):
         self.calls["close"] += 1
@@ -43,7 +47,7 @@ async def test_dropped_channel_is_redialled_and_the_action_retried():
     d = StubDesktop(fail_first=1)
     m = _machine(d)
     await m.click(10, 20)
-    assert d.calls["click"] == 2 and d.calls["connect"] == 1 and d.calls["close"] == 1
+    assert d.calls["click"] == 2 and d.calls["reconnect"] == 1 and d.calls["close"] == 1 and d.calls["connect"] == 0
     assert m.reconnects == 1
 
 
@@ -72,4 +76,4 @@ async def test_other_errors_are_not_retried():
         await m.click(1, 1)
     except ValueError:
         pass
-    assert d.calls["click"] == 1 and d.calls["connect"] == 0
+    assert d.calls["click"] == 1 and d.calls["connect"] == 0 and d.calls["reconnect"] == 0

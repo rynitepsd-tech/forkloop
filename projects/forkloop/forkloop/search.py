@@ -1,29 +1,22 @@
-"""Fork-based best-of-N at uncertain steps — the Rewind mechanic as a data engine.
+"""Bounded best-of-N with explicit decision-state isolation and terminal adoption.
 
-Two modes:
-
-* ``revert`` (width 1, any plan): at a branch point take a snapshot, try each
-  candidate action in turn by reverting the same machine, roll each branch out
-  to the end, verify, keep the best.
-* ``fork`` (needs ≥ 2 concurrent machines): create ``create(from_snapshot=cp)``
-  workers and roll the candidates out in parallel.
-
-The main trajectory adopts the winning branch's steps; every branch is kept on
-disk under ``branches/`` with its own verdict for analysis.
+Trajectory budgets rewind to the checkpoint; total calls and resource lifetimes
+never rewind. All branches are recorded, including losing and failed attempts.
 """
-
 from __future__ import annotations
 
 import asyncio
+import copy
+import json
 import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .actions import Action
-from .env import Env, EnvCheckpoint
+from .env import Env, EnvCheckpoint, EpisodeState, act_with_deadline
 from .oracle import Verdict
-from .policies.base import Policy, propose_or_repeat
+from .policies.base import Policy, require_branchable
 from .types import Observation
 
 
@@ -33,6 +26,9 @@ class BranchResult:
     first_action: str
     verdict: Verdict
     steps: int
+    policy_state: dict = field(default_factory=dict)
+    env_state: Optional[EnvCheckpoint] = None
+    _end_snapshot: Optional[str] = None
 
 
 @dataclass
@@ -43,22 +39,22 @@ class SearchStats:
     snapshots: int = 0
     reverts: int = 0
     forks: int = 0
-    #: checkpoint / branch-end snapshots deleted after the branch point (each is a full disk image on the account)
     snapshots_deleted: int = 0
     snapshot_delete_errors: list[str] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
+    experiment_wall_s: float = 0.0
+    experiment_tokens: dict = field(default_factory=dict)
+    branch_resource_seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return self.__dict__.copy()
+        return copy.deepcopy(self.__dict__)
 
 
 def _score(v: Verdict) -> tuple[float, float]:
-    return (v.reward, v.milestones)
+    return v.reward, v.milestones
 
 
-async def _rollout(env: Env, policy: Policy, obs: Observation, *, first: Optional[tuple[Optional[Action], dict[str, Any]]] = None,
-                   search_tag: Optional[dict[str, Any]] = None) -> Verdict:
-    """Play the current episode to the end from ``obs`` (greedy after the first action)."""
+async def _rollout(env: Env, policy: Policy, obs: Observation, *, first=None, search_tag=None) -> Verdict:
     pending = first
     while True:
         if pending is not None:
@@ -66,201 +62,201 @@ async def _rollout(env: Env, policy: Policy, obs: Observation, *, first: Optiona
             pending = None
         else:
             t0 = time.monotonic()
-            action, meta = await policy.act(obs)
+            action, meta = await act_with_deadline(env, policy, obs)
             meta = dict(meta or {})
             meta.setdefault("model_latency_s", time.monotonic() - t0)
-        meta = dict(meta or {})
+        meta = {k: v for k, v in (meta or {}).items() if k != "_policy_state"}
         if search_tag:
             meta["search"] = {**search_tag, **(meta.get("search") or {})}
-        obs, reward, term, trunc, info = await env.step(action, meta=meta)
+        obs, _, term, trunc, _ = await env.step(action, meta=meta)
         if term or trunc:
             return await env.verify()
+
+
+def _dedupe(candidates):
+    seen, out = set(), []
+    for action, meta in candidates:
+        key = action.to_compact() if isinstance(action, Action) else f"invalid:{meta.get('raw_action')}"
+        if key not in seen:
+            seen.add(key)
+            out.append((action, meta))
+    return out
+
+
+async def _delete_snapshots(env: Env, ids: list, stats: SearchStats) -> None:
+    for sid in dict.fromkeys(ids):
+        if not sid:
+            continue
+        try:
+            await env.backend.delete_snapshot(sid)
+            stats.snapshots_deleted += 1
+        except Exception as e:
+            stats.snapshot_delete_errors.append(f"{sid}: {type(e).__name__}: {str(e)[:200]}")
+
+
+async def _candidates(policy, before_state, obs, n):
+    """Generate alternatives from the state BEFORE the initial act, never after it.
+
+    A proposing policy must attach each candidate's post-choice state. A policy
+    without propose is sampled independently from its explicit checkpoint.
+    """
+    clone = policy.clone_for_branch(before_state)
+    if callable(getattr(clone, "propose", None)):
+        choices = await clone.propose(obs, n)
+        for _, meta in choices:
+            if "_policy_state" not in meta:
+                raise TypeError("propose must return each candidate's _policy_state")
+        return choices
+    choices = []
+    for _ in range(n):
+        child = policy.clone_for_branch(before_state)
+        action, meta = await child.act(obs)
+        choices.append((action, {**(meta or {}), "_policy_state": child.snapshot_state()}))
+    return choices
 
 
 async def best_of_n(env: Env, policy: Policy, n: int, seed: int, *, family: Optional[str] = None,
                     branch_prob: float = 0.2, confidence_threshold: float = 0.5, max_branch_points: int = 3,
                     mode: str = "revert", rng: Optional[random.Random] = None,
                     stats: Optional[SearchStats] = None) -> Verdict:
-    """Run one episode with best-of-``n`` branching at uncertain steps.
-
-    A step is a branch point when the policy reports ``confidence`` below the
-    threshold, or with probability ``branch_prob`` otherwise, up to
-    ``max_branch_points`` per episode. Returns the final verdict of the
-    trajectory the env's recorder ends up holding (the winner).
-    """
     if n < 2:
         from .env import run_episode
-
         return await run_episode(env, policy, seed, family=family)
     if mode not in ("revert", "fork"):
         raise ValueError("mode must be revert or fork")
-    rng = rng or random.Random(seed)
-    stats = stats if stats is not None else SearchStats()
-    obs, info = await env.reset(seed, family=family)
-    branch_points = 0
-    while True:
-        t0 = time.monotonic()
-        action, meta = await policy.act(obs)
-        meta = dict(meta or {})
-        meta.setdefault("model_latency_s", time.monotonic() - t0)
-        conf = meta.get("confidence")
-        uncertain = (conf is not None and float(conf) < confidence_threshold) or (conf is None and rng.random() < branch_prob)
-        terminal = isinstance(action, Action) and action.is_terminal
-        if uncertain and not terminal and branch_points < max_branch_points:
-            branch_points += 1
-            stats.branch_points += 1
-            cp = await env.checkpoint()
+    require_branchable(policy)
+    if mode == "fork" and env.backend.concurrency_cap < 2:
+        raise ValueError("fork search needs a slot for the parent and at least one branch")
+    rng, stats = rng or random.Random(seed), stats if stats is not None else SearchStats()
+    snapshots = []
+    start = time.monotonic()
+    main_rec = None
+    try:
+        obs, _ = await env.reset(seed, family=family)
+        if callable(getattr(policy, "reset", None)):
+            policy.reset()
+        main_rec = env.ep.recorder
+        while True:
+            before_state = policy.snapshot_state()
+            action, meta = await act_with_deadline(env, policy, obs)
+            meta = dict(meta or {})
+            after_state = policy.snapshot_state()
+            conf = meta.get("confidence")
+            uncertain = (float(conf) < confidence_threshold) if conf is not None else rng.random() < branch_prob
+            if uncertain and not (isinstance(action, Action) and action.is_terminal) and stats.branch_points < max_branch_points:
+                stats.branch_points += 1
+                cp = await env.checkpoint()
+                snapshots.append(cp.snapshot_id)
+                stats.snapshots += 1
+                try:
+                    alternatives = await asyncio.wait_for(
+                        _candidates(policy, before_state, obs, n - 1),
+                        timeout=max(0.0, env.remaining_seconds()))
+                except asyncio.TimeoutError:
+                    alternatives = []  # env.step verifies the elapsed trajectory deadline
+                candidates = _dedupe([(action, {**meta, "_policy_state": after_state})] + alternatives)
+                if len(candidates) >= 2:
+                    runner = _run_branches_fork if mode == "fork" else _run_branches_revert
+                    results = await runner(env, policy, cp, candidates, stats, snapshots)
+                    best_idx, best, child_rec = max(results, key=lambda r: _score(r[1].verdict))
+                    stats.wins += int(best.verdict.reward >= 1)
+                    stats.results.append({"step": cp.step, "candidates": [r[1].first_action for r in results],
+                                          "rewards": [r[1].verdict.reward for r in results], "chosen": best_idx})
+                    if mode == "revert":
+                        if best.env_state is None or not best._end_snapshot:
+                            raise RuntimeError("winning branch has no restorable end state")
+                        await env.restore(best.env_state)
+                        stats.reverts += 1
+                    else:
+                        # The root machine remains at the fork point. This is a terminal
+                        # recorded result; no further actions on that machine are permitted.
+                        env.ep.step = cp.step + best.steps
+                    policy.restore_state(best.policy_state)
+                    env.ep.terminated, env.ep.truncated = True, False
+                    env.ep.end_reason, env.ep.verdict = "search_done", best.verdict
+                    if main_rec is not None:
+                        main_rec.adopt(child_rec, from_step=cp.step)
+                        main_rec.finish(best.verdict, extra={"end_reason": "search_done", "search": stats.to_dict()})
+                    return best.verdict
+                policy.restore_state(after_state)
+            obs, _, term, trunc, _ = await env.step(action, meta=meta)
+            if term or trunc:
+                return await env.verify()
+    finally:
+        if env.ep is not None:
+            env.swap_recorder(main_rec)
+        await _delete_snapshots(env, snapshots, stats)
+        stats.experiment_wall_s = time.monotonic() - start
+        stats.experiment_tokens = dict(getattr(policy, "usage", {}) or {})
+        if main_rec is not None:
+            # Independent of the adopted/winning trajectory, also written on exceptions.
+            (main_rec.dir / "accounting.json").write_text(json.dumps(stats.to_dict(), indent=2))
+
+
+async def _run_branches_revert(env, policy, cp, candidates, stats, snapshots):
+    results, main_rec = [], env.ep.recorder
+    try:
+        for i, (action, meta) in enumerate(candidates):
+            obs = await env.restore(cp)
+            stats.reverts += 1
+            child = main_rec.fork(f"s{cp.step:03d}_b{i}") if main_rec else None
+            env.swap_recorder(child)
+            branch_policy = policy.clone_for_branch(meta["_policy_state"])
+            verdict = await _rollout(env, branch_policy, obs, first=(action, meta), search_tag={"branch": i})
+            stats.branches += 1
+            end = await env.checkpoint()
+            snapshots.append(end.snapshot_id)
             stats.snapshots += 1
-            candidates = [(action, meta)] + await propose_or_repeat(policy, obs, n - 1)
-            candidates = _dedupe(candidates)
-            if len(candidates) < 2:
-                # Nothing to branch on: the checkpoint is still a full disk image on the account.
-                # Measured 2026-09-04 (runs/luna-v10-bo2-hard): 6 of 16 checkpoints leaked this way,
-                # with no error recorded, because this path never reached the delete below.
-                await _delete_snapshots(env, [cp.snapshot_id], stats)
-                obs, reward, term, trunc, info = await env.step(action, meta=meta)
-                if term or trunc:
-                    return await env.verify()
-                continue
-            if mode == "fork":
-                results = await _run_branches_fork(env, policy, cp, candidates, obs, stats)
-            else:
-                results = await _run_branches_revert(env, policy, cp, candidates, obs, stats)
-            best = max(results, key=lambda r: _score(r[1].verdict))
-            best_idx, best_res, best_rec = best
-            stats.wins += 1 if best_res.verdict.reward >= 1.0 else 0
-            stats.results.append({"step": cp.step, "candidates": [r[1].first_action for r in results],
-                                  "rewards": [r[1].verdict.reward for r in results], "chosen": best_idx})
-            main_rec = env.ep.recorder if env.ep else None
-            if main_rec is not None and best_rec is not None:
-                main_rec.adopt(best_rec, from_step=cp.step)
-            # Leave the machine in the winning branch's final state and finish.
-            if mode == "revert":
-                # the last rollout may not be the winner; replay the winner's end state by reverting to its end snapshot
-                end_sid = best_res_end_snapshot(results, best_idx)
-                if end_sid and env.ep is not None:
-                    await env.ep.machine.revert(end_sid)
-                    stats.reverts += 1
-            # The branch snapshots have served their purpose; each one is a full disk image billed on the account.
-            await _delete_snapshots(env, [cp.snapshot_id] + [getattr(r[1], "_end_snapshot", None) for r in results], stats)
-            env.ep.terminated = True  # type: ignore[union-attr]
-            env.ep.end_reason = "search_done"  # type: ignore[union-attr]
-            env.ep.verdict = best_res.verdict  # type: ignore[union-attr]
-            env.ep.step = cp.step + best_res.steps  # type: ignore[union-attr]
-            if main_rec is not None:
-                main_rec.finish(best_res.verdict, extra={"end_reason": "search_done", "search": stats.to_dict()})
-            return best_res.verdict
-        obs, reward, term, trunc, info = await env.step(action, meta=meta)
-        if term or trunc:
-            return await env.verify()
-
-
-async def _delete_snapshots(env: Env, snapshot_ids: list, stats: SearchStats) -> None:
-    """Best-effort deletion of checkpoint snapshots once no branch needs them (never raises)."""
-    for sid in snapshot_ids:
-        if not sid:
-            continue
-        try:
-            await env.backend.delete_snapshot(sid)
-            stats.snapshots_deleted += 1
-        except Exception as e:  # noqa: BLE001
-            stats.snapshot_delete_errors.append(f"{sid}: {type(e).__name__}: {str(e)[:200]}")
-
-
-def _dedupe(cands: list[tuple[Optional[Action], dict[str, Any]]]) -> list[tuple[Optional[Action], dict[str, Any]]]:
-    seen: set[str] = set()
-    out = []
-    for a, m in cands:
-        key = a.to_compact() if isinstance(a, Action) else f"invalid:{m.get('raw_action')}"
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append((a, m))
-    return out
-
-
-_END_SNAPSHOTS: dict[int, dict[int, str]] = {}
-
-
-def best_res_end_snapshot(results: list[tuple[int, BranchResult, Any]], idx: int) -> Optional[str]:
-    for i, res, rec in results:
-        if i == idx:
-            return getattr(res, "_end_snapshot", None)
-    return None
-
-
-async def _run_branches_revert(env: Env, policy: Policy, cp: EnvCheckpoint, candidates: list, obs: Observation,
-                               stats: SearchStats) -> list[tuple[int, BranchResult, Any]]:
-    results = []
-    main_rec = env.ep.recorder if env.ep else None
-    for i, (a, m) in enumerate(candidates):
-        obs_i = await env.restore(cp)
-        stats.reverts += 1
-        child = main_rec.fork(f"s{cp.step:03d}_b{i}") if main_rec else None
-        env.swap_recorder(child)
-        meta = dict(m)
-        v = await _rollout(env, policy, obs_i, first=(a, meta), search_tag={"branch": i, "of": len(candidates), "step": cp.step})
-        stats.branches += 1
+            result = BranchResult(f"b{i}", action.to_compact() if isinstance(action, Action) else str(meta.get("raw_action")),
+                                  verdict, env.ep.step - cp.step, branch_policy.snapshot_state(), end, end.snapshot_id)
+            results.append((i, result, child))
+    finally:
         env.swap_recorder(main_rec)
-        steps = (env.ep.step - cp.step) if env.ep else 0
-        res = BranchResult(label=f"b{i}", first_action=a.to_compact() if isinstance(a, Action) else str(m.get("raw_action")),
-                           verdict=v, steps=steps)
-        # remember the end state so the winner can be restored after the loop
-        try:
-            res._end_snapshot = await env.ep.machine.snapshot(f"end-{cp.step}-{i}")  # type: ignore[attr-defined,union-attr]
-            stats.snapshots += 1
-        except Exception:  # noqa: BLE001
-            res._end_snapshot = None  # type: ignore[attr-defined]
-        results.append((i, res, child))
     return results
 
 
-async def _run_branches_fork(env: Env, policy: Policy, cp: EnvCheckpoint, candidates: list, obs: Observation,
-                             stats: SearchStats) -> list[tuple[int, BranchResult, Any]]:
-    """Run candidates on forked machines in parallel (bounded by the backend cap)."""
-    from .env import Env as _Env
+async def _run_branches_fork(env, policy, cp, candidates, stats, snapshots):
     from .pool import WorkerPool
+    main_rec, parent = env.ep.recorder, env.ep
+    sem = asyncio.Semaphore(max(1, env.backend.concurrency_cap - 1))
 
-    main_rec = env.ep.recorder if env.ep else None
-    cap = max(1, env.backend.concurrency_cap - 1)  # the main machine holds one slot
-    sem = asyncio.Semaphore(cap)
-    results: list[tuple[int, BranchResult, Any]] = []
-
-    async def one(i: int, a: Optional[Action], m: dict[str, Any]) -> None:
+    async def one(i, action, meta):
         async with sem:
-            # reap_orphans_enabled=False: the parent pool's worker (and sibling branches) are live and must survive.
+            t0 = time.monotonic()
             pool = WorkerPool(env.backend, env.world, size=1, mode="fork", golden_snapshot=cp.snapshot_id,
                               run_id=env.pool.run_id, reap_orphans_enabled=False)
-            sub = _Env(env.world, env.backend, family=env.family, split=env.split, pool=pool, recorder=None,
-                       history_k=env.history_k, settle_s=env.settle_s, reset_controller=env.resetter)
-            # A fork already contains the seeded, post-checkpoint state: skip seeding/health by attaching directly.
-            worker = await pool.acquire()
-            machine = await worker.restore()
-            stats.forks += 1
-            from .env import EpisodeState
-
-            sub.ep = EpisodeState(task=env.ep.task, worker=worker, machine=machine, dbs=env.world.databases(machine),
-                                  baseline=env.ep.baseline, step=cp.step, invalid=cp.invalid,
-                                  history=list(cp.history), started_at=cp.started_at,
-                                  last_shot=cp.screenshot or await machine.screenshot(),
-                                  recorder=main_rec.fork(f"s{cp.step:03d}_b{i}") if main_rec else None)
+            sub = Env(env.world, env.backend, family=env.family, split=env.split, pool=pool,
+                      history_k=env.history_k, settle_s=env.settle_s, reset_controller=env.resetter,
+                      stable_after_action=env.stable_after_action, max_invalid=env.max_invalid,
+                      budget_override=copy.deepcopy(env.budget_override), record_extra=copy.deepcopy(env.record_extra))
             try:
-                v = await _rollout(sub, policy, sub._obs(), first=(a, dict(m)),
-                                   search_tag={"branch": i, "of": len(candidates), "step": cp.step})
+                worker = await pool.acquire()
+                machine = await worker.restore()
+                stats.forks += 1
+                sub.ep = EpisodeState(task=copy.deepcopy(parent.task), worker=worker, machine=machine,
+                    dbs=env.world.databases(machine), baseline=copy.deepcopy(parent.baseline), step=cp.step,
+                    budget_steps=cp.budget_steps, invalid=cp.invalid, history=list(cp.history),
+                    started_at=time.monotonic() - cp.elapsed_s, last_shot=cp.screenshot,
+                    previous_shot=cp.previous_screenshot,
+                    recorder=main_rec.fork(f"s{cp.step:03d}_b{i}") if main_rec else None)
+                branch_policy = policy.clone_for_branch(meta["_policy_state"])
+                verdict = await _rollout(sub, branch_policy, sub._obs(), first=(action, meta), search_tag={"branch": i})
                 stats.branches += 1
-                res = BranchResult(label=f"b{i}", first_action=a.to_compact() if isinstance(a, Action) else str(m.get("raw_action")),
-                                   verdict=v, steps=sub.ep.step - cp.step)
-                res._end_snapshot = None  # type: ignore[attr-defined]
-                results.append((i, res, sub.ep.recorder))
+                result = BranchResult(f"b{i}", action.to_compact() if isinstance(action, Action) else str(meta.get("raw_action")),
+                                      verdict, sub.ep.step - cp.step, branch_policy.snapshot_state())
+                return i, result, sub.ep.recorder
             finally:
-                await sub.close()
-                # The branch env does not own its pool, so close the pool too: otherwise the branch's
-                # fork stays alive (holding a Starter slot) until some other pool reaps it as an orphan.
-                await pool.close()
+                try:
+                    await sub.close()
+                finally:
+                    await pool.close()
+                    stats.branch_resource_seconds += time.monotonic() - t0
 
-    await asyncio.gather(*(one(i, a, m) for i, (a, m) in enumerate(candidates)))
-    results.sort(key=lambda r: r[0])
-    return results
+    outcomes = await asyncio.gather(*(one(i, a, m) for i, (a, m) in enumerate(candidates)), return_exceptions=True)
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome  # siblings have finished cleanup before propagating the failure
+    return sorted(outcomes, key=lambda r: r[0])
 
 
 __all__ = ["best_of_n", "SearchStats", "BranchResult"]

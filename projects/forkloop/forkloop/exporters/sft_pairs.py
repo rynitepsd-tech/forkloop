@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..actions import Action, InvalidAction
+from .observations import image_fields
 from ..trajectories import iter_episode_dirs, load_episode
 
 
@@ -49,18 +50,18 @@ def export_sft_pairs(run_dir: str | Path, out: str | Path, *, history_k: int = 8
             m = ep["manifest"]
             hist: list[str] = []
             n_eps += 1
-            for s in ep["steps"]:
+            for index, s in enumerate(ep["steps"]):
                 target = _compact(s)
                 if target is None or (drop_invalid and not s.get("valid", True)):
-                    if target:
-                        hist.append(target)
+                    hist.append(target or str(s.get("raw_action") or "None"))
                     continue
                 img = ep["dir"] / s["shot_before"] if s.get("shot_before") else None
                 if img is None or not img.exists():
                     hist.append(target)
                     continue
                 fh.write(json.dumps({
-                    "images": [str(img.resolve())], "instruction": m["instruction"], "history": hist[-history_k:],
+                    **image_fields(ep["dir"], ep["steps"], index), "instruction": m["instruction"],
+                    "history": hist[-history_k:] if history_k else [],
                     "target": target, "task_id": m["task_id"], "family": m["family"], "seed": m["seed"],
                     "split": m["split"], "step": s["i"],
                 }, ensure_ascii=False) + "\n")

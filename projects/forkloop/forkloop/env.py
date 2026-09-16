@@ -36,6 +36,9 @@ class EnvCheckpoint:
     invalid: int
     started_at: float
     screenshot: bytes
+    budget_steps: int = 0
+    elapsed_s: float = 0.0
+    previous_screenshot: bytes = b""
 
 
 @dataclass
@@ -50,6 +53,7 @@ class EpisodeState:
     invalid: int = 0
     history: list[str] = field(default_factory=list)
     started_at: float = field(default_factory=time.monotonic)
+    previous_shot: bytes = b""
     last_shot: bytes = b""
     terminated: bool = False
     truncated: bool = False
@@ -89,7 +93,8 @@ class Env:
     def _obs(self) -> Observation:
         assert self.ep is not None
         return Observation(screenshot=self.ep.last_shot, instruction=self.ep.task.instruction, step=self.ep.step,
-                           history=list(self.ep.history[-self.history_k:]), width=self.width, height=self.height)
+                           history=list(self.ep.history[-self.history_k:]) if self.history_k else [],
+                           width=self.width, height=self.height, previous_screenshot=self.ep.previous_shot)
 
     def _info(self, **extra: Any) -> dict[str, Any]:
         assert self.ep is not None
@@ -112,9 +117,10 @@ class Env:
         worker = await self.pool.acquire()
         try:
             outcome = await self.resetter.reset(worker, task)
-        except ResetError as e:
+        except BaseException as e:
             await self.pool.release(worker, healthy=False)
-            self.last_reset_report = e.report.to_dict() if e.report else None
+            if isinstance(e, ResetError):
+                self.last_reset_report = e.report.to_dict() if e.report else None
             raise
         self.last_reset_report = outcome.report.to_dict()
         rec = self.recorder.episode(task, episode_id=episode_id, extra=self.record_extra) if self.recorder else None
@@ -125,12 +131,22 @@ class Env:
         return self._obs(), self._info(reset=self.last_reset_report)
 
     # --------------------------------------------------------------- step
+    def remaining_seconds(self) -> float:
+        if self.ep is None:
+            raise RuntimeError("call reset() first")
+        budget = {**self.ep.task.budget, **self.budget_override}
+        return max(0.0, float(budget.get("max_seconds", 600)) - (time.monotonic() - self.ep.started_at))
+
     async def step(self, action: Any, *, meta: Optional[dict[str, Any]] = None) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
         ep = self.ep
         if ep is None:
             raise RuntimeError("call reset() first")
         if ep.terminated or ep.truncated:
             raise RuntimeError("episode is over; call reset()")
+        if self.remaining_seconds() <= 0:
+            ep.truncated, ep.end_reason = True, "max_seconds"
+            verdict = await self.verify()
+            return self._obs(), verdict.reward, False, True, self._info(end_reason=ep.end_reason)
         meta = dict(meta or {})
         raw = meta.get("raw_action") or (action.to_compact() if isinstance(action, Action) else str(action))
         shot_before = ep.last_shot
@@ -166,6 +182,7 @@ class Env:
                 if self.settle_s:
                     await asyncio.sleep(self.settle_s)
                 ep.last_shot = await ep.machine.screenshot()
+        ep.previous_shot = shot_before
         shot_after = ep.last_shot
         ep.history.append(raw if parsed is None else parsed.to_compact())
         i = ep.step
@@ -247,18 +264,20 @@ class Env:
         assert ep is not None
         sid = await ep.machine.snapshot(f"cp-{ep.task.task_id}-{ep.step}")
         return EnvCheckpoint(snapshot_id=sid, step=ep.step, history=list(ep.history), invalid=ep.invalid,
-                             started_at=ep.started_at, screenshot=ep.last_shot)
+                             started_at=ep.started_at, screenshot=ep.last_shot, budget_steps=ep.budget_steps,
+                             elapsed_s=time.monotonic() - ep.started_at, previous_screenshot=ep.previous_shot)
 
     async def restore(self, cp: EnvCheckpoint) -> Observation:
         ep = self.ep
         assert ep is not None
         await ep.machine.revert(cp.snapshot_id)
         ep.step, ep.history, ep.invalid = cp.step, list(cp.history), cp.invalid
-        ep.budget_steps = min(ep.budget_steps, cp.step)
-        ep.started_at = cp.started_at
+        ep.budget_steps = cp.budget_steps
+        ep.started_at = time.monotonic() - cp.elapsed_s
         ep.terminated = ep.truncated = False
         ep.verdict = None
         ep.end_reason = ""
+        ep.previous_shot = cp.previous_screenshot
         ep.last_shot = cp.screenshot or await ep.machine.screenshot()
         return self._obs()
 
@@ -299,9 +318,11 @@ async def run_episode(env: Env, policy: Any, seed: int, *, family: Optional[str]
                       on_step: Optional[Any] = None) -> Verdict:
     """Drive one full episode with a policy. Returns the verdict."""
     obs, info = await env.reset(seed, family=family)
+    if callable(getattr(policy, "reset", None)):
+        policy.reset()
     while True:
         t0 = time.monotonic()
-        action, meta = await policy.act(obs)
+        action, meta = await act_with_deadline(env, policy, obs)
         meta = dict(meta or {})
         meta.setdefault("model_latency_s", time.monotonic() - t0)
         obs, reward, term, trunc, info = await env.step(action, meta=meta)
@@ -309,6 +330,25 @@ async def run_episode(env: Env, policy: Any, seed: int, *, family: Optional[str]
             on_step(obs, reward, term, trunc, info)
         if term or trunc:
             return await env.verify()
+
+
+async def act_with_deadline(env: Env, policy: Any, obs: Observation):
+    """A trajectory wall budget also bounds time spent waiting for the policy.
+
+    Cancellation never cancels/refunds the external reservation for a request
+    whose server may already be computing a response.
+    """
+    remaining = env.remaining_seconds()
+    if remaining <= 0:
+        return None, {"note": "trajectory wall budget exhausted"}
+    deadline = asyncio.timeout(remaining)
+    try:
+        async with deadline:
+            return await policy.act(obs)
+    except TimeoutError:
+        if not deadline.expired():
+            raise  # Provider timeouts are infrastructure errors, not elapsed task budgets.
+        return None, {"note": "policy call exceeded trajectory wall budget", "tokens": dict(getattr(policy, "usage", {}) or {})}
 
 
 __all__ = ["Env", "EnvCheckpoint", "make", "run_episode", "Observation"]

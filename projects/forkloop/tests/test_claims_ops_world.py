@@ -101,6 +101,21 @@ async def test_resolve_denial_ui_path_success(world, backend):
     await env.close()
 
 
+async def test_resolve_denial_without_appeal_is_not_a_duplicate(world, backend):
+    env = Env(world, backend, family="resolve_denial", settle_s=0)
+    try:
+        await env.reset(4)
+        await env.step(Action.done())
+        verdict = await env.verify()
+        assert verdict.reward == 0.0 and verdict.reason_code == "NOT_DONE"
+        assert "claim_status" in verdict.failed and "appeal_auth_number" in verdict.failed
+        assert "single_appeal" in verdict.failed
+        assert verdict.details["single_appeal"]["reason_code"] == "NOT_DONE"
+        assert verdict.details["single_appeal"]["actual"] == 0
+    finally:
+        await env.close()
+
+
 async def test_resolve_denial_rejects_wrong_number_duplicate_and_wrong_claim(world, backend):
     env = Env(world, backend, family="resolve_denial", settle_s=0)
     pool = env.pool
@@ -179,7 +194,7 @@ async def test_update_insurance_both_systems(world, backend):
     c.post(f"/claims/{ex['claim_number']}/resubmit", data={"member_id": ex["new_member"], "note": "corrected"})
     await env.step(Action.done())
     v = await env.verify()
-    assert v.reward == 0.0 and v.failed == ["openemr_policy"] and abs(v.milestones - 2 / 3) < 1e-6
+    assert v.reward == 0.0 and v.failed == ["openemr_policy", "openemr_plan"] and abs(v.milestones - 2 / 4) < 1e-6
     # both systems through their UI paths
     await env.reset(seed)
     task = env.ep.task

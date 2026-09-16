@@ -47,7 +47,11 @@ log "apt packages"
 # The template ships Microsoft's VS Code apt source whose signing key is not trusted any more
 # (NO_PUBKEY EB3E94ADBE1229CF on 2026-09-02) and it fails `apt-get update` for every repo. We
 # purge VS Code anyway, so drop every packages.microsoft.com source before updating.
-grep -ls 'packages.microsoft.com' /etc/apt/sources.list.d/* 2>/dev/null | xargs -r rm -f
+for source in /etc/apt/sources.list.d/*; do
+  [[ -f "$source" ]] || continue
+  # No matching source is normal on a fresh template, not a build failure.
+  if grep -q 'packages.microsoft.com' "$source"; then rm -f "$source"; fi
+done
 apt-get update -qq
 apt-get install -y -qq python3 python3-venv python3-pip sqlite3 curl procps ca-certificates >/dev/null
 if [[ "$HEADLESS" == "0" ]]; then apt-get install -y -qq xdotool wmctrl >/dev/null; fi
@@ -104,7 +108,7 @@ else
   # initial-screen step later only needs ctrl+l + URL because both sessions are already valid.
   # Chrome refuses to run as root; run the setup as the session user with its display and runtime dir.
   runuser -u "$DESKTOP_USER" -- env DISPLAY=:0 HOME="/home/$DESKTOP_USER" XDG_RUNTIME_DIR="/run/$DESKTOP_USER" \
-    bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh" || log "browser setup reported a problem (check manually over VNC)"
+    bash "$BUILD_DIR/worlds/claims_ops_v1/browser_setup.sh"
 fi
 
 # Reclaim space so episodes have headroom on the 4 GB disk (a full disk breaks OpenEMR: "table 'log' is full").

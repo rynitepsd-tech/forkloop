@@ -91,6 +91,20 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
               params=[ev_id], equals=str(provider["openemr_id"]), reason_code="PROVIDER_CHANGED"),
     ]
     invariants = [
+        Check(id="visit_type_unchanged", kind="query", db="openemr",
+              sql="SELECT pc_catid FROM openemr_postcalendar_events WHERE pc_eid = ?",
+              params=[ev_id], equals=osql.CAT_OFFICE_VISIT, reason_code="WRONG_VALUE"),
+        Check(id="event_end_date", kind="query", db="openemr",
+              sql="SELECT pc_endDate FROM openemr_postcalendar_events WHERE pc_eid = ?",
+              params=[ev_id], equals=target_date.isoformat(), reason_code="WRONG_SLOT"),
+        Check(id="event_duration_consistent", kind="count", db="openemr",
+              sql="SELECT COUNT(*) FROM openemr_postcalendar_events WHERE pc_eid = ? AND "
+                  "(SUBSTR(pc_endTime,1,2)*3600 + SUBSTR(pc_endTime,4,2)*60 + SUBSTR(pc_endTime,7,2)) - "
+                  "(SUBSTR(pc_startTime,1,2)*3600 + SUBSTR(pc_startTime,4,2)*60 + SUBSTR(pc_startTime,7,2)) = pc_duration",
+              params=[ev_id], equals=1, reason_code="WRONG_SLOT"),
+        Check(id="event_fields_preserved", kind="preserve_fields", db="openemr",
+              sql="SELECT * FROM openemr_postcalendar_events WHERE pc_eid = ?", params=[ev_id],
+              mutable_fields=["pc_eventDate", "pc_endDate", "pc_startTime", "pc_endTime"], reason_code="COLLATERAL_EDIT"),
         Check(id="single_event", kind="count", db="openemr",
               sql="SELECT COUNT(*) FROM openemr_postcalendar_events WHERE pc_pid = ? AND pc_aid = ?",
               params=[str(person.pid), str(provider["openemr_id"])], equals=1, reason_code="DUPLICATE_SIDE_EFFECT"),

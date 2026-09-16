@@ -84,7 +84,8 @@ class ResetController:
         # 4. baseline
         baseline = await stage("baseline", Baseline.capture(dbs, self.world.checksum_tables(), self.world.primary_keys(),
                                                             self.world.watermark_tables(),
-                                                            ignore_columns=self.world.ignore_columns()))
+                                                            ignore_columns=self.world.ignore_columns(),
+                                                            preservation_checks=[*task.oracle.effects, *task.oracle.invariants]))
         # 5. initial screen
         await stage("initial_screen", self.world.open_initial_screen(machine, task.initial_screen))
         if self.skip_screen or "gui" not in machine.capabilities:

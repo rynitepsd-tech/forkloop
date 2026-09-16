@@ -49,6 +49,8 @@ async def reattach(sb, timeout_s: float = 60.0) -> float:
 
 
 async def main(args: argparse.Namespace) -> int:
+    from forkloop.spending import require_solari_lifetime_bound
+    require_solari_lifetime_bound()
     from solari_sandbox import SandboxClient
     from solari_core.errors import GatewayError
 

@@ -1,11 +1,51 @@
-# Solari Cookbook
+# Forkloop
 
-Short, runnable examples for [Solari](https://getsolari.com) — cloud browsers,
-sandboxes, and desktops behind one API key.
+Compare computer-use policies on a seeded **denial appeal across real OpenEMR 8.3
+and a synthetic payer portal**. Run matched attempts on Solari desktops, verify what
+persisted in the databases, and inspect the evidence behind each regression.
+All patient and claims data is synthetic.
 
-Every example in this repo is a complete program you can run in under a minute.
-They are deliberately small: one idea each, no framework, no scaffolding to read
-past. Copy one into your project and change the parts you care about.
+**[Open the evidence report](https://rynitepsd-tech.github.io/forkloop/)**
+— no installation or account is needed. A [downloadable HTML copy](projects/forkloop/docs/worked-example/report.html)
+is also included. The portal said “Appeal submitted”; the database held the wrong authorization.
+The report connects the failed check to the typed value and retained screenshot.
+
+**[Inspect the recovered prompt comparison](https://rynitepsd-tech.github.io/forkloop/navigation-comparison.html)**
+— two completed matched development seeds: compact prompt 0/2, workflow prompt
+2/2. The original four-pair experiment was interrupted, so the report retains
+every planned cell and withholds a winner. This is check-summary evidence, not
+a complete replay or a held-out reliability claim.
+
+The supported product now includes:
+
+- **`forkloop demo`**: five no-account verifier controls, each with an HTML report.
+- **`forkloop doctor`**: actionable setup checks without a VM allocation or model call.
+- **`forkloop compare`**: two identified policies, matched seeds/resets/budgets, every
+  attempted or missing cell retained, and no successful-retry selection.
+- **`forkloop compare-report`**: paired outcomes, changed settings and inspectable
+  episode evidence. Incomplete or non-comparable evidence cannot recommend a winner.
+
+**Live allocation hold:** new Forkloop Solari desktops and sandboxes are paused
+until billable lifetime can be bounded. A new ledger or pricing review cannot
+clear this hold. Offline workflows, report inspection and resource cleanup remain available.
+
+**[Install and run Forkloop](projects/forkloop/README.md)**
+· [Live comparison configuration](projects/forkloop/configs/denial-navigation.json)
+· [33-second evidence explainer](projects/forkloop/docs/worked-example/demo.mp4)
+· [Verification receipts](projects/forkloop/docs/product-handoff.md)
+· [Scope and limitations](projects/forkloop/docs/limitations.md)
+
+Solari snapshots, revert and fork make the world reusable. Forkloop additionally
+seeds application state and checks equivalence; restore alone is not a full reset.
+Checks cover configured tables, not global safety. Training remains research, and
+external adoption is not claimed.
+
+## Solari Cookbook provenance
+
+This repository grew from the [Solari Cookbook](https://github.com/solari-sdk/solari-cookbook):
+short examples for [Solari](https://getsolari.com) cloud browsers, sandboxes and
+desktops. The original examples below remain intact and self-contained; Forkloop
+is the larger project under `projects/`, not a replacement for them.
 
 ## Examples
 
@@ -41,7 +81,7 @@ the upstream examples untouched.
 
 | Project | What it is |
 | --- | --- |
-| [forkloop](projects/forkloop) | Snapshot-native training worlds for vision-only GUI agents: `reset()` is one `revert()`, `fork()` is one `create(fromSnapshot)`. A payer portal + OpenEMR world, a deterministic DB oracle, teacher/student policies, LoRA SFT scripts, and a reset benchmark. |
+| [forkloop](projects/forkloop) | Seeded `resolve_denial` policy evaluation across OpenEMR and a synthetic payer portal, with scoped SQL verification and text/HTML artifact reports. Snapshot restore is one stage of reset; training and other task families remain research paths. |
 
 ## Running an example
 

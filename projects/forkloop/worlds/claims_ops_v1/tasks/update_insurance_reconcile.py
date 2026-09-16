@@ -71,6 +71,9 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
         Check(id="openemr_policy", kind="query", db="openemr",
               sql="SELECT policy_number FROM insurance_data WHERE pid = ? AND type = 'primary' ORDER BY date DESC, id DESC",
               params=[person.pid], equals=new_member, reason_code="WRONG_VALUE"),
+        Check(id="openemr_plan", kind="query", db="openemr",
+              sql="SELECT plan_name FROM insurance_data WHERE pid = ? AND type = 'primary' ORDER BY date DESC, id DESC",
+              params=[person.pid], equals=new_plan, reason_code="WRONG_VALUE"),
         Check(id="claim_status", kind="query", db="portal", sql="SELECT status FROM claims WHERE id = ?", params=[target.id],
               equals="RESUBMITTED", reason_code="NOT_DONE"),
         Check(id="claim_member", kind="query", db="portal", sql="SELECT submitted_member_id FROM claims WHERE id = ?",
@@ -78,6 +81,17 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
     ]
     allow = {"portal.claims": [target.id], "portal.resubmissions": ["*"], "openemr.insurance_data": [person.insurance_id]}
     invariants = [
+        Check(id="insurance_fields_preserved", kind="preserve_fields", db="openemr",
+              sql="SELECT * FROM insurance_data WHERE id = ?", params=[person.insurance_id],
+              mutable_fields=[] if partially_updated else ["plan_name", "policy_number"], reason_code="COLLATERAL_EDIT"),
+        Check(id="claim_fields_preserved", kind="preserve_fields", db="portal",
+              sql="SELECT * FROM claims WHERE id = ?", params=[target.id],
+              mutable_fields=["submitted_member_id", "status", "updated_at"], reason_code="COLLATERAL_EDIT"),
+        Check(id="other_resubmissions_preserved", kind="preserve_fields", db="portal",
+              sql="SELECT * FROM resubmissions WHERE claim_id != ? ORDER BY id", params=[target.id], reason_code="COLLATERAL_EDIT"),
+        Check(id="resubmission_member", kind="count", db="portal",
+              sql="SELECT COUNT(*) FROM resubmissions WHERE claim_id = ? AND member_id = ?",
+              params=[target.id, new_member], equals=1, reason_code="WRONG_VALUE"),
         Check(id="single_resubmission", kind="count", db="portal", sql="SELECT COUNT(*) FROM resubmissions WHERE claim_id = ?",
               params=[target.id], equals=1, reason_code="DUPLICATE_SIDE_EFFECT"),
         Check(id="other_claim_untouched", kind="query", db="portal", sql="SELECT status FROM claims WHERE id = ?",

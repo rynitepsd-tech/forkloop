@@ -87,17 +87,37 @@ async def test_transient_api_errors_are_retried_not_charged(monkeypatch):
     assert calls["n"] == 3 and m["tokens"]["retries"] == 2
 
 
-async def test_non_transient_api_errors_still_surface(monkeypatch):
-    monkeypatch.setattr("forkloop.policies.teacher.resize_png", lambda png, side: (png, 1.0))
+
+
+async def test_teacher_request_failure_is_unscored_without_retry(tmp_path):
+    from forkloop.backends.fake import FakeBackend
+    from forkloop.comparison import PolicyVariant, run_comparison
+    from forkloop.policies.scripted import ScriptedPolicy
+    from forkloop.world import load_world
+
     client = StubClient([])
+    calls = 0
 
-    async def bad(**kw):
-        raise ValueError("bad request")
+    async def rejected(**kwargs):
+        nonlocal calls
+        calls += 1
+        raise ValueError("invalid provider request")
 
-    client.beta.messages.create = bad
-    pol = TeacherPolicy(client=client)
-    a, m = await pol.act(_obs())
-    assert a is None and "ValueError" in m["error"]
+    client.messages.create = rejected
+    client.beta.messages.create = rejected
+    world = load_world("toy-counter")
+    backend = FakeBackend(base_dir=tmp_path / "fake", concurrency_cap=1, gui_factory=world.gui_factory())
+    try:
+        result = await run_comparison(world, backend, [
+            PolicyVariant("teacher", {"policy": "teacher", "version": "test", "options": {}}, lambda: TeacherPolicy(client=client)),
+            PolicyVariant("empty", {"policy": "scripted", "version": "test", "options": {}}, lambda: ScriptedPolicy([])),
+        ], [11], output=tmp_path / "comparison", settle_s=0)
+    finally:
+        backend.cleanup()
+    assert calls == 1
+    assert result["arms"]["A"]["scored"] == result["arms"]["A"]["failures"] == 0
+    assert result["cells"][0]["status"] == "execution_error"
+    assert result["arms"]["B"]["scored"] == 1
 
 
 async def test_cache_breakpoint_moves_to_the_newest_user_block(monkeypatch):

@@ -126,10 +126,7 @@ class Worker:
                                                    "worker": self.index, "error": f"{type(e).__name__}: {str(e)[:300]}"})
         # The machine may have been destroyed by the failed revert; replace it either way.
         if self.machine is not None:
-            try:
-                await self.machine.kill()
-            except Exception:  # noqa: BLE001
-                pass
+            await self.machine.kill()  # retain handle and stop if cleanup is uncertain
             self.machine = None
         self.machine = await self.pool._create(from_snapshot=snapshot_id)
 
@@ -166,12 +163,15 @@ class WorkerPool:
         self.concurrency_backoff_max_s = concurrency_backoff_max_s
         #: None until a revert has been attempted; then True/False for this account.
         self.revert_supported: Optional[bool] = None
-        #: Orphan reaping kills every forkloop-tagged machine this pool does not own. A pool that
+        #: Orphan reaping is restricted to this run_id. A pool that
         #: shares the account with a live parent pool (best_of_n branch pools) must not reap: on
         #: 2026-09-03 a branch pool killed the episode's main worker at start-up.
         self.reap_orphans_enabled = reap_orphans_enabled
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
-        self.golden = golden_snapshot or world.golden_snapshot_id()
+        # The fake backend's snapshots are directories of this process; a Solari snapshot id left in
+        # the environment (``source ~/.config/forkloop/env``) would make every offline reset fail
+        # with "unknown snapshot", so it is only honoured on backends that can revert to it.
+        self.golden = golden_snapshot or (None if backend.name == "fake" else world.golden_snapshot_id())
         self.run_id = run_id or ("run-" + uuid.uuid4().hex[:8])
         res = world.config.extra.get("resources", {}) if hasattr(world.config, "extra") else {}
         self.cpu = cpu or int(res.get("cpu", 2))
@@ -208,14 +208,21 @@ class WorkerPool:
     async def release(self, worker: Worker, *, healthy: bool = True) -> None:
         worker.busy = False
         if not healthy and worker.machine is not None:
-            try:
-                await worker.machine.kill()
-            finally:
-                worker.machine = None
+            await worker.machine.kill()
+            worker.machine = None
         self._free.put_nowait(worker)
 
     async def close(self) -> None:
-        await asyncio.gather(*(w.kill() for w in self.workers), return_exceptions=True)
+        results = await asyncio.gather(*(w.kill() for w in self.workers), return_exceptions=True)
+        errors = [r for r in results if isinstance(r, BaseException)]
+        for error in errors:
+            _log_and_append(self.events, {"event": "cleanup_failed", "error": str(error)})
+        if errors:
+            raise BackendError(f"pool cleanup failed for {len(errors)} machine(s); handles retained for retry")
+        while not self._free.empty():
+            self._free.get_nowait()
+        for worker in self.workers:
+            worker.busy = False
         self._started = False
 
     async def __aenter__(self) -> "WorkerPool":
@@ -273,17 +280,19 @@ class WorkerPool:
             return sid, True
 
     async def reap_orphans(self, *, older_than_s: float = 0.0) -> list[str]:
-        """Kill machines tagged forkloop=1 that are not owned by this pool."""
+        """Kill unowned machines from this run only; other sessions are never reaped."""
         mine = {w.machine.id for w in self.workers if w.machine is not None}
         killed: list[str] = []
         if not self.reap_orphans_enabled:
             return killed
         try:
-            infos = await self.backend.list_machines(metadata={"forkloop": "1"})
+            infos = await self.backend.list_machines(metadata={"forkloop": "1", "run_id": self.run_id})
         except Exception as e:  # noqa: BLE001
             _log_and_append(self.events, {"t": time.time(), "event": "reap_failed", "error": str(e)})
             return killed
         for info in infos:
+            if info.metadata.get("run_id") != self.run_id:
+                continue
             if info.id in mine or info.state not in ("running", "starting", "paused"):
                 continue
             # A machine tagged with *this* run_id that no worker owns is a leak from a failed

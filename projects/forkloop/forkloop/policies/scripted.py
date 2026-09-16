@@ -7,10 +7,12 @@ from typing import Any, Callable, Optional
 
 from ..actions import Action, InvalidAction
 from ..types import Observation
-from .base import PolicyResult
+from .base import PolicyResult, BranchablePolicy
 
 
-class ScriptedPolicy:
+class ScriptedPolicy(BranchablePolicy):
+    branch_state_fields = ("i",)
+
     """Replays a fixed list of actions (compact strings, dicts or Actions), then ``done()``."""
 
     name = "scripted"
@@ -37,7 +39,9 @@ class ScriptedPolicy:
         self.i = 0
 
 
-class CallbackPolicy:
+class CallbackPolicy(BranchablePolicy):
+    # Callback functions must be pure; mutable closures are unsupported in search.
+
     """Wraps a plain function ``(obs) -> Action | str | dict | None``."""
 
     name = "callback"
@@ -57,7 +61,9 @@ class CallbackPolicy:
         return a, {"raw_action": a.to_compact(), "model_latency_s": 0.0}
 
 
-class RandomPolicy:
+class RandomPolicy(BranchablePolicy):
+    branch_state_fields = ("rng",)
+
     """Uniform random clicks; a floor for any learning curve."""
 
     name = "random"
@@ -79,7 +85,12 @@ class RandomPolicy:
         return a, {"raw_action": a.to_compact(), "model_latency_s": 0.0}
 
     async def propose(self, obs: Observation, n: int) -> list[PolicyResult]:
-        return [await self.act(obs) for _ in range(n)]
+        await self.act(obs)  # skip the initial sample reproduced from the checkpoint RNG
+        out = []
+        for _ in range(n):
+            action, meta = await self.act(obs)
+            out.append((action, {**meta, "_policy_state": self.snapshot_state()}))
+        return out
 
 
 __all__ = ["ScriptedPolicy", "CallbackPolicy", "RandomPolicy"]
