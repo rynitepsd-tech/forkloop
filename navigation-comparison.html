@@ -1,0 +1,1742 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><title>Forkloop · Policy comparison</title><style>
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #172333; background: #f3f4f6; }
+* { box-sizing: border-box; }
+html { scroll-padding-top: 20px; }
+body { margin: 0; font-size: 16px; line-height: 1.6; }
+main { max-width: 1120px; padding: 32px 36px 80px; margin: auto; background: #fff; }
+header { border-bottom: 1px solid #cbd2da; padding-bottom: 28px; }
+.brand { font-weight: 700; font-size: 18px; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; letter-spacing: -.025em; margin: 24px 0 16px; overflow-wrap: anywhere; }
+h2 { font-size: 1.5rem; line-height: 1.3; margin: 40px 0 16px; }
+h3 { font-size: 1.08rem; margin: 24px 0 8px; }
+p { max-width: 74ch; margin: 12px 0; overflow-wrap: anywhere; }
+a { color: #1d4ed8; text-underline-offset: 3px; }
+a:hover { color: #12338e; }
+a, summary { touch-action: manipulation; }
+:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 4px; }
+.skip-link { position: absolute; top: 8px; left: 8px; transform: translateY(-200%); padding: 8px 16px; background: #fff; z-index: 1; }
+.skip-link:focus { transform: none; }
+nav { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 24px; }
+nav a { padding: 8px 0; }
+.bad { color: #9b2525; } .good { color: #176447; } .unknown { color: #795211; }
+.label { display: inline-block; font-weight: 650; border: 1px solid #9aa8b8; padding: 3px 9px; margin: 12px 8px 0 0; }
+.muted, figcaption { color: #4b5563; }
+.comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-block: 1px solid #cbd2da; margin: 20px 0; gap: 24px; padding: 16px 0; }
+.comparison dt { margin-bottom: 8px; }
+.comparison dd { font-size: clamp(1.15rem, 2.5vw, 1.6rem); margin: 0; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+pre { white-space: pre-wrap; font-size: .85rem; background: #f3f4f6; padding: 16px; margin: 12px 0; }
+dl.meta { display: grid; grid-template-columns: minmax(110px, 180px) minmax(0, 1fr); gap: 8px 20px; }
+dl.meta dt { color: #4b5563; } dl.meta dd { margin: 0; overflow-wrap: anywhere; }
+.check { border-top: 1px solid #d8dee6; padding: 12px 0; }
+.check p { margin: 6px 0; }
+.check summary { font-weight: 600; }
+details { margin: 12px 0; }
+summary { cursor: pointer; padding: 10px 0; min-height: 44px; overflow-wrap: anywhere; }
+summary:hover { color: #1d4ed8; }
+figure { margin: 16px 0 28px; }
+figure img { display: block; width: 100%; height: auto; border: 1px solid #cbd2da; }
+.image-view { max-width: 100%; overflow: auto; }
+.image-view img { max-width: none; }
+.pixel-toggle { width: 18px; height: 18px; accent-color: #1d4ed8; vertical-align: middle; }
+.pixel-label { display: inline-block; padding: 10px 4px; cursor: pointer; }
+.pixel-toggle:checked ~ .image-view img { width: auto; }
+figcaption { font-size: .9rem; padding-top: 8px; overflow-wrap: anywhere; }
+.frame-index { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.frame-index a { padding: 8px 0; }
+.trace { list-style: none; padding: 0; }
+.trace-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px 16px; border-top: 1px solid #d8dee6; padding: 16px 0; }
+.trace-row p, .trace-row details { margin: 0; }
+.trace-row .step-evidence { margin-top: 8px; }
+.step-evidence { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.step-evidence a { display: inline-block; padding: 8px 0; }
+.frame { border-top: 1px solid #d8dee6; padding: 4px 0; }
+.frame summary { font-weight: 600; }
+.check-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.check-links a { padding: 8px 0; overflow-wrap: anywhere; }
+.missing { color: #795211; }
+.summary-line { font-size: .95rem; color: #4b5563; }
+:target { outline: 2px solid #1d4ed8; outline-offset: 5px; }
+ul { padding-left: 24px; }
+section, article, details, .check, .trace-row { scroll-margin-top: 20px; }
+.episode + .episode { border-top: 2px solid #cbd2da; margin-top: 56px; padding-top: 24px; }
+footer { border-top: 1px solid #cbd2da; margin-top: 48px; padding-top: 20px; font-size: .9rem; }
+@media (max-width: 600px) { main { padding: 24px 18px 48px; } .comparison { grid-template-columns: minmax(0, 1fr); gap: 16px; } dl.meta { grid-template-columns: minmax(0, 1fr); gap: 2px; } dl.meta dd { margin-bottom: 12px; } .trace-row { grid-template-columns: minmax(0, 1fr); gap: 4px; } nav { gap: 4px 20px; } }
+@media print { main { max-width: none; padding: 0; } nav { display: none; } details { break-inside: avoid; } }
+
+.table-scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:12px;border-bottom:1px solid #cbd2da}th{font-weight:650}article{scroll-margin-top:20px}</style></head><body><a class="skip-link" href="#outcomes">Skip to outcomes</a><main><header><h1>Matched policy comparison</h1><p>claims-ops-v1 / resolve_denial / train</p><p><strong>live_policy_evaluation</strong> · incomplete</p><p>Recommendation withheld: incomplete or non-comparable evidence.</p><p>No terminal execution record was saved. The run may have been interrupted or may still be active; offline artifacts cannot establish process or resource liveness. Unfinished and unstarted cells are unscored. Historical artifacts are unchanged.</p><nav aria-label="Report sections"><a href="#outcomes">Outcomes</a><a href="#changes">What changed</a><a href="#pairs">Matched seeds</a><a href="#evidence">Cell evidence</a><a href="#protocol">Protocol and limits</a></nav></header><section id="outcomes"><h2>Exact denominators</h2><p>2 of 4 planned pairs are comparable. Missing, setup and execution errors are unscored, never silently counted as task failures.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Per-arm outcome counts"><table><thead><tr><th scope="col">Policy arm</th><th scope="col">Pass / scored</th><th scope="col">Failed</th><th scope="col">Unscored</th><th scope="col">Planned</th></tr></thead><tbody><tr><th scope="row">A / Luna compact prompt</th><td>0 / 2</td><td>2</td><td>2</td><td>4</td></tr><tr><th scope="row">B / Luna workflow prompt v5</th><td>2 / 2</td><td>0</td><td>2</td><td>4</td></tr></tbody></table></div><h3>Paired outcomes</h3><dl class="meta"><dt>Both pass</dt><dd>0</dd><dt>A only · B regression</dt><dd>0</dd><dt>B only · B improvement</dt><dd>2</dd><dt>Neither passes</dt><dd>0</dd></dl><p>Discordant seeds: [200, 201]</p></section><section id="changes"><h2>What changed</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Declared policy changes"><table><thead><tr><th scope="col">Setting</th><th scope="col">A</th><th scope="col">B</th></tr></thead><tbody><tr><th scope="row"><code>options.system_prompt</code></th><td>&quot;[not supplied]&quot;</td><td>&quot;You are a careful GUI agent operating an Ubuntu desktop through screenshots. Each turn you receive the task, the list of actions you already took, and one screenshot that is {w}x{h} pixels. Coordinates are pixel positions in that screenshot: x from 0 (left) to {w1}, y from 0 (top) to {h1}. Aim for the centre of the element you want to hit.\n\nReply with a short line of reasoning, then exactly ONE action as the last line, using this grammar and nothing else:\n  click(x, y)                 left click\n  double_click(x, y)          double click\n  right_click(x, y)           right click\n  move(x, y)                  move the mouse without clicking\n  drag(x1, y1, x2, y2)        press at (x1, y1), release at (x2, y2)\n  scroll(x, y, \&quot;down\&quot;, 3)     scroll at (x, y); direction up|down|left|right; amount = wheel notches\n  type(\&quot;text\&quot;)                type into the focused field (JSON string escaping; \&quot;\\n\&quot; presses Enter)\n  key(\&quot;ctrl+l\&quot;)               press a key or chord; names: Return, Tab, Escape, BackSpace, Delete, Page_Down, Page_Up, Home, End, Up, Down, Left, Right, F5, ctrl, alt, shift, letters and digits\n  wait(2.0)                   wait for the screen to settle\n  done()                      the task is complete\n  done(success=false, note=\&quot;reason\&quot;)   the task cannot be completed\n\nHow to work:\n- Check your action history before acting. If the same action did not visibly change the screen last time, do NOT repeat it: choose a different element, press a key, wait, or navigate by URL.\n- To use a text field: click it once, then type. A blue outline means it is already focused, so type immediately. To replace its contents, press key(\&quot;ctrl+a\&quot;) and then type.\n- To open a page, click the address bar (about y=90), press key(\&quot;ctrl+a\&quot;), type the URL followed by \&quot;\\n\&quot;, then wait(2.0).\n- After a click that loads a page or opens a dialog, wait(2.0) before the next action.\n- If a page shows \&quot;Aw, Snap!\&quot;, a blank error, or looks broken (plain unstyled text, a greyed-out or unresponsive button, missing menus), press key(\&quot;F5\&quot;) to reload it, wait(2.0), and try once more; if you land on a login page, log in again with the credentials in the task. Never retry the same form more than twice without reloading.\n- In list/search screens, prefer searching by surname only; use the row&#x27;s link to open a record.\n- Read documents fully: scroll inside the viewer and check every page before deciding. Some documents are decoys: if a document says it is for a different service, a different claim, a prior/closed case, or another patient, it is NOT the one you want; keep looking until the document clearly refers to this claim&#x27;s service and dates.\n- Windows: a window WITHOUT a tab strip (no tabs above the address bar, often titled \&quot;Untitled\&quot;) is a popup and its address bar is read-only, so typing a URL there does nothing. Close it with key(\&quot;ctrl+w\&quot;) or use the window&#x27;s close button at the top right, which returns you to the main tabbed window; then navigate there. The taskbar at the top lists open windows; a number badge means several.\n- Use one browser tab per application and switch between them by clicking the tab strip; do not type the other app&#x27;s URL into a tab that is logged into OpenEMR, because OpenEMR forgets its session when you leave and you will have to log in and search again. Open OpenEMR with key(\&quot;ctrl+t\&quot;) if it is not already in a tab.\n- Codes such as authorization numbers must be copied EXACTLY, character by character (letters and digits look alike: G/6, O/0, I/1, S/5, Z/2, B/8). Read the code twice from the document, write it in your reasoning, and after typing it into a field look at the field and compare it with the document before submitting; fix any mismatch with key(\&quot;ctrl+a\&quot;) and retyping.\n- Once you have the authorization number, write it in your reasoning on every later step so you do not lose it, and do not go back to OpenEMR unless the portal rejects it.\n- Portal appeal form: open http://localhost:8080/claims, open the claim, click its appeal button; the form has a reason dropdown, an authorization number field, a narrative and a file field; submit with the form&#x27;s button.\n- Do exactly what the task asks and nothing else. Never touch records it does not name. Call done() only after the final confirmation is visible on screen.\n&quot;</td></tr></tbody></table></div><p>These are declared settings, not proof of the code or weights served by a remote endpoint.</p><details><summary>Recorded work and token usage</summary><p>Cell timing includes setup and episode cleanup. Token counts include only reported usage; unreported or uncertain billing is not zero. These are not invoices.</p><h3>A / Luna compact prompt</h3><pre>{
+  &quot;recorded_steps&quot;: 367,
+  &quot;recorded_setup_and_episode_seconds&quot;: 1034.266,
+  &quot;duration_cells&quot;: 2,
+  &quot;recorded_tokens&quot;: {
+    &quot;in&quot;: 1037578,
+    &quot;out&quot;: 35547,
+    &quot;cache_read&quot;: 8192,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;usage_cells&quot;: 3
+}</pre><h3>B / Luna workflow prompt v5</h3><pre>{
+  &quot;recorded_steps&quot;: 112,
+  &quot;recorded_setup_and_episode_seconds&quot;: 454.704,
+  &quot;duration_cells&quot;: 2,
+  &quot;recorded_tokens&quot;: {
+    &quot;in&quot;: 396211,
+    &quot;out&quot;: 11735,
+    &quot;cache_read&quot;: 0,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;usage_cells&quot;: 2
+}</pre></details></section><section id="pairs"><h2>Matched seeds</h2><article class="check"><h3>Seed 200 · B only · B improvement</h3><p><a href="#cell-A-000000">A evidence</a> · <a href="#cell-B-000000">B evidence</a></p><details><summary>Reset equivalence</summary><pre>{
+  &quot;equivalent&quot;: true,
+  &quot;reasons&quot;: [],
+  &quot;baseline_tables_compared&quot;: 14,
+  &quot;baseline_tables_differing&quot;: [],
+  &quot;reset_methods&quot;: [
+    &quot;revert&quot;,
+    &quot;revert&quot;
+  ],
+  &quot;initial_observation_equal&quot;: true,
+  &quot;scope&quot;: &quot;Reset equivalence covers configured baseline tables, watermarks and preserved rows, not all application or VM state.&quot;
+}</pre></details></article><article class="check"><h3>Seed 201 · B only · B improvement</h3><p><a href="#cell-A-000001">A evidence</a> · <a href="#cell-B-000001">B evidence</a></p><details><summary>Reset equivalence</summary><pre>{
+  &quot;equivalent&quot;: true,
+  &quot;reasons&quot;: [],
+  &quot;baseline_tables_compared&quot;: 14,
+  &quot;baseline_tables_differing&quot;: [],
+  &quot;reset_methods&quot;: [
+    &quot;revert&quot;,
+    &quot;revert&quot;
+  ],
+  &quot;initial_observation_equal&quot;: true,
+  &quot;scope&quot;: &quot;Reset equivalence covers configured baseline tables, watermarks and preserved rows, not all application or VM state.&quot;
+}</pre></details></article><article class="check"><h3>Seed 202 · Not comparable</h3><ul><li>incomplete or unscored pair</li><li>A: no terminal attempt record; interrupted or still active, never scored from partial evidence</li><li>A: no verifier result was saved; episode is unscored</li><li>B: no attempt record found for planned cell; not started or evidence missing</li><li>task or effective budget differs between arms</li><li>baseline fingerprints unavailable, malformed or no configured tables</li><li>baseline fingerprints differ</li><li>reset did not record success for both arms</li><li>actual reset method missing or unsupported</li><li>golden snapshot missing or different</li></ul><p><a href="#cell-A-000002">A evidence</a> · <a href="#cell-B-000002">B evidence</a></p><details><summary>Reset equivalence</summary><pre>{
+  &quot;equivalent&quot;: false,
+  &quot;reasons&quot;: [
+    &quot;baseline fingerprints unavailable, malformed or no configured tables&quot;,
+    &quot;baseline fingerprints differ&quot;,
+    &quot;reset did not record success for both arms&quot;,
+    &quot;actual reset method missing or unsupported&quot;,
+    &quot;golden snapshot missing or different&quot;
+  ],
+  &quot;baseline_tables_compared&quot;: 14,
+  &quot;baseline_tables_differing&quot;: [
+    &quot;openemr.categories_to_documents&quot;,
+    &quot;openemr.documents&quot;,
+    &quot;openemr.insurance_companies&quot;,
+    &quot;openemr.insurance_data&quot;,
+    &quot;openemr.openemr_postcalendar_events&quot;,
+    &quot;openemr.patient_data&quot;,
+    &quot;openemr.users&quot;,
+    &quot;portal.appeals&quot;,
+    &quot;portal.claims&quot;,
+    &quot;portal.messages&quot;,
+    &quot;portal.patients&quot;,
+    &quot;portal.providers&quot;,
+    &quot;portal.resubmissions&quot;,
+    &quot;portal.users&quot;
+  ],
+  &quot;reset_methods&quot;: [
+    &quot;revert&quot;,
+    null
+  ],
+  &quot;initial_observation_equal&quot;: false,
+  &quot;scope&quot;: &quot;Reset equivalence covers configured baseline tables, watermarks and preserved rows, not all application or VM state.&quot;
+}</pre></details></article><article class="check"><h3>Seed 203 · Not comparable</h3><ul><li>incomplete or unscored pair</li><li>A: no attempt record found for planned cell; not started or evidence missing</li><li>B: no attempt record found for planned cell; not started or evidence missing</li><li>task or effective budget differs between arms</li><li>baseline fingerprints unavailable, malformed or no configured tables</li><li>reset did not record success for both arms</li><li>actual reset method missing or unsupported</li><li>golden snapshot missing or different</li></ul><p><a href="#cell-A-000003">A evidence</a> · <a href="#cell-B-000003">B evidence</a></p><details><summary>Reset equivalence</summary><pre>{
+  &quot;equivalent&quot;: false,
+  &quot;reasons&quot;: [
+    &quot;baseline fingerprints unavailable, malformed or no configured tables&quot;,
+    &quot;reset did not record success for both arms&quot;,
+    &quot;actual reset method missing or unsupported&quot;,
+    &quot;golden snapshot missing or different&quot;
+  ],
+  &quot;baseline_tables_compared&quot;: 0,
+  &quot;baseline_tables_differing&quot;: [],
+  &quot;reset_methods&quot;: [
+    null,
+    null
+  ],
+  &quot;initial_observation_equal&quot;: false,
+  &quot;scope&quot;: &quot;Reset equivalence covers configured baseline tables, watermarks and preserved rows, not all application or VM state.&quot;
+}</pre></details></article></section><section id="evidence"><h2>Every planned cell</h2><p>Check details are embedded below. Episode paths locate the normal manifests, step records and screenshots; external episode links appear only for existing reports.</p><article class="check" id="cell-A-000000"><h3>A / seed 200 · completed</h3><p>Episode: <code>runs/A/episodes/A-000000</code></p><p><strong>Failed</strong></p><p>Retained verifier result: <strong>NOT_DONE</strong> · 139 recorded steps; wall seconds: 478.972</p><details><summary>Check: claim_status</summary><pre>{
+  &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+  &quot;actual&quot;: &quot;DENIED&quot;,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+}</pre></details><details><summary>Check: appeal_reason</summary><pre>{
+  &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+  &quot;actual&quot;: null,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: appeal_auth_number</summary><pre>{
+  &quot;expected&quot;: &quot;AUTH-36G14538&quot;,
+  &quot;actual&quot;: null,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: single_appeal</summary><pre>{
+  &quot;expected&quot;: 1,
+  &quot;actual&quot;: 0,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+}</pre></details><details><summary>Check: no_collateral</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;unexpected_changes&quot;: [],
+  &quot;n_unexpected&quot;: 0,
+  &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+}</pre></details><details><summary>Check: ui_path</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;checked&quot;: 0,
+  &quot;unaudited_changes&quot;: [],
+  &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+}</pre></details><details><summary>Check: no_forbidden</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;visited&quot;: [],
+  &quot;n_pages&quot;: 1,
+  &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+}</pre></details><details><summary>Check: distractor_0_untouched</summary><pre>{
+  &quot;expected&quot;: &quot;DENIED&quot;,
+  &quot;actual&quot;: &quot;DENIED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+}</pre></details><details><summary>Check: ui_milestones</summary><pre>{
+  &quot;rungs&quot;: {
+    &quot;openemr_login&quot;: true,
+    &quot;openemr_chart&quot;: false,
+    &quot;openemr_document&quot;: false,
+    &quot;portal_claim&quot;: false,
+    &quot;portal_appeal_form&quot;: false,
+    &quot;appeal_submitted&quot;: false
+  },
+  &quot;order&quot;: [
+    &quot;openemr_login&quot;,
+    &quot;openemr_chart&quot;,
+    &quot;openemr_document&quot;,
+    &quot;portal_claim&quot;,
+    &quot;portal_appeal_form&quot;,
+    &quot;appeal_submitted&quot;
+  ],
+  &quot;highest&quot;: &quot;openemr_login&quot;,
+  &quot;n_reached&quot;: 1,
+  &quot;evidence&quot;: {
+    &quot;openemr_logins&quot;: 1,
+    &quot;openemr_login_failures&quot;: 0,
+    &quot;openemr_rows_for_patient&quot;: 0,
+    &quot;openemr_request_paths&quot;: 372,
+    &quot;openemr_document_paths&quot;: [],
+    &quot;openemr_documents_list&quot;: false,
+    &quot;portal_page_views&quot;: 1,
+    &quot;appeals_for_claim&quot;: 0
+  }
+}</pre></details><details><summary>Complete verdict and recorded usage</summary><pre>{
+  &quot;verdict&quot;: {
+    &quot;reward&quot;: 0.0,
+    &quot;milestones&quot;: 0.0,
+    &quot;reason_code&quot;: &quot;NOT_DONE&quot;,
+    &quot;failed&quot;: [
+      &quot;claim_status&quot;,
+      &quot;appeal_reason&quot;,
+      &quot;appeal_auth_number&quot;,
+      &quot;single_appeal&quot;
+    ],
+    &quot;details&quot;: {
+      &quot;claim_status&quot;: {
+        &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+        &quot;actual&quot;: &quot;DENIED&quot;,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+      },
+      &quot;appeal_reason&quot;: {
+        &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+        &quot;actual&quot;: null,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;appeal_auth_number&quot;: {
+        &quot;expected&quot;: &quot;AUTH-36G14538&quot;,
+        &quot;actual&quot;: null,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;single_appeal&quot;: {
+        &quot;expected&quot;: 1,
+        &quot;actual&quot;: 0,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+      },
+      &quot;no_collateral&quot;: {
+        &quot;passed&quot;: true,
+        &quot;unexpected_changes&quot;: [],
+        &quot;n_unexpected&quot;: 0,
+        &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+      },
+      &quot;ui_path&quot;: {
+        &quot;passed&quot;: true,
+        &quot;checked&quot;: 0,
+        &quot;unaudited_changes&quot;: [],
+        &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+      },
+      &quot;no_forbidden&quot;: {
+        &quot;passed&quot;: true,
+        &quot;visited&quot;: [],
+        &quot;n_pages&quot;: 1,
+        &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+      },
+      &quot;distractor_0_untouched&quot;: {
+        &quot;expected&quot;: &quot;DENIED&quot;,
+        &quot;actual&quot;: &quot;DENIED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+      },
+      &quot;ui_milestones&quot;: {
+        &quot;rungs&quot;: {
+          &quot;openemr_login&quot;: true,
+          &quot;openemr_chart&quot;: false,
+          &quot;openemr_document&quot;: false,
+          &quot;portal_claim&quot;: false,
+          &quot;portal_appeal_form&quot;: false,
+          &quot;appeal_submitted&quot;: false
+        },
+        &quot;order&quot;: [
+          &quot;openemr_login&quot;,
+          &quot;openemr_chart&quot;,
+          &quot;openemr_document&quot;,
+          &quot;portal_claim&quot;,
+          &quot;portal_appeal_form&quot;,
+          &quot;appeal_submitted&quot;
+        ],
+        &quot;highest&quot;: &quot;openemr_login&quot;,
+        &quot;n_reached&quot;: 1,
+        &quot;evidence&quot;: {
+          &quot;openemr_logins&quot;: 1,
+          &quot;openemr_login_failures&quot;: 0,
+          &quot;openemr_rows_for_patient&quot;: 0,
+          &quot;openemr_request_paths&quot;: 372,
+          &quot;openemr_document_paths&quot;: [],
+          &quot;openemr_documents_list&quot;: false,
+          &quot;portal_page_views&quot;: 1,
+          &quot;appeals_for_claim&quot;: 0
+        }
+      }
+    },
+    &quot;n_effects&quot;: 3,
+    &quot;n_invariants&quot;: 5,
+    &quot;success&quot;: false,
+    &quot;wall_seconds&quot;: 478.972,
+    &quot;n_steps&quot;: 139,
+    &quot;n_invalid&quot;: 0,
+    &quot;finished_at&quot;: &quot;2026-09-15T10:42:51+00:00&quot;,
+    &quot;end_reason&quot;: &quot;max_steps&quot;,
+    &quot;invalid_actions&quot;: 0
+  },
+  &quot;failure_codes&quot;: [
+    &quot;NOT_DONE&quot;,
+    &quot;WRONG_VALUE&quot;
+  ],
+  &quot;tokens&quot;: {
+    &quot;in&quot;: 387640,
+    &quot;out&quot;: 13737,
+    &quot;cache_read&quot;: 8192,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;steps&quot;: 139,
+  &quot;reset&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 43.3236,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 39.1473,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5149,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1612,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5814,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.7396,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.8604,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.3186,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;wall_seconds&quot;: 478.972
+}</pre></details><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;A&quot;,
+  &quot;seed&quot;: 200,
+  &quot;id&quot;: &quot;A-000000&quot;,
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;scored&quot;: true,
+  &quot;success&quot;: false,
+  &quot;issues&quot;: [],
+  &quot;started_at&quot;: &quot;2026-09-15T10:34:09.012049+00:00&quot;,
+  &quot;protocol_sha256&quot;: &quot;45915d0877e9ad39fa1eafb974af65fe7dd501f6012bd111441008bc482a5378&quot;,
+  &quot;identity_sha256&quot;: &quot;b68a51491d853657e300c86aa798c051fd2bf48e39bdab3ad1c4cb5d5242381f&quot;,
+  &quot;episode&quot;: &quot;runs/A/episodes/A-000000&quot;,
+  &quot;task_sha256&quot;: &quot;32260fcb8e1c17d376ed380ffb145d5e18f7b5cc668af1ada54222d3936ae45d&quot;,
+  &quot;effective_budget&quot;: {
+    &quot;max_steps&quot;: 120,
+    &quot;max_seconds&quot;: 900
+  },
+  &quot;initial_observation_sha256&quot;: &quot;de36fe77a1f4a8d000b659e99fe17e0733e1ff43a94e98fdf8f88c370bee87aa&quot;,
+  &quot;reset_report&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 43.3236,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 39.1473,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5149,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1612,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5814,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.7396,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.8604,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.3186,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;golden_snapshot&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;machine&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;recorded_policy_usage&quot;: {
+    &quot;in&quot;: 387640,
+    &quot;out&quot;: 13737,
+    &quot;cache_read&quot;: 8192
+  },
+  &quot;finished_at&quot;: &quot;2026-09-15T10:42:53.718908+00:00&quot;,
+  &quot;setup_and_episode_seconds&quot;: 524.681
+}</pre></details></article><article class="check" id="cell-B-000000"><h3>B / seed 200 · completed</h3><p>Episode: <code>runs/B/episodes/B-000000</code></p><p><strong>Passed</strong></p><p>Retained verifier result: <strong>OK</strong> · 54 recorded steps; wall seconds: 152.695</p><details><summary>Check: claim_status</summary><pre>{
+  &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+  &quot;actual&quot;: &quot;APPEAL_SUBMITTED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+}</pre></details><details><summary>Check: appeal_reason</summary><pre>{
+  &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+  &quot;actual&quot;: &quot;PRECERT_OBTAINED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: appeal_auth_number</summary><pre>{
+  &quot;expected&quot;: &quot;AUTH-36G14538&quot;,
+  &quot;actual&quot;: &quot;AUTH-36G14538&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: single_appeal</summary><pre>{
+  &quot;expected&quot;: 1,
+  &quot;actual&quot;: 1,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;DUPLICATE_SIDE_EFFECT&quot;
+}</pre></details><details><summary>Check: no_collateral</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;unexpected_changes&quot;: [],
+  &quot;n_unexpected&quot;: 0,
+  &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+}</pre></details><details><summary>Check: ui_path</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;checked&quot;: 1,
+  &quot;unaudited_changes&quot;: [],
+  &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+}</pre></details><details><summary>Check: no_forbidden</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;visited&quot;: [],
+  &quot;n_pages&quot;: 7,
+  &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+}</pre></details><details><summary>Check: distractor_0_untouched</summary><pre>{
+  &quot;expected&quot;: &quot;DENIED&quot;,
+  &quot;actual&quot;: &quot;DENIED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+}</pre></details><details><summary>Check: ui_milestones</summary><pre>{
+  &quot;rungs&quot;: {
+    &quot;openemr_login&quot;: true,
+    &quot;openemr_chart&quot;: true,
+    &quot;openemr_document&quot;: true,
+    &quot;portal_claim&quot;: true,
+    &quot;portal_appeal_form&quot;: true,
+    &quot;appeal_submitted&quot;: true
+  },
+  &quot;order&quot;: [
+    &quot;openemr_login&quot;,
+    &quot;openemr_chart&quot;,
+    &quot;openemr_document&quot;,
+    &quot;portal_claim&quot;,
+    &quot;portal_appeal_form&quot;,
+    &quot;appeal_submitted&quot;
+  ],
+  &quot;highest&quot;: &quot;appeal_submitted&quot;,
+  &quot;n_reached&quot;: 6,
+  &quot;evidence&quot;: {
+    &quot;openemr_logins&quot;: 1,
+    &quot;openemr_login_failures&quot;: 0,
+    &quot;openemr_rows_for_patient&quot;: 168,
+    &quot;openemr_request_paths&quot;: 39,
+    &quot;openemr_document_paths&quot;: [
+      &quot;/openemr/controller.php?document&amp;view&amp;patient_id=700000&amp;doc_id=700000&amp;&quot;,
+      &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=700000&amp;document_id=700000&amp;as_file=false&quot;
+    ],
+    &quot;openemr_documents_list&quot;: true,
+    &quot;portal_page_views&quot;: 7,
+    &quot;appeals_for_claim&quot;: 1
+  }
+}</pre></details><details><summary>Complete verdict and recorded usage</summary><pre>{
+  &quot;verdict&quot;: {
+    &quot;reward&quot;: 1.0,
+    &quot;milestones&quot;: 1.0,
+    &quot;reason_code&quot;: &quot;OK&quot;,
+    &quot;failed&quot;: [],
+    &quot;details&quot;: {
+      &quot;claim_status&quot;: {
+        &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+        &quot;actual&quot;: &quot;APPEAL_SUBMITTED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+      },
+      &quot;appeal_reason&quot;: {
+        &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+        &quot;actual&quot;: &quot;PRECERT_OBTAINED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;appeal_auth_number&quot;: {
+        &quot;expected&quot;: &quot;AUTH-36G14538&quot;,
+        &quot;actual&quot;: &quot;AUTH-36G14538&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;single_appeal&quot;: {
+        &quot;expected&quot;: 1,
+        &quot;actual&quot;: 1,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;DUPLICATE_SIDE_EFFECT&quot;
+      },
+      &quot;no_collateral&quot;: {
+        &quot;passed&quot;: true,
+        &quot;unexpected_changes&quot;: [],
+        &quot;n_unexpected&quot;: 0,
+        &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+      },
+      &quot;ui_path&quot;: {
+        &quot;passed&quot;: true,
+        &quot;checked&quot;: 1,
+        &quot;unaudited_changes&quot;: [],
+        &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+      },
+      &quot;no_forbidden&quot;: {
+        &quot;passed&quot;: true,
+        &quot;visited&quot;: [],
+        &quot;n_pages&quot;: 7,
+        &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+      },
+      &quot;distractor_0_untouched&quot;: {
+        &quot;expected&quot;: &quot;DENIED&quot;,
+        &quot;actual&quot;: &quot;DENIED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+      },
+      &quot;ui_milestones&quot;: {
+        &quot;rungs&quot;: {
+          &quot;openemr_login&quot;: true,
+          &quot;openemr_chart&quot;: true,
+          &quot;openemr_document&quot;: true,
+          &quot;portal_claim&quot;: true,
+          &quot;portal_appeal_form&quot;: true,
+          &quot;appeal_submitted&quot;: true
+        },
+        &quot;order&quot;: [
+          &quot;openemr_login&quot;,
+          &quot;openemr_chart&quot;,
+          &quot;openemr_document&quot;,
+          &quot;portal_claim&quot;,
+          &quot;portal_appeal_form&quot;,
+          &quot;appeal_submitted&quot;
+        ],
+        &quot;highest&quot;: &quot;appeal_submitted&quot;,
+        &quot;n_reached&quot;: 6,
+        &quot;evidence&quot;: {
+          &quot;openemr_logins&quot;: 1,
+          &quot;openemr_login_failures&quot;: 0,
+          &quot;openemr_rows_for_patient&quot;: 168,
+          &quot;openemr_request_paths&quot;: 39,
+          &quot;openemr_document_paths&quot;: [
+            &quot;/openemr/controller.php?document&amp;view&amp;patient_id=700000&amp;doc_id=700000&amp;&quot;,
+            &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=700000&amp;document_id=700000&amp;as_file=false&quot;
+          ],
+          &quot;openemr_documents_list&quot;: true,
+          &quot;portal_page_views&quot;: 7,
+          &quot;appeals_for_claim&quot;: 1
+        }
+      }
+    },
+    &quot;n_effects&quot;: 3,
+    &quot;n_invariants&quot;: 5,
+    &quot;success&quot;: true,
+    &quot;wall_seconds&quot;: 152.695,
+    &quot;n_steps&quot;: 54,
+    &quot;n_invalid&quot;: 0,
+    &quot;finished_at&quot;: &quot;2026-09-15T10:46:08+00:00&quot;,
+    &quot;end_reason&quot;: &quot;done&quot;,
+    &quot;invalid_actions&quot;: 0
+  },
+  &quot;failure_codes&quot;: [],
+  &quot;tokens&quot;: {
+    &quot;in&quot;: 190490,
+    &quot;out&quot;: 4904,
+    &quot;cache_read&quot;: 0,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;steps&quot;: 54,
+  &quot;reset&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 42.1146,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 37.8985,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5127,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1614,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5988,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.7435,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.8979,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.3017,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;wall_seconds&quot;: 152.695
+}</pre></details><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;B&quot;,
+  &quot;seed&quot;: 200,
+  &quot;id&quot;: &quot;B-000000&quot;,
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;scored&quot;: true,
+  &quot;success&quot;: true,
+  &quot;issues&quot;: [],
+  &quot;started_at&quot;: &quot;2026-09-15T10:42:53.719381+00:00&quot;,
+  &quot;protocol_sha256&quot;: &quot;45915d0877e9ad39fa1eafb974af65fe7dd501f6012bd111441008bc482a5378&quot;,
+  &quot;identity_sha256&quot;: &quot;f9da5129f24a6f27d634a76eb4c087c9fd6dd74ad7d1e86346c6a52bb8f2fbd5&quot;,
+  &quot;episode&quot;: &quot;runs/B/episodes/B-000000&quot;,
+  &quot;task_sha256&quot;: &quot;32260fcb8e1c17d376ed380ffb145d5e18f7b5cc668af1ada54222d3936ae45d&quot;,
+  &quot;effective_budget&quot;: {
+    &quot;max_steps&quot;: 120,
+    &quot;max_seconds&quot;: 900
+  },
+  &quot;initial_observation_sha256&quot;: &quot;de36fe77a1f4a8d000b659e99fe17e0733e1ff43a94e98fdf8f88c370bee87aa&quot;,
+  &quot;reset_report&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 42.1146,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 37.8985,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5127,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1614,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5988,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.7435,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.8979,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.3017,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;golden_snapshot&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;machine&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;recorded_policy_usage&quot;: {
+    &quot;in&quot;: 190490,
+    &quot;out&quot;: 4904
+  },
+  &quot;finished_at&quot;: &quot;2026-09-15T10:46:09.553402+00:00&quot;,
+  &quot;setup_and_episode_seconds&quot;: 195.832
+}</pre></details></article><article class="check" id="cell-B-000001"><h3>B / seed 201 · completed</h3><p>Episode: <code>runs/B/episodes/B-000001</code></p><p><strong>Passed</strong></p><p>Retained verifier result: <strong>OK</strong> · 58 recorded steps; wall seconds: 176.846</p><details><summary>Check: claim_status</summary><pre>{
+  &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+  &quot;actual&quot;: &quot;APPEAL_SUBMITTED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+}</pre></details><details><summary>Check: appeal_reason</summary><pre>{
+  &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+  &quot;actual&quot;: &quot;PRECERT_OBTAINED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: appeal_auth_number</summary><pre>{
+  &quot;expected&quot;: &quot;AUTH-71N39501&quot;,
+  &quot;actual&quot;: &quot;AUTH-71N39501&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: single_appeal</summary><pre>{
+  &quot;expected&quot;: 1,
+  &quot;actual&quot;: 1,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;DUPLICATE_SIDE_EFFECT&quot;
+}</pre></details><details><summary>Check: no_collateral</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;unexpected_changes&quot;: [],
+  &quot;n_unexpected&quot;: 0,
+  &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+}</pre></details><details><summary>Check: ui_path</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;checked&quot;: 1,
+  &quot;unaudited_changes&quot;: [],
+  &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+}</pre></details><details><summary>Check: no_forbidden</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;visited&quot;: [],
+  &quot;n_pages&quot;: 6,
+  &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+}</pre></details><details><summary>Check: distractor_0_untouched</summary><pre>{
+  &quot;expected&quot;: &quot;DENIED&quot;,
+  &quot;actual&quot;: &quot;DENIED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+}</pre></details><details><summary>Check: ui_milestones</summary><pre>{
+  &quot;rungs&quot;: {
+    &quot;openemr_login&quot;: true,
+    &quot;openemr_chart&quot;: true,
+    &quot;openemr_document&quot;: true,
+    &quot;portal_claim&quot;: true,
+    &quot;portal_appeal_form&quot;: true,
+    &quot;appeal_submitted&quot;: true
+  },
+  &quot;order&quot;: [
+    &quot;openemr_login&quot;,
+    &quot;openemr_chart&quot;,
+    &quot;openemr_document&quot;,
+    &quot;portal_claim&quot;,
+    &quot;portal_appeal_form&quot;,
+    &quot;appeal_submitted&quot;
+  ],
+  &quot;highest&quot;: &quot;appeal_submitted&quot;,
+  &quot;n_reached&quot;: 6,
+  &quot;evidence&quot;: {
+    &quot;openemr_logins&quot;: 1,
+    &quot;openemr_login_failures&quot;: 0,
+    &quot;openemr_rows_for_patient&quot;: 251,
+    &quot;openemr_request_paths&quot;: 64,
+    &quot;openemr_document_paths&quot;: [
+      &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701001&amp;&quot;,
+      &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701001&amp;as_file=false&quot;,
+      &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701002&amp;&quot;,
+      &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701002&amp;as_file=false&quot;,
+      &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701001&amp;&quot;,
+      &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701001&amp;as_file=false&quot;,
+      &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701000&amp;&quot;,
+      &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701000&amp;as_file=false&quot;
+    ],
+    &quot;openemr_documents_list&quot;: true,
+    &quot;portal_page_views&quot;: 6,
+    &quot;appeals_for_claim&quot;: 1
+  }
+}</pre></details><details><summary>Complete verdict and recorded usage</summary><pre>{
+  &quot;verdict&quot;: {
+    &quot;reward&quot;: 1.0,
+    &quot;milestones&quot;: 1.0,
+    &quot;reason_code&quot;: &quot;OK&quot;,
+    &quot;failed&quot;: [],
+    &quot;details&quot;: {
+      &quot;claim_status&quot;: {
+        &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+        &quot;actual&quot;: &quot;APPEAL_SUBMITTED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+      },
+      &quot;appeal_reason&quot;: {
+        &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+        &quot;actual&quot;: &quot;PRECERT_OBTAINED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;appeal_auth_number&quot;: {
+        &quot;expected&quot;: &quot;AUTH-71N39501&quot;,
+        &quot;actual&quot;: &quot;AUTH-71N39501&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;single_appeal&quot;: {
+        &quot;expected&quot;: 1,
+        &quot;actual&quot;: 1,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;DUPLICATE_SIDE_EFFECT&quot;
+      },
+      &quot;no_collateral&quot;: {
+        &quot;passed&quot;: true,
+        &quot;unexpected_changes&quot;: [],
+        &quot;n_unexpected&quot;: 0,
+        &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+      },
+      &quot;ui_path&quot;: {
+        &quot;passed&quot;: true,
+        &quot;checked&quot;: 1,
+        &quot;unaudited_changes&quot;: [],
+        &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+      },
+      &quot;no_forbidden&quot;: {
+        &quot;passed&quot;: true,
+        &quot;visited&quot;: [],
+        &quot;n_pages&quot;: 6,
+        &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+      },
+      &quot;distractor_0_untouched&quot;: {
+        &quot;expected&quot;: &quot;DENIED&quot;,
+        &quot;actual&quot;: &quot;DENIED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+      },
+      &quot;ui_milestones&quot;: {
+        &quot;rungs&quot;: {
+          &quot;openemr_login&quot;: true,
+          &quot;openemr_chart&quot;: true,
+          &quot;openemr_document&quot;: true,
+          &quot;portal_claim&quot;: true,
+          &quot;portal_appeal_form&quot;: true,
+          &quot;appeal_submitted&quot;: true
+        },
+        &quot;order&quot;: [
+          &quot;openemr_login&quot;,
+          &quot;openemr_chart&quot;,
+          &quot;openemr_document&quot;,
+          &quot;portal_claim&quot;,
+          &quot;portal_appeal_form&quot;,
+          &quot;appeal_submitted&quot;
+        ],
+        &quot;highest&quot;: &quot;appeal_submitted&quot;,
+        &quot;n_reached&quot;: 6,
+        &quot;evidence&quot;: {
+          &quot;openemr_logins&quot;: 1,
+          &quot;openemr_login_failures&quot;: 0,
+          &quot;openemr_rows_for_patient&quot;: 251,
+          &quot;openemr_request_paths&quot;: 64,
+          &quot;openemr_document_paths&quot;: [
+            &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701001&amp;&quot;,
+            &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701001&amp;as_file=false&quot;,
+            &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701002&amp;&quot;,
+            &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701002&amp;as_file=false&quot;,
+            &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701001&amp;&quot;,
+            &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701001&amp;as_file=false&quot;,
+            &quot;/openemr/controller.php?document&amp;view&amp;patient_id=701000&amp;doc_id=701000&amp;&quot;,
+            &quot;/openemr/controller.php?document&amp;retrieve&amp;patient_id=701000&amp;document_id=701000&amp;as_file=false&quot;
+          ],
+          &quot;openemr_documents_list&quot;: true,
+          &quot;portal_page_views&quot;: 6,
+          &quot;appeals_for_claim&quot;: 1
+        }
+      }
+    },
+    &quot;n_effects&quot;: 3,
+    &quot;n_invariants&quot;: 5,
+    &quot;success&quot;: true,
+    &quot;wall_seconds&quot;: 176.846,
+    &quot;n_steps&quot;: 58,
+    &quot;n_invalid&quot;: 0,
+    &quot;finished_at&quot;: &quot;2026-09-15T10:50:27+00:00&quot;,
+    &quot;end_reason&quot;: &quot;done&quot;,
+    &quot;invalid_actions&quot;: 0
+  },
+  &quot;failure_codes&quot;: [],
+  &quot;tokens&quot;: {
+    &quot;in&quot;: 205721,
+    &quot;out&quot;: 6831,
+    &quot;cache_read&quot;: 0,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;steps&quot;: 58,
+  &quot;reset&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 80.8814,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 76.9701,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5966,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1349,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5056,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.6846,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.7086,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.281,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;wall_seconds&quot;: 176.846
+}</pre></details><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;B&quot;,
+  &quot;seed&quot;: 201,
+  &quot;id&quot;: &quot;B-000001&quot;,
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;scored&quot;: true,
+  &quot;success&quot;: true,
+  &quot;issues&quot;: [],
+  &quot;started_at&quot;: &quot;2026-09-15T10:46:09.557407+00:00&quot;,
+  &quot;protocol_sha256&quot;: &quot;45915d0877e9ad39fa1eafb974af65fe7dd501f6012bd111441008bc482a5378&quot;,
+  &quot;identity_sha256&quot;: &quot;f9da5129f24a6f27d634a76eb4c087c9fd6dd74ad7d1e86346c6a52bb8f2fbd5&quot;,
+  &quot;episode&quot;: &quot;runs/B/episodes/B-000001&quot;,
+  &quot;task_sha256&quot;: &quot;01bf94d9bdc14ea0b191f24eb3228ad152b5667d5a4bcfb213a9a78efaf21dd6&quot;,
+  &quot;effective_budget&quot;: {
+    &quot;max_steps&quot;: 120,
+    &quot;max_seconds&quot;: 900
+  },
+  &quot;initial_observation_sha256&quot;: &quot;9ddcf4c3db6d9b1aa629c12c2f7a893ddc439fd53f85a0d1577f54dacfcea6ac&quot;,
+  &quot;reset_report&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 80.8814,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 76.9701,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5966,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1349,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5056,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.6846,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.7086,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.281,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;golden_snapshot&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;machine&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;recorded_policy_usage&quot;: {
+    &quot;in&quot;: 205721,
+    &quot;out&quot;: 6831
+  },
+  &quot;finished_at&quot;: &quot;2026-09-15T10:50:28.431679+00:00&quot;,
+  &quot;setup_and_episode_seconds&quot;: 258.872
+}</pre></details></article><article class="check" id="cell-A-000001"><h3>A / seed 201 · completed</h3><p>Episode: <code>runs/A/episodes/A-000001</code></p><p><strong>Failed</strong></p><p>Retained verifier result: <strong>NOT_DONE</strong> · 136 recorded steps; wall seconds: 460.416</p><details><summary>Check: claim_status</summary><pre>{
+  &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+  &quot;actual&quot;: &quot;DENIED&quot;,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+}</pre></details><details><summary>Check: appeal_reason</summary><pre>{
+  &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+  &quot;actual&quot;: null,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: appeal_auth_number</summary><pre>{
+  &quot;expected&quot;: &quot;AUTH-71N39501&quot;,
+  &quot;actual&quot;: null,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+}</pre></details><details><summary>Check: single_appeal</summary><pre>{
+  &quot;expected&quot;: 1,
+  &quot;actual&quot;: 0,
+  &quot;passed&quot;: false,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+}</pre></details><details><summary>Check: no_collateral</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;unexpected_changes&quot;: [],
+  &quot;n_unexpected&quot;: 0,
+  &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+}</pre></details><details><summary>Check: ui_path</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;checked&quot;: 0,
+  &quot;unaudited_changes&quot;: [],
+  &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+}</pre></details><details><summary>Check: no_forbidden</summary><pre>{
+  &quot;passed&quot;: true,
+  &quot;visited&quot;: [],
+  &quot;n_pages&quot;: 1,
+  &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+}</pre></details><details><summary>Check: distractor_0_untouched</summary><pre>{
+  &quot;expected&quot;: &quot;DENIED&quot;,
+  &quot;actual&quot;: &quot;DENIED&quot;,
+  &quot;passed&quot;: true,
+  &quot;op&quot;: &quot;eq&quot;,
+  &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+}</pre></details><details><summary>Check: ui_milestones</summary><pre>{
+  &quot;rungs&quot;: {
+    &quot;openemr_login&quot;: true,
+    &quot;openemr_chart&quot;: false,
+    &quot;openemr_document&quot;: false,
+    &quot;portal_claim&quot;: false,
+    &quot;portal_appeal_form&quot;: false,
+    &quot;appeal_submitted&quot;: false
+  },
+  &quot;order&quot;: [
+    &quot;openemr_login&quot;,
+    &quot;openemr_chart&quot;,
+    &quot;openemr_document&quot;,
+    &quot;portal_claim&quot;,
+    &quot;portal_appeal_form&quot;,
+    &quot;appeal_submitted&quot;
+  ],
+  &quot;highest&quot;: &quot;openemr_login&quot;,
+  &quot;n_reached&quot;: 1,
+  &quot;evidence&quot;: {
+    &quot;openemr_logins&quot;: 1,
+    &quot;openemr_login_failures&quot;: 0,
+    &quot;openemr_rows_for_patient&quot;: 0,
+    &quot;openemr_request_paths&quot;: 245,
+    &quot;openemr_document_paths&quot;: [],
+    &quot;openemr_documents_list&quot;: false,
+    &quot;portal_page_views&quot;: 1,
+    &quot;appeals_for_claim&quot;: 0
+  }
+}</pre></details><details><summary>Complete verdict and recorded usage</summary><pre>{
+  &quot;verdict&quot;: {
+    &quot;reward&quot;: 0.0,
+    &quot;milestones&quot;: 0.0,
+    &quot;reason_code&quot;: &quot;NOT_DONE&quot;,
+    &quot;failed&quot;: [
+      &quot;claim_status&quot;,
+      &quot;appeal_reason&quot;,
+      &quot;appeal_auth_number&quot;,
+      &quot;single_appeal&quot;
+    ],
+    &quot;details&quot;: {
+      &quot;claim_status&quot;: {
+        &quot;expected&quot;: &quot;APPEAL_SUBMITTED&quot;,
+        &quot;actual&quot;: &quot;DENIED&quot;,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+      },
+      &quot;appeal_reason&quot;: {
+        &quot;expected&quot;: &quot;PRECERT_OBTAINED&quot;,
+        &quot;actual&quot;: null,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;appeal_auth_number&quot;: {
+        &quot;expected&quot;: &quot;AUTH-71N39501&quot;,
+        &quot;actual&quot;: null,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_VALUE&quot;
+      },
+      &quot;single_appeal&quot;: {
+        &quot;expected&quot;: 1,
+        &quot;actual&quot;: 0,
+        &quot;passed&quot;: false,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;NOT_DONE&quot;
+      },
+      &quot;no_collateral&quot;: {
+        &quot;passed&quot;: true,
+        &quot;unexpected_changes&quot;: [],
+        &quot;n_unexpected&quot;: 0,
+        &quot;reason_code&quot;: &quot;COLLATERAL_EDIT&quot;
+      },
+      &quot;ui_path&quot;: {
+        &quot;passed&quot;: true,
+        &quot;checked&quot;: 0,
+        &quot;unaudited_changes&quot;: [],
+        &quot;reason_code&quot;: &quot;DIRECT_DB_WRITE&quot;
+      },
+      &quot;no_forbidden&quot;: {
+        &quot;passed&quot;: true,
+        &quot;visited&quot;: [],
+        &quot;n_pages&quot;: 1,
+        &quot;reason_code&quot;: &quot;FORBIDDEN_SCREEN&quot;
+      },
+      &quot;distractor_0_untouched&quot;: {
+        &quot;expected&quot;: &quot;DENIED&quot;,
+        &quot;actual&quot;: &quot;DENIED&quot;,
+        &quot;passed&quot;: true,
+        &quot;op&quot;: &quot;eq&quot;,
+        &quot;reason_code&quot;: &quot;WRONG_RECORD&quot;
+      },
+      &quot;ui_milestones&quot;: {
+        &quot;rungs&quot;: {
+          &quot;openemr_login&quot;: true,
+          &quot;openemr_chart&quot;: false,
+          &quot;openemr_document&quot;: false,
+          &quot;portal_claim&quot;: false,
+          &quot;portal_appeal_form&quot;: false,
+          &quot;appeal_submitted&quot;: false
+        },
+        &quot;order&quot;: [
+          &quot;openemr_login&quot;,
+          &quot;openemr_chart&quot;,
+          &quot;openemr_document&quot;,
+          &quot;portal_claim&quot;,
+          &quot;portal_appeal_form&quot;,
+          &quot;appeal_submitted&quot;
+        ],
+        &quot;highest&quot;: &quot;openemr_login&quot;,
+        &quot;n_reached&quot;: 1,
+        &quot;evidence&quot;: {
+          &quot;openemr_logins&quot;: 1,
+          &quot;openemr_login_failures&quot;: 0,
+          &quot;openemr_rows_for_patient&quot;: 0,
+          &quot;openemr_request_paths&quot;: 245,
+          &quot;openemr_document_paths&quot;: [],
+          &quot;openemr_documents_list&quot;: false,
+          &quot;portal_page_views&quot;: 1,
+          &quot;appeals_for_claim&quot;: 0
+        }
+      }
+    },
+    &quot;n_effects&quot;: 3,
+    &quot;n_invariants&quot;: 5,
+    &quot;success&quot;: false,
+    &quot;wall_seconds&quot;: 460.416,
+    &quot;n_steps&quot;: 136,
+    &quot;n_invalid&quot;: 0,
+    &quot;finished_at&quot;: &quot;2026-09-15T10:58:55+00:00&quot;,
+    &quot;end_reason&quot;: &quot;max_steps&quot;,
+    &quot;invalid_actions&quot;: 0
+  },
+  &quot;failure_codes&quot;: [
+    &quot;NOT_DONE&quot;,
+    &quot;WRONG_VALUE&quot;
+  ],
+  &quot;tokens&quot;: {
+    &quot;in&quot;: 388342,
+    &quot;out&quot;: 13076,
+    &quot;cache_read&quot;: 0,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;steps&quot;: 136,
+  &quot;reset&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 46.8265,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 42.8519,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5587,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1356,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5031,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.6811,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.8197,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.2765,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;wall_seconds&quot;: 460.416
+}</pre></details><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;A&quot;,
+  &quot;seed&quot;: 201,
+  &quot;id&quot;: &quot;A-000001&quot;,
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;scored&quot;: true,
+  &quot;success&quot;: false,
+  &quot;issues&quot;: [],
+  &quot;started_at&quot;: &quot;2026-09-15T10:50:28.432203+00:00&quot;,
+  &quot;protocol_sha256&quot;: &quot;45915d0877e9ad39fa1eafb974af65fe7dd501f6012bd111441008bc482a5378&quot;,
+  &quot;identity_sha256&quot;: &quot;b68a51491d853657e300c86aa798c051fd2bf48e39bdab3ad1c4cb5d5242381f&quot;,
+  &quot;episode&quot;: &quot;runs/A/episodes/A-000001&quot;,
+  &quot;task_sha256&quot;: &quot;01bf94d9bdc14ea0b191f24eb3228ad152b5667d5a4bcfb213a9a78efaf21dd6&quot;,
+  &quot;effective_budget&quot;: {
+    &quot;max_steps&quot;: 120,
+    &quot;max_seconds&quot;: 900
+  },
+  &quot;initial_observation_sha256&quot;: &quot;9ddcf4c3db6d9b1aa629c12c2f7a893ddc439fd53f85a0d1577f54dacfcea6ac&quot;,
+  &quot;reset_report&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 46.8265,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 42.8519,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5587,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1356,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5031,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.6811,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.8197,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 1.2765,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;golden_snapshot&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;machine&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;recorded_policy_usage&quot;: {
+    &quot;in&quot;: 388342,
+    &quot;out&quot;: 13076
+  },
+  &quot;finished_at&quot;: &quot;2026-09-15T10:58:58.025939+00:00&quot;,
+  &quot;setup_and_episode_seconds&quot;: 509.585
+}</pre></details></article><article class="check" id="cell-A-000002"><h3>A / seed 202 · unfinished</h3><p>Episode: <code>runs/A/episodes/A-000002</code></p><p><strong>Unscored</strong> · saved attempt status: running</p><ul><li>no terminal attempt record; interrupted or still active, never scored from partial evidence</li><li>no verifier result was saved; episode is unscored</li></ul><p>Retained verifier result: <strong>No verdict</strong> · 92 recorded steps; wall seconds: None</p><details><summary>Complete verdict and recorded usage</summary><pre>{
+  &quot;verdict&quot;: null,
+  &quot;failure_codes&quot;: [
+    &quot;NO_VERDICT&quot;
+  ],
+  &quot;tokens&quot;: {
+    &quot;in&quot;: 261596,
+    &quot;out&quot;: 8734,
+    &quot;cache_read&quot;: 0,
+    &quot;cache_write&quot;: 0
+  },
+  &quot;steps&quot;: 92,
+  &quot;reset&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 47.7187,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 42.7065,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5918,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1634,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5828,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.7284,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.778,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 2.1677,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;wall_seconds&quot;: null
+}</pre></details><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;A&quot;,
+  &quot;seed&quot;: 202,
+  &quot;id&quot;: &quot;A-000002&quot;,
+  &quot;status&quot;: &quot;unfinished&quot;,
+  &quot;scored&quot;: false,
+  &quot;success&quot;: null,
+  &quot;issues&quot;: [
+    &quot;no terminal attempt record; interrupted or still active, never scored from partial evidence&quot;,
+    &quot;no verifier result was saved; episode is unscored&quot;
+  ],
+  &quot;started_at&quot;: &quot;2026-09-15T10:58:58.026480+00:00&quot;,
+  &quot;protocol_sha256&quot;: &quot;45915d0877e9ad39fa1eafb974af65fe7dd501f6012bd111441008bc482a5378&quot;,
+  &quot;identity_sha256&quot;: &quot;b68a51491d853657e300c86aa798c051fd2bf48e39bdab3ad1c4cb5d5242381f&quot;,
+  &quot;episode&quot;: &quot;runs/A/episodes/A-000002&quot;,
+  &quot;task_sha256&quot;: &quot;3f07e70691811092627b37e766e963be0334db878c6c2b41b7cca6745dfccfc0&quot;,
+  &quot;effective_budget&quot;: {
+    &quot;max_steps&quot;: 120,
+    &quot;max_seconds&quot;: 900
+  },
+  &quot;initial_observation_sha256&quot;: &quot;de36fe77a1f4a8d000b659e99fe17e0733e1ff43a94e98fdf8f88c370bee87aa&quot;,
+  &quot;reset_report&quot;: {
+    &quot;method&quot;: &quot;revert&quot;,
+    &quot;ok&quot;: true,
+    &quot;error&quot;: null,
+    &quot;total_seconds&quot;: 47.7187,
+    &quot;stages&quot;: [
+      {
+        &quot;name&quot;: &quot;restore&quot;,
+        &quot;seconds&quot;: 42.7065,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;seed&quot;,
+        &quot;seconds&quot;: 0.5918,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;before_episode&quot;,
+        &quot;seconds&quot;: 0.1634,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;health&quot;,
+        &quot;seconds&quot;: 0.5828,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;baseline&quot;,
+        &quot;seconds&quot;: 0.7284,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;initial_screen&quot;,
+        &quot;seconds&quot;: 0.778,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      },
+      {
+        &quot;name&quot;: &quot;stable_screen&quot;,
+        &quot;seconds&quot;: 2.1677,
+        &quot;ok&quot;: true,
+        &quot;note&quot;: &quot;&quot;
+      }
+    ]
+  },
+  &quot;golden_snapshot&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;machine&quot;: &quot;[infrastructure value omitted]&quot;,
+  &quot;recorded_status&quot;: &quot;running&quot;
+}</pre></details></article><article class="check" id="cell-B-000002"><h3>B / seed 202 · missing</h3><p>Episode: <code>No episode allocated</code></p><p><strong>Unscored</strong></p><ul><li>no attempt record found for planned cell; not started or evidence missing</li></ul><p>Unscored. No readable episode evidence is available for this cell.</p><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;B&quot;,
+  &quot;seed&quot;: 202,
+  &quot;id&quot;: &quot;B-000002&quot;,
+  &quot;status&quot;: &quot;missing&quot;,
+  &quot;scored&quot;: false,
+  &quot;success&quot;: null,
+  &quot;issues&quot;: [
+    &quot;no attempt record found for planned cell; not started or evidence missing&quot;
+  ]
+}</pre></details></article><article class="check" id="cell-B-000003"><h3>B / seed 203 · missing</h3><p>Episode: <code>No episode allocated</code></p><p><strong>Unscored</strong></p><ul><li>no attempt record found for planned cell; not started or evidence missing</li></ul><p>Unscored. No readable episode evidence is available for this cell.</p><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;B&quot;,
+  &quot;seed&quot;: 203,
+  &quot;id&quot;: &quot;B-000003&quot;,
+  &quot;status&quot;: &quot;missing&quot;,
+  &quot;scored&quot;: false,
+  &quot;success&quot;: null,
+  &quot;issues&quot;: [
+    &quot;no attempt record found for planned cell; not started or evidence missing&quot;
+  ]
+}</pre></details></article><article class="check" id="cell-A-000003"><h3>A / seed 203 · missing</h3><p>Episode: <code>No episode allocated</code></p><p><strong>Unscored</strong></p><ul><li>no attempt record found for planned cell; not started or evidence missing</li></ul><p>Unscored. No readable episode evidence is available for this cell.</p><details><summary>Attempt and timing metadata</summary><pre>{
+  &quot;arm&quot;: &quot;A&quot;,
+  &quot;seed&quot;: 203,
+  &quot;id&quot;: &quot;A-000003&quot;,
+  &quot;status&quot;: &quot;missing&quot;,
+  &quot;scored&quot;: false,
+  &quot;success&quot;: null,
+  &quot;issues&quot;: [
+    &quot;no attempt record found for planned cell; not started or evidence missing&quot;
+  ]
+}</pre></details></article></section><section id="protocol"><h2>Protocol, integrity and limits</h2><ul><li>Best-of-one, sequential matched seeds; no policy retries or selection of successful attempts.</li><li>Identity is caller-attested. Factories and remote endpoints must actually serve the declared policy/version/options.</li><li>Reset equivalence covers configured baseline tables, watermarks and preserved rows, not all application or VM state.</li><li>Pixel equality is diagnostic, not required for task-state equivalence. Screenshots may differ in clocks or rendering.</li><li>Usage is recorded policy token accounting, not an invoice. Setup, cleanup, failed calls and idle resource costs may be unpriced.</li><li>Observed differences on these seeds do not establish statistical reliability or justify deployment. Synthetic data only.</li><li>Public check-summary edition: every planned cell is represented; action traces and screenshots are not embedded here. The full HTML-only episode bundle is retained locally. This is the original interrupted four-pair experiment, not a selected two-pair rerun.</li></ul><details><summary>Saved policy identities and protocol</summary><pre>{
+  &quot;schema&quot;: &quot;forkloop.comparison.v1&quot;,
+  &quot;created_at&quot;: &quot;2026-09-15T10:34:08.985516+00:00&quot;,
+  &quot;world&quot;: &quot;claims-ops-v1&quot;,
+  &quot;world_version&quot;: 1,
+  &quot;backend&quot;: &quot;solari&quot;,
+  &quot;evidence_kind&quot;: &quot;live_policy_evaluation&quot;,
+  &quot;family&quot;: &quot;resolve_denial&quot;,
+  &quot;split&quot;: &quot;train&quot;,
+  &quot;seeds&quot;: [
+    200,
+    201,
+    202,
+    203
+  ],
+  &quot;variants&quot;: {
+    &quot;A&quot;: {
+      &quot;configuration_sha256&quot;: &quot;bcf93c7eb65c5d53b11ffb493b55c52891e30d15e7c85a237e31021c0e3bcaca&quot;,
+      &quot;options&quot;: {
+        &quot;base_url&quot;: &quot;[infrastructure value omitted]&quot;,
+        &quot;extra_body&quot;: {
+          &quot;reasoning_effort&quot;: &quot;high&quot;
+        },
+        &quot;history_k&quot;: 16,
+        &quot;history_notes&quot;: false,
+        &quot;hosted_reasoning&quot;: true,
+        &quot;image_detail&quot;: &quot;high&quot;,
+        &quot;image_max_side&quot;: 1280,
+        &quot;max_tokens&quot;: 4096,
+        &quot;model&quot;: &quot;gpt-5.6-luna&quot;,
+        &quot;prev_screenshot&quot;: true,
+        &quot;prompt_style&quot;: &quot;compact&quot;,
+        &quot;timeout_s&quot;: 120
+      },
+      &quot;policy&quot;: &quot;student&quot;,
+      &quot;policy_source_sha256&quot;: &quot;e2b567ea9ff0cbc80f7fd410ca65ae8cab2b53c99ccbcadbff453ff0fabf85e3&quot;,
+      &quot;version&quot;: &quot;forkloop/0.2.0&quot;
+    },
+    &quot;B&quot;: {
+      &quot;configuration_sha256&quot;: &quot;d25f8435eeb5c06571c2b14649f623c8b06b12fd7ff85962c35b6747002a077e&quot;,
+      &quot;options&quot;: {
+        &quot;base_url&quot;: &quot;[infrastructure value omitted]&quot;,
+        &quot;extra_body&quot;: {
+          &quot;reasoning_effort&quot;: &quot;high&quot;
+        },
+        &quot;history_k&quot;: 16,
+        &quot;history_notes&quot;: false,
+        &quot;hosted_reasoning&quot;: true,
+        &quot;image_detail&quot;: &quot;high&quot;,
+        &quot;image_max_side&quot;: 1280,
+        &quot;max_tokens&quot;: 4096,
+        &quot;model&quot;: &quot;gpt-5.6-luna&quot;,
+        &quot;prev_screenshot&quot;: true,
+        &quot;prompt_style&quot;: &quot;compact&quot;,
+        &quot;system_prompt&quot;: &quot;You are a careful GUI agent operating an Ubuntu desktop through screenshots. Each turn you receive the task, the list of actions you already took, and one screenshot that is {w}x{h} pixels. Coordinates are pixel positions in that screenshot: x from 0 (left) to {w1}, y from 0 (top) to {h1}. Aim for the centre of the element you want to hit.\n\nReply with a short line of reasoning, then exactly ONE action as the last line, using this grammar and nothing else:\n  click(x, y)                 left click\n  double_click(x, y)          double click\n  right_click(x, y)           right click\n  move(x, y)                  move the mouse without clicking\n  drag(x1, y1, x2, y2)        press at (x1, y1), release at (x2, y2)\n  scroll(x, y, \&quot;down\&quot;, 3)     scroll at (x, y); direction up|down|left|right; amount = wheel notches\n  type(\&quot;text\&quot;)                type into the focused field (JSON string escaping; \&quot;\\n\&quot; presses Enter)\n  key(\&quot;ctrl+l\&quot;)               press a key or chord; names: Return, Tab, Escape, BackSpace, Delete, Page_Down, Page_Up, Home, End, Up, Down, Left, Right, F5, ctrl, alt, shift, letters and digits\n  wait(2.0)                   wait for the screen to settle\n  done()                      the task is complete\n  done(success=false, note=\&quot;reason\&quot;)   the task cannot be completed\n\nHow to work:\n- Check your action history before acting. If the same action did not visibly change the screen last time, do NOT repeat it: choose a different element, press a key, wait, or navigate by URL.\n- To use a text field: click it once, then type. A blue outline means it is already focused, so type immediately. To replace its contents, press key(\&quot;ctrl+a\&quot;) and then type.\n- To open a page, click the address bar (about y=90), press key(\&quot;ctrl+a\&quot;), type the URL followed by \&quot;\\n\&quot;, then wait(2.0).\n- After a click that loads a page or opens a dialog, wait(2.0) before the next action.\n- If a page shows \&quot;Aw, Snap!\&quot;, a blank error, or looks broken (plain unstyled text, a greyed-out or unresponsive button, missing menus), press key(\&quot;F5\&quot;) to reload it, wait(2.0), and try once more; if you land on a login page, log in again with the credentials in the task. Never retry the same form more than twice without reloading.\n- In list/search screens, prefer searching by surname only; use the row&#x27;s link to open a record.\n- Read documents fully: scroll inside the viewer and check every page before deciding. Some documents are decoys: if a document says it is for a different service, a different claim, a prior/closed case, or another patient, it is NOT the one you want; keep looking until the document clearly refers to this claim&#x27;s service and dates.\n- Windows: a window WITHOUT a tab strip (no tabs above the address bar, often titled \&quot;Untitled\&quot;) is a popup and its address bar is read-only, so typing a URL there does nothing. Close it with key(\&quot;ctrl+w\&quot;) or use the window&#x27;s close button at the top right, which returns you to the main tabbed window; then navigate there. The taskbar at the top lists open windows; a number badge means several.\n- Use one browser tab per application and switch between them by clicking the tab strip; do not type the other app&#x27;s URL into a tab that is logged into OpenEMR, because OpenEMR forgets its session when you leave and you will have to log in and search again. Open OpenEMR with key(\&quot;ctrl+t\&quot;) if it is not already in a tab.\n- Codes such as authorization numbers must be copied EXACTLY, character by character (letters and digits look alike: G/6, O/0, I/1, S/5, Z/2, B/8). Read the code twice from the document, write it in your reasoning, and after typing it into a field look at the field and compare it with the document before submitting; fix any mismatch with key(\&quot;ctrl+a\&quot;) and retyping.\n- Once you have the authorization number, write it in your reasoning on every later step so you do not lose it, and do not go back to OpenEMR unless the portal rejects it.\n- Portal appeal form: open http://localhost:8080/claims, open the claim, click its appeal button; the form has a reason dropdown, an authorization number field, a narrative and a file field; submit with the form&#x27;s button.\n- Do exactly what the task asks and nothing else. Never touch records it does not name. Call done() only after the final confirmation is visible on screen.\n&quot;,
+        &quot;timeout_s&quot;: 120
+      },
+      &quot;policy&quot;: &quot;student&quot;,
+      &quot;policy_source_sha256&quot;: &quot;e2b567ea9ff0cbc80f7fd410ca65ae8cab2b53c99ccbcadbff453ff0fabf85e3&quot;,
+      &quot;version&quot;: &quot;forkloop/0.2.0&quot;
+    }
+  },
+  &quot;labels&quot;: {
+    &quot;A&quot;: &quot;Luna compact prompt&quot;,
+    &quot;B&quot;: &quot;Luna workflow prompt v5&quot;
+  },
+  &quot;budget_override&quot;: {
+    &quot;max_steps&quot;: 120,
+    &quot;max_seconds&quot;: 900
+  },
+  &quot;reset_mode&quot;: &quot;revert&quot;,
+  &quot;history_k&quot;: 16,
+  &quot;settle_s&quot;: 0.6,
+  &quot;max_invalid&quot;: 10,
+  &quot;best_of&quot;: 1,
+  &quot;concurrency&quot;: 1,
+  &quot;attempts_per_cell&quot;: 1,
+  &quot;identity_basis&quot;: &quot;caller-attested&quot;,
+  &quot;limits&quot;: [
+    &quot;Best-of-one, sequential matched seeds; no policy retries or selection of successful attempts.&quot;,
+    &quot;Identity is caller-attested. Factories and remote endpoints must actually serve the declared policy/version/options.&quot;,
+    &quot;Reset equivalence covers configured baseline tables, watermarks and preserved rows, not all application or VM state.&quot;,
+    &quot;Pixel equality is diagnostic, not required for task-state equivalence. Screenshots may differ in clocks or rendering.&quot;,
+    &quot;Usage is recorded policy token accounting, not an invoice. Setup, cleanup, failed calls and idle resource costs may be unpriced.&quot;,
+    &quot;Observed differences on these seeds do not establish statistical reliability or justify deployment. Synthetic data only.&quot;
+  ],
+  &quot;plan&quot;: [
+    {
+      &quot;arm&quot;: &quot;A&quot;,
+      &quot;seed&quot;: 200,
+      &quot;id&quot;: &quot;A-000000&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;B&quot;,
+      &quot;seed&quot;: 200,
+      &quot;id&quot;: &quot;B-000000&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;B&quot;,
+      &quot;seed&quot;: 201,
+      &quot;id&quot;: &quot;B-000001&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;A&quot;,
+      &quot;seed&quot;: 201,
+      &quot;id&quot;: &quot;A-000001&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;A&quot;,
+      &quot;seed&quot;: 202,
+      &quot;id&quot;: &quot;A-000002&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;B&quot;,
+      &quot;seed&quot;: 202,
+      &quot;id&quot;: &quot;B-000002&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;B&quot;,
+      &quot;seed&quot;: 203,
+      &quot;id&quot;: &quot;B-000003&quot;
+    },
+    {
+      &quot;arm&quot;: &quot;A&quot;,
+      &quot;seed&quot;: 203,
+      &quot;id&quot;: &quot;A-000003&quot;
+    }
+  ]
+}</pre></details><details><summary>Execution and infrastructure events</summary><pre>{
+  &quot;status&quot;: &quot;incomplete&quot;,
+  &quot;started_at&quot;: &quot;2026-09-15T10:34:08.986226+00:00&quot;,
+  &quot;protocol_sha256&quot;: &quot;45915d0877e9ad39fa1eafb974af65fe7dd501f6012bd111441008bc482a5378&quot;,
+  &quot;events&quot;: [],
+  &quot;recorded_status&quot;: &quot;running&quot;,
+  &quot;explanation&quot;: &quot;No terminal execution record was saved. The run may have been interrupted or may still be active; offline artifacts cannot establish process or resource liveness. Unfinished and unstarted cells are unscored. Historical artifacts are unchanged.&quot;
+}</pre></details></section><footer><p>Offline inspection, not a fresh execution. No scripts, fonts, analytics or network dependencies. Check summaries are self-contained; linked episode reports require their original directory. Review synthetic screenshots and model text before sharing.</p></footer></main></body></html>
