@@ -11,9 +11,10 @@ the report as `index.html` and `report.html`, the comparison, video, poster,
 captions and `.nojekyll`. All six HTTP asset checks returned 200 and matched
 the reviewed local SHA-256 hashes.
 
-The source release is version **0.2.0**, a prerelease for the offline evaluation
-and evidence-inspection workflow, not production healthcare or a live reliability
-claim. Raw worked-example episodes, credentials, runs, datasets and checkpoints
+The [0.2.0 prerelease](https://github.com/rynitepsd-tech/forkloop/releases/tag/v0.2.0)
+publishes source commit `327812c` and an installable wheel for the offline
+evaluation and evidence-inspection workflow, not production healthcare or a live
+reliability claim. Raw worked-example episodes, credentials, runs, datasets and checkpoints
 are excluded. Their original local files remain untouched. Ignore rules now
 protect those untracked artifacts from accidental staging. Linked research
 documents use public summaries and explicitly local-only raw-evidence references.
@@ -23,9 +24,10 @@ documents use public summaries and explicitly local-only raw-evidence references
 The continuation authorized up to **$100 new total** across the three providers.
 **New paid spend: $0.** No model request, Solari allocation or Lambda GPU was made.
 The prior ledger was preserved byte-for-byte; its uncertain charges are unchanged.
-Read-only provider inventory found no resources tagged `forkloop=1`, across
-desktop and sandbox kinds. The existing ledger's `reap --dry-run` selected zero
-machines and changed nothing.
+The final read-only account inventory returned no visible Solari desktop or
+sandbox VMs and no Lambda instances. This is not a statement about retained
+snapshot storage or unresolved historical charges. The existing ledger's
+`reap --dry-run` selected zero machines and changed nothing.
 
 The [provider API](https://docs.getsolari.com/api-reference/sandboxes) describes
 rolling idle timeouts; activity and open connections extend them. No verified
@@ -54,6 +56,8 @@ A wheel installed outside the checkout passed fake doctor, all five demo control
 the complete two-pair offline comparison and cropped HTML bundle export.
 The installed wheel reports the allocation hold; the standalone sandbox probe
 also refuses before contacting a provider. Cleanup regression tests pass.
+The downloaded public wheel's SHA-256 matches the tested local wheel:
+`2c5de45f539a85a4005f214a0f81b6733ee714b23a237a3f195cdcb5450d47f0`.
 A selected-file scan against six configured credential values found no matches.
 This does not certify arbitrary screenshots or free text as secret-free.
 
@@ -64,8 +68,11 @@ The five video scenes were inspected at 2, 8, 15, 22 and 30 seconds.
 Only the reviewed sharing derivatives were inspected/published, never raw images.
 
 Local verification and accounting receipts are under `runs/release-20260915/`.
-Social posts and researcher messages remain unsent. Independent adoption,
-repeat use and a changed research decision still require an actual external user.
+The [independent-evaluation invitation](https://github.com/rynitepsd-tech/forkloop/issues/1)
+and [live-execution spending blocker](https://github.com/rynitepsd-tech/forkloop/issues/2)
+are public GitHub issues. Social posts and researcher messages remain unsent.
+Independent adoption, repeat use and a changed research decision still require
+an actual external user.
 
 ## Historical handoff — September 15 session recovery
 
