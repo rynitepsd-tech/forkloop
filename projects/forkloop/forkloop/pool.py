@@ -39,6 +39,13 @@ def _log(event: dict[str, Any]) -> None:
     print(f"[pool {time.strftime('%H:%M:%S')}] {event.get('event')} {fields}", file=sys.stderr, flush=True)
 
 
+#: Per run_id, across every pool in this process (fork-search branch pools share the
+#: parent's run_id): machines this process created, and creates still in flight. Reaping
+#: must not kill either — only machines no one here ever received a handle for.
+_CREATED: dict[str, set[str]] = {}
+_INFLIGHT: dict[str, int] = {}
+
+
 def _is_revert_refusal(e: BaseException) -> bool:
     """The account/API refusing revert() as such (HTTP 409 "Not revertable", a paused machine), as
     opposed to a revert that failed on the way (timeouts, capacity, transport errors)."""
@@ -247,11 +254,17 @@ class WorkerPool:
             try:
                 # Solari's create call has been seen to hang for many minutes with no answer
                 # (2026-09-02); treat that like a capacity error and try again.
-                return await asyncio.wait_for(self.backend.create(
-                    template=self.world.config.template, from_snapshot=from_snapshot,
-                    resolution=self.world.config.resolution, cpu=self.cpu, mem_mb=self.mem_mb,
-                    record=self.record, metadata={"forkloop": "1", "run_id": self.run_id, "world": self.world.name},
-                    timeout_ms=self.timeout_ms, disk_gb=self.disk_gb), timeout=self.create_timeout_s)
+                _INFLIGHT[self.run_id] = _INFLIGHT.get(self.run_id, 0) + 1
+                try:
+                    machine = await asyncio.wait_for(self.backend.create(
+                        template=self.world.config.template, from_snapshot=from_snapshot,
+                        resolution=self.world.config.resolution, cpu=self.cpu, mem_mb=self.mem_mb,
+                        record=self.record, metadata={"forkloop": "1", "run_id": self.run_id, "world": self.world.name},
+                        timeout_ms=self.timeout_ms, disk_gb=self.disk_gb), timeout=self.create_timeout_s)
+                finally:
+                    _INFLIGHT[self.run_id] -= 1
+                _CREATED.setdefault(self.run_id, set()).add(machine.id)
+                return machine
             except (ConcurrencyError, CapacityError, asyncio.TimeoutError) as e:
                 err = str(e) or f"create timed out after {self.create_timeout_s:.0f}s"
                 _log_and_append(self.events, {"t": time.time(), "event": "create_retry", "attempt": attempt, "error": err})
@@ -289,9 +302,14 @@ class WorkerPool:
 
     async def reap_orphans(self, *, older_than_s: float = 0.0) -> list[str]:
         """Kill unowned machines from this run only; other sessions are never reaped."""
-        mine = {w.machine.id for w in self.workers if w.machine is not None}
+        mine = {w.machine.id for w in self.workers if w.machine is not None} | _CREATED.get(self.run_id, set())
         killed: list[str] = []
         if not self.reap_orphans_enabled:
+            return killed
+        if _INFLIGHT.get(self.run_id, 0) > 0:
+            # Another worker's create is pending: the unowned machine may be seconds from
+            # being its handle. Let the caller back off instead.
+            _log_and_append(self.events, {"t": time.time(), "event": "reap_deferred_create_in_flight"})
             return killed
         try:
             infos = await self.backend.list_machines(metadata={"forkloop": "1", "run_id": self.run_id})
