@@ -367,6 +367,50 @@ async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
     assert any("CHROME_OK" in c for c in calls)
 
 
+async def test_initial_screen_logs_back_into_the_portal_or_fails_the_reset(monkeypatch):
+    """2026-09-23: a Chrome relaunch lost the portal session and every cell opened on its login page."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from forkloop.world import load_world
+    from worlds.claims_ops_v1 import world as world_module
+
+    async def no_sleep(_s):
+        return None
+    monkeypatch.setattr(world_module.asyncio, "sleep", no_sleep)
+    world = load_world("claims-ops-v1")
+    screen = {"app": "portal", "url": "http://localhost:8080/claims?status=DENIED"}
+
+    def machine(titles):
+        typed: list[str] = []
+        titles = list(titles)
+
+        async def exec_(cmd, args=None, **kw):
+            return SimpleNamespace(exit_code=0, stdout=titles.pop(0) + "\n", stderr="")
+
+        async def noop(*a, **k):
+            return None
+
+        async def type_text(text):
+            typed.append(text)
+        return SimpleNamespace(exec=exec_, click=noop, press=noop, type_text=type_text, typed=typed,
+                               capabilities={"gui"}, backend_name="solari")
+
+    claims = "Claims - Meridian Provider Portal - Google Chrome"
+    login = "Log in - Meridian Provider Portal - Google Chrome"
+    ok = machine([claims])
+    await world.open_initial_screen(ok, screen)
+    assert ok.typed == [screen["url"]]
+    relogin = machine([login, claims])
+    await world.open_initial_screen(relogin, screen)
+    assert relogin.typed == [screen["url"], "agent", "agent", screen["url"]]
+    with pytest.raises(RuntimeError, match="portal session missing"):
+        await world.open_initial_screen(machine([login, login]), screen)
+    with pytest.raises(RuntimeError, match="could not confirm the portal screen"):
+        await world.open_initial_screen(machine([""]), screen)
+
+
 def test_insurance_row_carries_subscriber_sex_and_address(world):
     """OpenEMR 8.3's insurance editor refuses to save a policy with a blank subscriber sex,
     street, city, state or ZIP (family-2 seed 0, 2026-09-03), so the seeded policy carries the

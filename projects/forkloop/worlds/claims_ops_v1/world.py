@@ -9,6 +9,7 @@ snapshot id. Everything the agent could touch lives inside the VM so that one
 
 from __future__ import annotations
 
+import asyncio
 import os
 import base64
 import json
@@ -20,6 +21,10 @@ from forkloop.oracle import _comment_texts
 from forkloop.world import HealthReport, World
 
 HERE = Path(__file__).resolve().parent
+#: The synthetic portal account browser_setup.sh logs Chrome into; tasks never include it.
+PORTAL_LOGIN = ("agent", "agent")
+PORTAL_TITLE = "Meridian Provider Portal"
+PORTAL_LOGIN_TITLE = f"Log in - {PORTAL_TITLE}"
 
 PORTAL_SYSTEMD = """[Unit]
 Description=Forkloop payer portal
@@ -157,12 +162,44 @@ class ClaimsOpsWorld(World):
         url = screen.get("url")
         if not url:
             return
+        await self._navigate(machine, url)
+        if screen.get("app") != "portal":
+            return
+        # 2026-09-23 (runs/image-detail-live-20260923): relaunching Chrome on the Sept 15 golden lost
+        # the portal session, so all 28 cells opened on the portal login page, whose credentials the
+        # task never gives. Log in again the way browser_setup.sh does, and fail the reset (an
+        # unscored cell) rather than start an episode no agent can finish.
+        await asyncio.sleep(3)
+        title = await self._window_title(machine)
+        if PORTAL_TITLE not in title:
+            raise RuntimeError(f"could not confirm the portal screen after reset (window title {title[:80]!r})")
+        if not title.startswith(PORTAL_LOGIN_TITLE):
+            return
+        for x, y, text in ((340, 309, PORTAL_LOGIN[0]), (340, 391, PORTAL_LOGIN[1])):
+            await machine.click(x, y)
+            await machine.type_text(text)
+        await machine.click(90, 449)
+        await asyncio.sleep(3)
+        await self._navigate(machine, url)
+        await asyncio.sleep(3)
+        title = await self._window_title(machine)
+        if PORTAL_TITLE not in title or title.startswith(PORTAL_LOGIN_TITLE):
+            raise RuntimeError(f"portal session missing after reset (window title {title[:80]!r})")
+
+    @staticmethod
+    async def _navigate(machine: Any, url: str) -> None:
         # Agent-channel only: click the omnibox (keyboard focus is not guaranteed to be in
         # Chrome right after a fork), replace the URL, go.
         await machine.click(640, 90)
         await machine.press(["ctrl", "a"])
         await machine.type_text(url)
         await machine.press(["Return"])
+
+    @staticmethod
+    async def _window_title(machine: Any) -> str:
+        r = await machine.exec("runuser", ["-u", "desktop", "--", "env", "DISPLAY=:0",
+                                           "xdotool", "getactivewindow", "getwindowname"])
+        return (r.stdout or "").strip() if r is not None else ""
 
     async def before_episode(self, machine: Any) -> None:
         if machine.backend_name == "fake":
@@ -272,9 +309,9 @@ class ClaimsOpsWorld(World):
         flag every authenticated OpenEMR page kills the renderer ("Aw, Snap! Error
         code: 5"). Golden images built after 2026-09-02 start Chrome with the flag
         (``browser_setup.sh``), so this is a no-op costing one ``ps``; on older
-        goldens it relaunches Chrome on the portal claims list (the canonical initial
-        screen; both app logins live in the profile and survive). Returns True when
-        a relaunch happened.
+        goldens it relaunches Chrome on the portal claims list. The relaunch can lose the
+        portal session (measured 2026-09-23 on the Sept 15 golden); ``open_initial_screen``
+        logs back in. Returns True when a relaunch happened.
         """
         # Experiment hooks (docs/limitations.md, Chrome tab crashes): FORKLOOP_CHROME_FLAGS appends
         # flags, FORKLOOP_CHROME_DROP removes base flags (space-separated); either forces a relaunch.
