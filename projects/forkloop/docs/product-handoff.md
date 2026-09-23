@@ -1,5 +1,37 @@
 # Forkloop publication handoff
 
+## Current handoff — September 22–23 review, repairs and first complete live comparison
+
+**Start here:** [README](../README.md) · [live notes comparison](live-notes-comparison.md) ·
+[student diagnosis](student-diagnosis.md) · [Solari lifetime probe](solari-lifetime-probe.md).
+
+### What changed
+
+- **Scoring.** Infrastructure and oracle failures are unscored everywhere (`INFRA_ERROR`, `ORACLE_ERROR`). Neither can mask a violation a clean check observed. `metrics` no longer counts cells without a verdict as failures.
+- **World.** An inbox read is no longer a collateral edit. PDF titles no longer leak the authorization. A missing attachment reports `MISSING_ATTACHMENT`. The composition oracle guards insurance fields. Chrome's password-breach dialog is disabled. MySQL output is parsed correctly, and IDs keep their leading zeros.
+- **Pool.** No machine leaks when a kill fails or a machine turns unhealthy. The raw Solari 409 is recognized as a refusal. Reaping is run-scoped and never kills sibling or in-flight machines.
+- **compare.** Exact McNemar test, with a leader named only at p < 0.05. Wilson intervals. Exit codes 0/1/2/3/4. `--check` works without keys. `reset_mode` is configurable, and custom factories import from the working directory.
+- **Solari.** The unconditional hold is replaced by an opt-in, enforced lifetime: `FORKLOOP_SOLARI_MAX_LIFETIME_MIN`, in-process deadline kills, `reap --older-than-min`, and the prepaid balance as the acknowledged last resort. The probe showed that desktop idle timeouts renew themselves.
+- **Onboarding.** READMEs rewritten; a custom-agent template; a docs index; a CI workflow; a Pages landing page.
+- **Student.** Recipe v4-notes (history notes in training and serving), with a parity test.
+
+### Measured
+
+- **Live, 20/20 cells, 10/10 equivalent resets.** Fara-4B v3 with notes 1/10, without notes 1/10 (p = 1). 16/20 episodes ran out of the 900-second budget. On one seed both arms submitted the same misread digit.
+- **Offline, 38 held-out states.** Notes let every model type a number it cannot see (v3: 37/38 vs 0/38). SFT improved reading (26/38 vs 10/38 for base). Training on notes (v4) added nothing over giving them at inference.
+- **Tests.** 439 passed, 3 skipped offline; CI green on GitHub.
+
+### Pending for the owner
+
+1. Prune storage before October 1:
+   - Solari snapshots: keep `snap_dlft9omnpkyw` (the Sept 15 golden, used by all live runs); `snap_dl4cngznmvr7`, `snap_dl4e90g095y2`, `snap_dl4e05ciyt1p` and `snap_dl4driq97904` are candidates (delete children before parents).
+   - Two Lambda filesystems (`Forkloop`, `Forkloop-with-H100`, about 18.5 GB each).
+   - Point `FORKLOOP_GOLDEN_SNAPSHOT_CLAIMS_OPS_V1` in `~/.config/forkloop/env` at `snap_dlft9omnpkyw`.
+2. Optionally post the drafted comment on Solari issue #79 (`runs/solari-live-20260923/solari-issue-79-comment.md`, local).
+3. Next experiment:
+   - the same live comparison with vLLM serving (one client per server) and a longer budget;
+   - then a reading intervention (verify or magnify the letter) as the B arm.
+
 ## Current handoff — September 16 diagnostic and 0.2.1 repairs
 
 The continuation completed a bounded recorded-observation study and two source

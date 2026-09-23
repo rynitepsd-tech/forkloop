@@ -103,7 +103,7 @@ Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop 
 | [Retained live episode](docs/worked-example/) | Adapter-trained Fara-4B completed the full workflow and submitted one wrong character → `WRONG_VALUE` | One episode; 6 of 148 screenshots retained |
 | [Prompt comparison, Sept 15](docs/worked-example/navigation-comparison.html) | Workflow prompt 2/2 vs compact prompt 0/2 on two matched seeds (exact p = 0.5) | Run interrupted; 2 of 4 planned pairs |
 | [Image-detail study](docs/frozen-v3-evaluation-results.md) | Exact authorization typing: 19/20 at high image detail vs 0/20 at low | Recorded states; actions not executed |
-| Small-model SFT (Fara-4B) | Base, v1, v2: 0/30 each; v3 adapter 0/2 live, with one complete wrong-value run | [Why it failed and what fixes it](docs/student-diagnosis.md) |
+| [Small-model SFT (Fara-4B)](docs/student-diagnosis.md) | SFT improved reading (26/38 vs 10/38). A notes memory lets the model type a number it can no longer see (37/38 vs 0/38), and training on notes added nothing over giving them at inference | Offline, on 38 held-out recorded states |
 
 Other task families (rescheduling, insurance updates) and fork-based search exist as research paths, and have not been re-verified live since the last repairs. See [limitations](docs/limitations.md) and [cost](docs/cost.md).
 

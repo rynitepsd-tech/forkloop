@@ -44,4 +44,35 @@ The evaluation covers 38 teacher episodes from seeds 100–139. Training used se
 
 Base and v3 get no notes, as trained. v4 gets the teacher-derived notes of the previous steps; in the read states those notes never contain the answer. As a secondary condition declared before inference, base and v3 are also given the same notes at inference only (`+notes`). Decoding is greedy, best-of-one, with the v3 serving prompt and settings. The protocol and case hashes are in `runs/v4-notes-20260922/eval/` (local).
 
-RESULTS_PLACEHOLDER
+## Results
+
+The table shows exact authorization typing, or for the read condition the number appearing in
+the reply, out of 38 held-out states. "Wrong" counts typed authorizations that do not match.
+
+| Model | Notes given | Type, paired | Type, current only | Read | Wrong typed (paired) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| base | no | 6 | 0 | 10 | 9 |
+| base | yes (inference only) | 33 | 33 | 13 | 1 |
+| v3 | no | 27 | 0 | 26 | 11 |
+| v3 | yes (inference only) | **37** | **37** | 25 | 1 |
+| v4-notes | yes (as trained) | **37** | 0 | 27 | 1 |
+| v4-notes | no | 21 | 0 | 27 | 17 |
+
+What this shows:
+
+1. **The memory channel fixes carrying, even without training.** Given the notes, every model types the number it cannot see: base 33/38 and v3 37/38 with the letter off screen, against 0/38 without notes.
+2. **SFT is what improved reading.** v3 wrote the exact number when the letter was on screen in 26/38 states, against 10/38 for base. Notes do not change reading: v3 read 25/38 with notes and 26/38 without.
+3. **Training on notes (v4) added nothing over giving v3 notes at inference.** v4-notes reads about the same (27/38), and with notes it types as well as v3 when the previous screenshot is shown. With only the current screenshot it clicks back to OpenEMR to "verify the number before submission" in all 38 states. That is the teacher's habit, and a cautious one, but it costs steps. Without notes it is out of distribution and makes 17 wrong entries.
+4. **Live, none of this reached task success yet.** The matched live comparison of v3 with and without notes ([live-notes-comparison.md](live-notes-comparison.md)) scored 1/10 each. Most episodes ran out of the 900-second budget at about 10.5 s per step. On one seed both arms submitted the same misread digit, and the notes arm carried it faithfully.
+
+**Recommendation for the next model iteration.**
+
+- Use v3 with notes at inference; do not retrain for notes.
+- Spend effort on reading (a verification or magnification step on the letter) and on speed: vLLM serving, one client per server.
+- Re-run the live comparison with a longer budget before trying another model change.
+
+v4-notes trained for exactly v3's 411 steps (1.87 epochs, seed 0; final loss 0.132 vs 0.139).
+The adapter is kept locally at `checkpoints/v4-notes-main25/final`
+(sha256 `1e9d5e02…6d42`) and is not distributed. Training ran 7.2 h. The whole H100 session
+lasted about 8.3 h at $3.29/h, about $27, and the base and v3 evaluations shared the GPU with
+training.

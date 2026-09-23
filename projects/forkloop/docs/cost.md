@@ -114,6 +114,24 @@ cleaned up according to those dated receipts; the golden and pre-existing
 filesystems were preserved. This is not a fresh provider-inventory check.
 Snapshot/filesystem retention can still incur storage charges.
 
+## September 22–23 session
+
+These are usage-derived estimates, not invoices.
+
+| Service | Item | Estimate |
+| --- | --- | ---: |
+| Lambda | H100 PCIe, 22:39–06:55 HST (8.3 h at $3.29/h): v4-notes training (7.2 h) and the base/v3/v4 offline evaluations | ≈ $27.20 |
+| Lambda | A100 SXM4, 02:52–05:32 HST (2.7 h at $1.99/h): serving v3 for the live comparison | ≈ $5.30 |
+| Solari | Idle-timeout probe: one desktop for 16.5 min, outside the ledger | ≈ $0.04 |
+| Solari | Live comparison: 20 fork desktops, ~15 min each | ≈ $0.70 compute; ledger upper bound $2.46 |
+| OpenAI / Anthropic | none | $0 |
+
+Both Lambda instances were terminated by API and confirmed; each also had a local
+terminate-at-deadline watchdog. No Solari machines remained (`reap --dry-run`: 0 selected;
+account inventory: 0 machines). Two Lambda filesystems (about 18.5 GB each) and five Solari
+snapshots (42.7 GB) remain: storage the owner should prune, since Solari snapshot billing
+starts October 1.
+
 ## Guard and accounting boundaries
 
 **Public-release continuation.** The new authorization is a $100 total ceiling,
