@@ -97,3 +97,32 @@ def test_openai_dns_absolute_name_cannot_bypass_hosted_validation(tmp_path, monk
         configure_policy({"name": "hosted", "policy": "student", "options": {
             "base_url": "https://api.openai.com./v1", "model": "unpriced-model",
         }}, tmp_path)
+
+
+def test_custom_factory_imports_from_the_working_directory(tmp_path, monkeypatch):
+    from forkloop.policy_config import load_config
+
+    (tmp_path / "my_agents_cwd_probe.py").write_text(
+        "class A:\n    name = 'a'\n    async def act(self, obs):\n        return None, {}\n"
+        "def make(**kw):\n    return A()\n")
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("version: 1\nbackend: fake\nseeds: [1]\nvariants:\n"
+                   "  - {name: a, factory: 'my_agents_cwd_probe:make', revision: r1}\n"
+                   "  - {name: b, factory: 'my_agents_cwd_probe:make', revision: r2}\n")
+    monkeypatch.chdir(tmp_path)
+    _, policies = load_config(cfg)
+    assert [p.name for p in policies] == ["a", "b"]
+
+
+def test_missing_factory_module_is_a_configuration_error(tmp_path, monkeypatch):
+    import pytest
+
+    from forkloop.policy_config import load_config
+
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("version: 1\nbackend: fake\nseeds: [1]\nvariants:\n"
+                   "  - {name: a, factory: 'no_such_module_xyz:make', revision: r1}\n"
+                   "  - {name: b, factory: 'no_such_module_xyz:make', revision: r2}\n")
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="cannot import factory module"):
+        load_config(cfg)

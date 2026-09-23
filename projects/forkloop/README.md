@@ -64,6 +64,8 @@ variants:
     options: {temperature: 0}
 ```
 
+[`examples/custom_agent.py`](examples/custom_agent.py) documents the whole interface in about 60 lines, and `forkloop compare --config configs/custom-agent.yaml --out runs/custom-agent` runs it offline. Factory modules are imported relative to the working directory.
+
 The agent sees only the instruction, screenshots and its action history: never the expected values, the SQL, the seeding or the oracle. Custom factories are trusted local Python, not sandboxed plugins. Credentials come from environment variables named in the config (`api_key_env`), never from the YAML itself.
 
 ## Share a result

@@ -11,6 +11,7 @@ import inspect
 import json
 import math
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -40,6 +41,22 @@ def _public_options(value: Any) -> None:
 
     _safe_metadata(value)
     json.dumps(value, allow_nan=False)
+
+
+def _import_factory_module(module: str):
+    """Import a custom factory's module the way ``python -m`` would: the current working
+    directory is importable (the installed ``forkloop`` script does not put it on sys.path)."""
+    cwd = os.getcwd()
+    added = cwd not in sys.path
+    if added:
+        sys.path.insert(0, cwd)
+    try:
+        return importlib.import_module(module)
+    except ImportError as exc:
+        raise ValueError(f"cannot import factory module {module!r} from {cwd}: {exc}") from exc
+    finally:
+        if added:
+            sys.path.remove(cwd)
 
 
 def configure_policy(raw: dict, base: Path, *, require_env: bool = True) -> ConfiguredPolicy:
@@ -104,7 +121,9 @@ def configure_policy(raw: dict, base: Path, *, require_env: bool = True) -> Conf
         module, symbol = reference.split(":")
         if not module or not symbol.isidentifier():
             raise ValueError("factory must be an importable module:callable")
-        constructor = getattr(importlib.import_module(module), symbol)
+        constructor = getattr(_import_factory_module(module), symbol, None)
+        if constructor is None:
+            raise ValueError(f"factory {reference!r}: module {module!r} has no attribute {symbol!r}")
         if not callable(constructor):
             raise ValueError("factory is not callable")
         if not isinstance(spec.get("revision"), str) or not spec["revision"].strip():

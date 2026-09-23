@@ -1,0 +1,23 @@
+# Bring-your-own-agent template. Runs offline on the fake backend:
+#   forkloop compare --config configs/custom-agent.yaml --out runs/custom-agent
+# Swap `backend: solari` (and a real model inside examples/custom_agent.py) for a live run.
+version: 1
+world: claims-ops-v1
+backend: fake
+family: resolve_denial
+split: train
+seeds: [200, 201]
+budget:
+  max_steps: 5
+  max_seconds: 60
+variants:
+  - name: agent v1 (gives up)
+    factory: examples.custom_agent:make_agent
+    revision: example-v1
+    options:
+      plan: []
+  - name: agent v2 (clicks, then gives up)
+    factory: examples.custom_agent:make_agent
+    revision: example-v2
+    options:
+      plan: ["click(640, 90)", "key(\"Escape\")"]
