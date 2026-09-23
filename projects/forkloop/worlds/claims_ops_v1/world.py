@@ -280,7 +280,17 @@ class ClaimsOpsWorld(World):
         # flags, FORKLOOP_CHROME_DROP removes base flags (space-separated); either forces a relaunch.
         extra = os.environ.get("FORKLOOP_CHROME_FLAGS", "").split()
         drop = set(os.environ.get("FORKLOOP_CHROME_DROP", "").split())
-        if not extra and not drop:
+        # Goldens built before 2026-09-23 lack PasswordLeakDetectionEnabled=false: Chrome then opens
+        # every episode with a "password found in a data breach" dialog over the claims list (the
+        # synthetic portal login is agent/agent). Install the current policy and relaunch once.
+        policy_path = "/etc/opt/chrome/policies/managed/forkloop.json"
+        r = await machine.exec("sh", ["-c", f"grep -c PasswordLeakDetectionEnabled {policy_path} 2>/dev/null || true"])
+        stale_policy = (r.stdout or "").strip() in ("", "0")
+        if stale_policy:
+            policy = (Path(__file__).parent / "chrome_policy.json").read_bytes()
+            await machine.exec("sh", ["-c", f"mkdir -p $(dirname {policy_path}) && echo "
+                                            f"{base64.b64encode(policy).decode()} | base64 -d > {policy_path}"])
+        if not extra and not drop and not stale_policy:
             r = await machine.exec("sh", ["-c", "ps -eo args | grep -m1 '[g]oogle-chrome' | grep -c -- '--disable-gpu'"])
             if r.stdout.strip() == "1":
                 return False

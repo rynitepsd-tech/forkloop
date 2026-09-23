@@ -336,8 +336,10 @@ async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
     world = load_world("claims-ops-v1")
     calls: list[str] = []
 
-    def machine(flag_present: bool, comes_up: bool = True):
+    def machine(flag_present: bool, comes_up: bool = True, policy_current: bool = True):
         async def exec_(cmd, args=None, **kw):
+            if "grep -c PasswordLeakDetectionEnabled" in (args or [""])[-1]:
+                return SimpleNamespace(exit_code=0, stdout="1\n" if policy_current else "0\n", stderr="")
             calls.append(" ".join(args or []))
             if "grep -c -- '--disable-gpu'" in (args or [""])[-1]:
                 return SimpleNamespace(exit_code=0, stdout="1\n" if flag_present else "0\n", stderr="")
@@ -358,6 +360,11 @@ async def test_ensure_chrome_gpu_flag_relaunches_only_when_missing():
     import pytest
     with pytest.raises(RuntimeError, match="Chrome did not come up"):
         await world.ensure_chrome_gpu_flag(machine(False, comes_up=False))
+    # a golden without the leak-detection policy gets it installed and Chrome relaunched once
+    calls.clear()
+    assert await world.ensure_chrome_gpu_flag(machine(True, policy_current=False)) is True
+    assert "base64 -d > /etc/opt/chrome/policies/managed/forkloop.json" in calls[0]
+    assert any("CHROME_OK" in c for c in calls)
 
 
 def test_insurance_row_carries_subscriber_sex_and_address(world):
