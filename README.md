@@ -1,51 +1,14 @@
 # Forkloop
 
-Compare computer-use policies on a seeded **denial appeal across real OpenEMR 8.3
-and a synthetic payer portal**. Run matched attempts on Solari desktops, verify what
-persisted in the databases, and inspect the evidence behind each regression.
-All patient and claims data is synthetic.
+**Regression testing for computer-use agents, scored by the database instead of by the agent's own account of what it did.**
 
-**[Open the evidence report](https://rynitepsd-tech.github.io/forkloop/)**
-— no installation or account is needed. A [downloadable HTML copy](projects/forkloop/docs/worked-example/report.html)
-is also included. The portal said “Appeal submitted”; the database held the wrong authorization.
-The report connects the failed check to the typed value and retained screenshot.
+Forkloop runs two versions of a GUI agent on the same seeded denial-appeal task in **real OpenEMR 8.3 plus a synthetic payer portal** on Solari desktops. It checks what actually persisted and links every verdict to its screenshots and database rows. All patient and claims data is synthetic.
 
-**[Inspect the recovered prompt comparison](https://rynitepsd-tech.github.io/forkloop/navigation-comparison.html)**
-— two completed matched development seeds: compact prompt 0/2, workflow prompt
-2/2. The original four-pair experiment was interrupted, so the report retains
-every planned cell and withholds a winner. This is check-summary evidence, not
-a complete replay or a held-out reliability claim.
+**[See a real failure report](https://rynitepsd-tech.github.io/forkloop/)** (no install). An agent's appeal was accepted by the portal, but the authorization number it typed was missing one character, so the verifier rejected the episode as `WRONG_VALUE`.
 
-**[Read the recorded-observation study](projects/forkloop/docs/frozen-v3-evaluation-results.md)**
-— high image detail selected exact authorization typing on 19/20 states, versus
-0/20 with low detail. A separate 18-state development validation made 16 exact
-proposals with no wrong entries and two abstentions under a two-view agreement
-rule. These are saved-state decisions, not live task completion; negative
-verification and magnification findings are included.
+**[Install and try it offline in two minutes →](projects/forkloop/README.md)** It covers five verifier controls with HTML reports, a matched A/B `compare` with an exact paired test and CI-friendly exit codes, and a template for plugging in your own agent.
 
-The supported product now includes:
-
-- **`forkloop demo`**: five no-account verifier controls, each with an HTML report.
-- **`forkloop doctor`**: actionable setup checks without a VM allocation or model call.
-- **`forkloop compare`**: two identified policies, matched seeds/resets/budgets, every
-  attempted or missing cell retained, and no successful-retry selection.
-- **`forkloop compare-report`**: paired outcomes, changed settings and inspectable
-  episode evidence. Incomplete or non-comparable evidence cannot recommend a winner.
-
-**Live allocation hold:** new Forkloop Solari desktops and sandboxes are paused
-until billable lifetime can be bounded. A new ledger or pricing review cannot
-clear this hold. Offline workflows, report inspection and resource cleanup remain available.
-
-**[Install and run Forkloop](projects/forkloop/README.md)**
-· [Live comparison configuration](projects/forkloop/configs/denial-navigation.json)
-· [33-second evidence explainer](projects/forkloop/docs/worked-example/demo.mp4)
-· [Verification receipts](projects/forkloop/docs/product-handoff.md)
-· [Scope and limitations](projects/forkloop/docs/limitations.md)
-
-Solari snapshots, revert and fork make the world reusable. Forkloop additionally
-seeds application state and checks equivalence; restore alone is not a full reset.
-Checks cover configured tables, not global safety. Training remains research, and
-external adoption is not claimed.
+Live Solari allocation is paused in code until VM lifetime can be bounded ([issue #1](https://github.com/rynitepsd-tech/forkloop/issues/1)). Everything offline works, and so does cleanup of existing machines.
 
 ## Solari Cookbook provenance
 
