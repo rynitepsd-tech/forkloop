@@ -9,6 +9,7 @@ commands run locally against files under the fake machine root.
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
@@ -125,7 +126,9 @@ class DbAccess:
 
     # ----------------------------------------------------------------- basics
     def _mysql_prefix(self) -> str:
-        return (f'mysql --batch --raw -u {shlex.quote(self.user or "")} '
+        # --batch without --raw: mysql escapes tab, newline, NUL and backslash in values, so a
+        # multi-line value (OpenEMR log comments) stays one row; _parse_tsv decodes it.
+        return (f'mysql --batch -u {shlex.quote(self.user or "")} '
                 f'--password="$(cat {shlex.quote(self.password_file or "")})" {shlex.quote(self.database or "")}')
 
     async def query(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
@@ -256,8 +259,13 @@ def _parse_tsv(text: str) -> list[dict[str, Any]]:
     return rows
 
 
+_MYSQL_ESCAPES = {"t": "\t", "n": "\n", "0": "\0", "\\": "\\"}
+
+
 def _unescape(v: str) -> str:
-    return v.replace("\\t", "\t").replace("\\n", "\n").replace("\\\\", "\\")
+    """Decode mysql --batch escaping in one left-to-right pass (sequential replaces
+    would turn an escaped backslash followed by 't' into a tab)."""
+    return re.sub(r"\\(.)", lambda m: _MYSQL_ESCAPES.get(m.group(1), "\\" + m.group(1)), v)
 
 
 __all__ = ["DbAccess", "DbError", "row_hash"]

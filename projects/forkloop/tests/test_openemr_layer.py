@@ -352,3 +352,13 @@ def test_install_sh_static():
     assert "interface/login/login.php?site=" in text
     if shutil.which("bash"):
         subprocess.run(["bash", "-n", str(path)], check=True)
+
+
+def test_mysql_batch_output_keeps_multiline_values_in_one_row():
+    """mysql --batch escapes tab/newline/backslash; decoding is one pass, so an escaped
+    backslash followed by 't' is not a tab (2026-09-22 review)."""
+    from forkloop.dbaccess import _parse_tsv, _unescape
+
+    rows = _parse_tsv("id\tcomments\n7\tUPDATE log\\nSET x = 'a\\\\tb'\n8\tNULL\n")
+    assert rows == [{"id": "7", "comments": "UPDATE log\nSET x = 'a\\tb'"}, {"id": "8", "comments": None}]
+    assert _unescape("C:\\\\temp") == "C:\\temp"
