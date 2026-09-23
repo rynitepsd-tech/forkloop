@@ -126,7 +126,9 @@ def summarize_episodes(episodes: list[dict[str, Any]], *, vm_hour_usd: float = 0
     steps = [len(e["steps"]) for e in episodes]
     walls = [float((e["verdict"] or {}).get("wall_seconds", 0.0)) for e in episodes if e["verdict"]]
     n_actions = sum(steps)
-    n_invalid = sum(1 for e in episodes for s in e["steps"] if not s.get("valid", True))
+    # A backend failure is recorded valid=False but is not the policy's invalid action.
+    n_invalid = sum(1 for e in episodes for s in e["steps"]
+                    if not s.get("valid", True) and not str(s.get("error") or "").startswith("backend failed:"))
     per_ep = [episode_tokens(e) for e in episodes]
     tokens = {k: sum(t[k] for t in per_ep) for k in ("in", "out", "cache_read", "cache_write")}
     # Reset/setup is outside EpisodeRecorder's clock. Search parent time already

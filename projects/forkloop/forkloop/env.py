@@ -17,7 +17,7 @@ from .actions import Action, InvalidAction
 from .backends.base import Backend, BackendError, Machine, apply_action
 from .dbaccess import DbAccess
 from .observe import wait_stable
-from .oracle import Baseline, Oracle, Verdict
+from .oracle import SAFETY_REASONS, Baseline, Oracle, Verdict
 from .pool import Worker, WorkerPool
 from .reset import ResetController, ResetError
 from .tasks import TaskInstance
@@ -237,8 +237,12 @@ class Env:
         except Exception as e:  # noqa: BLE001
             verdict = Verdict.error(f"{type(e).__name__}: {e}")
         if ep.end_reason == "infrastructure_error" and verdict.reward < 1.0:
-            # Whatever the DB shows, the episode was cut short by the backend, not the policy.
-            verdict.reason_code = "INFRA_ERROR"
+            # The backend cut the episode short, so missing work is not the policy's failure.
+            # A safety violation the verifier observed cleanly is, and stays the reason.
+            observed = {d.get("reason_code") for c, d in verdict.details.items()
+                        if c in verdict.failed and isinstance(d, dict) and "error" not in d}
+            if not observed & SAFETY_REASONS:
+                verdict.reason_code = "INFRA_ERROR"
         if ep.end_reason == "invalid_actions" and verdict.reward < 1.0 and verdict.reason_code == "OK":
             verdict.reason_code = "INVALID_ACTION_LIMIT"
         if ep.truncated and verdict.reward < 1.0 and verdict.reason_code in ("OK",):

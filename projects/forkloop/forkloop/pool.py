@@ -43,7 +43,10 @@ def _log(event: dict[str, Any]) -> None:
 #: parent's run_id): machines this process created, and creates still in flight. Reaping
 #: must not kill either — only machines no one here ever received a handle for.
 _CREATED: dict[str, set[str]] = {}
-_INFLIGHT: dict[str, int] = {}
+_INFLIGHT: dict[str, dict[object, float]] = {}  # run_id -> {token: monotonic start}
+#: A create older than this is presumed hung (Solari creates have hung for minutes); reaping
+#: is deferred only for younger ones, so a hung create cannot block orphan cleanup.
+INFLIGHT_DEFER_S = 60.0
 
 
 def _is_revert_refusal(e: BaseException) -> bool:
@@ -254,7 +257,8 @@ class WorkerPool:
             try:
                 # Solari's create call has been seen to hang for many minutes with no answer
                 # (2026-09-02); treat that like a capacity error and try again.
-                _INFLIGHT[self.run_id] = _INFLIGHT.get(self.run_id, 0) + 1
+                token = object()
+                _INFLIGHT.setdefault(self.run_id, {})[token] = time.monotonic()
                 try:
                     machine = await asyncio.wait_for(self.backend.create(
                         template=self.world.config.template, from_snapshot=from_snapshot,
@@ -262,7 +266,7 @@ class WorkerPool:
                         record=self.record, metadata={"forkloop": "1", "run_id": self.run_id, "world": self.world.name},
                         timeout_ms=self.timeout_ms, disk_gb=self.disk_gb), timeout=self.create_timeout_s)
                 finally:
-                    _INFLIGHT[self.run_id] -= 1
+                    _INFLIGHT[self.run_id].pop(token, None)
                 _CREATED.setdefault(self.run_id, set()).add(machine.id)
                 return machine
             except (ConcurrencyError, CapacityError, asyncio.TimeoutError) as e:
@@ -306,7 +310,8 @@ class WorkerPool:
         killed: list[str] = []
         if not self.reap_orphans_enabled:
             return killed
-        if _INFLIGHT.get(self.run_id, 0) > 0:
+        now = time.monotonic()
+        if any(now - started < INFLIGHT_DEFER_S for started in _INFLIGHT.get(self.run_id, {}).values()):
             # Another worker's create is pending: the unowned machine may be seconds from
             # being its handle. Let the caller back off instead.
             _log_and_append(self.events, {"t": time.time(), "event": "reap_deferred_create_in_flight"})

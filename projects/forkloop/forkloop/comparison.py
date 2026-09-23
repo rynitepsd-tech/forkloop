@@ -247,7 +247,8 @@ async def run_comparison(world: World | str, backend: Backend, variants: Sequenc
                         raise RuntimeError(step_info["error"])
                     if terminated or truncated:
                         verdict = await env.verify()
-                        cell["status"] = "oracle_error" if verdict.reason_code == "ORACLE_ERROR" else "completed"
+                        cell["status"] = ("oracle_error" if verdict.reason_code == "ORACLE_ERROR" else
+                                          "infrastructure_error" if verdict.reason_code == "INFRA_ERROR" else "completed")
                         break
             except BaseException as exc:
                 cell.update(status=("setup_error" if phase == "setup" else "execution_error") if isinstance(exc, Exception) else "interrupted", error=_error(exc))
@@ -557,6 +558,8 @@ def summarize_comparison(output: str | Path) -> dict[str, Any]:
                     row["issues"].append("no verifier result was saved; episode is unscored")
                 elif verdict.get("reason_code") == "ORACLE_ERROR":
                     row["issues"].append("oracle execution failed; episode is unscored")
+                elif verdict.get("reason_code") == "INFRA_ERROR":
+                    row["issues"].append("backend failures ended the episode; unscored")
                 elif type(verdict.get("n_steps")) is not int or verdict["n_steps"] != len(episode["steps"]):
                     row["issues"].append("recorded step count differs from verifier result")
                 if any(type(step.get("i")) is not int or step["i"] != index for index, step in enumerate(episode["steps"])):
@@ -571,7 +574,7 @@ def summarize_comparison(output: str | Path) -> dict[str, Any]:
                     row["issues"].append("recorded baseline missing or differs from cell baseline")
                 report_path = episode_path / "report.html"
                 row["report"] = report_path.relative_to(root.resolve()).as_posix() if report_path.is_file() and report_path.resolve().is_relative_to(root.resolve()) else None
-                if row["status"] == "completed" and verdict and verdict.get("reason_code") != "ORACLE_ERROR":
+                if row["status"] == "completed" and verdict and verdict.get("reason_code") not in ("ORACLE_ERROR", "INFRA_ERROR"):
                     reward = verdict.get("reward")
                     if type(reward) not in (int, float) or not math.isfinite(reward) or reward not in (0, 1):
                         row["issues"].append("invalid oracle reward")

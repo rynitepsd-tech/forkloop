@@ -246,7 +246,8 @@ def _norm_int(v: Any) -> Optional[int]:
 
 
 def _parse_tsv(text: str) -> list[dict[str, Any]]:
-    lines = text.splitlines()
+    # mysql --batch escapes \n but not \r: split on \n only (splitlines would break CRLF values).
+    lines = text.rstrip("\n").split("\n") if text else []
     if not lines:
         return []
     header = lines[0].split("\t")

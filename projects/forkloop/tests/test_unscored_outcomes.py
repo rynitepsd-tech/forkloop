@@ -120,3 +120,37 @@ def test_identifiers_with_leading_zeros_are_not_numbers():
     assert _compare("eq", "0123", "0123")
     assert not _compare("eq", "123", "0123")
     assert _compare("eq", "7", 7) and _compare("eq", "0", 0) and _compare("eq", "-5", -5)
+
+
+class _OkDb:
+    async def query(self, sql, params=None):
+        return [{"v": "CHANGED"}]
+
+
+async def test_an_errored_check_does_not_hide_a_violation_another_check_observed():
+    ctx = OracleContext(dbs={"portal": _OkDb(), "dead": _DeadDb()}, baseline=None, primary_keys={},
+                        exempt_tables=[], audit={}, page_views=None, forbidden_paths=[])
+    spec = OracleSpec(effects=[Check(id="appeal", kind="query", db="dead", sql="SELECT 1", equals=1, reason_code="NOT_DONE")],
+                      invariants=[Check(id="distractor", kind="query", db="portal", sql="SELECT 1", equals="DENIED",
+                                        reason_code="WRONG_RECORD")])
+    v = await Oracle(ctx).evaluate(spec)
+    assert v.reason_code == "WRONG_RECORD"
+
+
+def test_backend_failure_steps_are_not_invalid_actions():
+    ep = _episode("INFRA_ERROR")
+    ep["steps"] = [{"valid": False, "error": "backend failed: ConnectionError: x"},
+                   {"valid": False, "error": "apply failed: ActionError: empty key"}, {"valid": True}]
+    s = summarize_episodes([ep])
+    assert s["invalid_action_rate"]["k"] == 1
+
+
+def test_setup_errors_exit_4_not_the_regression_code(tmp_path, monkeypatch):
+    from forkloop.cli import main
+
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("version: 1\nbackend: solari\nseeds: [1]\nvariants:\n"
+                   "  - {name: a, policy: scripted, options: {actions: []}}\n"
+                   "  - {name: b, policy: scripted, options: {actions: []}}\n")
+    monkeypatch.delenv("SOLARI_API_KEY", raising=False)
+    assert main(["compare", "--config", str(cfg), "--out", str(tmp_path / "out"), "--fail-on-regression"]) == 4

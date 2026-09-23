@@ -43,8 +43,8 @@ def _backend(name: str, world: Any, latency: float = 0.0):
     try:
         return SolariBackend()
     except BackendError as e:
-        raise SystemExit(f"{e} (the default backend is the paid Solari desktop; pass --backend fake for the offline "
-                         "simulation, or export SOLARI_API_KEY and FORKLOOP_SESSION_LEDGER for a live run)") from None
+        raise ValueError(f"{e} (the default backend is the paid Solari desktop; pass --backend fake for the offline "
+                         "simulation)") from None
 
 
 
@@ -745,11 +745,18 @@ def main(argv: Optional[list[str]] = None) -> int:
             ap.error("report --crop-top must be nonnegative")
         if args.format != "html" and args.crop_top:
             ap.error("report --crop-top requires --format html")
+    from .backends.base import BackendError
+    from .spending import BudgetExceeded
+
     try:
         return int(args.fn(args) or 0)
-    except (ValueError, TypeError, OSError) as exc:
-        # Distinct from argparse's usage errors (2) and incomplete comparison evidence (3).
+    except (ValueError, TypeError, OSError, BackendError, BudgetExceeded) as exc:
+        # Distinct from argparse's usage errors (2), incomplete comparison evidence (3) and a
+        # regression (1): CI must not read a broken setup as a regression.
         print(f"forkloop {args.cmd}: error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    except RuntimeError as exc:
+        print(f"forkloop {args.cmd}: error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
 

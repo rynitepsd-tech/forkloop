@@ -91,9 +91,17 @@ async def test_reap_is_deferred_while_a_create_is_in_flight(world, backend):
     from forkloop import pool as pool_module
 
     p = WorkerPool(backend, world, size=1, mode="fork", run_id="run-inflight")
-    pool_module._INFLIGHT["run-inflight"] = 1
+    import time as _time
+
+    token = object()
+    pool_module._INFLIGHT["run-inflight"] = {token: _time.monotonic()}
     try:
         assert await p.reap_orphans() == []
         assert any(e["event"] == "reap_deferred_create_in_flight" for e in p.events)
+        # a create pending longer than INFLIGHT_DEFER_S is presumed hung and no longer defers reaping
+        pool_module._INFLIGHT["run-inflight"][token] -= pool_module.INFLIGHT_DEFER_S + 1
+        p.events.clear()
+        await p.reap_orphans()
+        assert not any(e["event"] == "reap_deferred_create_in_flight" for e in p.events)
     finally:
-        pool_module._INFLIGHT["run-inflight"] = 0
+        pool_module._INFLIGHT.pop("run-inflight", None)

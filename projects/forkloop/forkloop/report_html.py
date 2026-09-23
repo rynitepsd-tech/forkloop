@@ -228,8 +228,11 @@ def _episode(ep: Path, index: int, turns: int, crop_top: int) -> str:
     details = v.get("details") or {}
     prefix = f"episode-{index}"
     reward = v.get("reward")
-    outcome = "Outcome unavailable" if reward is None else "Task accepted" if reward == 1 else "Task rejected"
-    tone = "unknown" if reward is None else "good" if reward == 1 else "bad"
+    unscored = v.get("reason_code") in ("ORACLE_ERROR", "INFRA_ERROR")
+    outcome = ("Outcome unavailable" if reward is None else
+               "Unscored · verifier or infrastructure error" if unscored and reward != 1 else
+               "Task accepted" if reward == 1 else "Task rejected")
+    tone = "unknown" if reward is None or (unscored and reward != 1) else "good" if reward == 1 else "bad"
     specs = {c["id"]: c for group in ("effects", "invariants") for c in (m.get("oracle") or {}).get(group, [])}
     incomplete = not specs or bool(_missing_checks(details, specs))
     if reward == 1 and (incomplete or v.get("failed") or any(d.get("passed") is False for d in details.values() if isinstance(d, dict))):

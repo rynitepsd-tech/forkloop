@@ -388,14 +388,16 @@ def run_report(run_dir: str | Path, *, all_attempts: bool = False) -> str:
                  f"{str(r['reason']):<22} {str(r['end']):<12} {str(r['steps']):>5} {wall:>7} {r['highest']:<20} "
                  + (", ".join(r["safety_failed"]) or "-")
                  + (" [invariant evidence unavailable]" if r["safety_missing"] or not r["safety_spec"] else ""))
-    k = sum(1 for r in rows if (r["reward"] or 0) >= 1.0)
-    available = sum(r["reward"] is not None for r in rows)
+    from .metrics import UNSCORED_REASONS
+    scored = [r for r in rows if r["reward"] is not None and r["reason"] not in UNSCORED_REASONS]
+    k = sum(1 for r in scored if (r["reward"] or 0) >= 1.0)
+    available = len(scored)
     p, lo, hi = wilson(k, available)
     L.append("")
     L.append(f"success   {k}/{available} recorded outcomes"
              + (f" = {p * 100:.1f}% (Wilson 95% [{lo * 100:.1f}, {hi * 100:.1f}])" if available else "; rate unavailable"))
-    L.append(f"coverage  {len(rows) - available} episode(s) without a recorded reward; excluded from rate, not successes "
-             "or measured policy failures")
+    L.append(f"coverage  {len(rows) - available} episode(s) without a recorded reward or ended by an oracle/infrastructure "
+             "error; excluded from rate, not successes or measured policy failures")
     L.append("meaning   this directory's recorded cohort only, not a general success rate; constructed controls "
              "and simulations do not measure live policy reliability")
     L.append("reasons   " + ", ".join(f"{c}={n}" for c, n in sorted(Counter(str(r["reason"]) for r in rows).items())))

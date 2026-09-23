@@ -30,7 +30,7 @@ The image-detail result (19/20 vs 0/20) applies to hosted GPT-5.6 Luna, not Fara
 `StudentPolicy(history_notes=True)` already shows the policy's own earlier reasoning next to each history action. Recipe v4-notes trains on that same input:
 
 - `make_sft --with-notes` gives each record `notes`: the reasoning line the teacher wrote on each of the previous ≤8 steps, extracted with the same function serving uses (`note_from_reply`).
-- `note_from_reply` strips Fara's `<think>` and `<tool_call>` wrappers, and keeps a memorized fact as `Memorized: …`. A Fara reply and a compact training target with the same reasoning therefore produce the same note. `tests/test_observation_contract.py` checks that the training and serving prompts are identical.
+- `note_from_reply` strips Fara's `<think>` and `<tool_call>` wrappers, so a Fara reply and a compact training target with the same reasoning produce the same note. `tests/test_observation_contract.py` checks that the training and serving prompts are identical. At serving time it also keeps a `pause_and_memorize_fact` fact as `Memorized: …`; the teacher never used that action, so training notes never contain one.
 - Under exactly the serving-time format, all 25 typing steps in the training set have the number in their last 8 notes.
 
 `data/sft_f3_25_v4notes.jsonl` is the v3 dataset (sha256 `194022b8…`) with one change: the `notes` field. The training command is v3's main command with only the data and output directory changed, capped at v3's 411 optimizer steps. So v3 → v4 is a one-variable ablation.
