@@ -414,6 +414,17 @@ def _content_text(content: Any) -> str:
 # Policy
 # --------------------------------------------------------------------------- #
 
+#: Models the guarded OpenAI path may call, USD per 1M tokens:
+#: (input, output) at <= 272K prompt tokens, then (input, output) above it. Cache reads are
+#: 0.1x input and cache writes 1.25x input. Both have a 1,050,000-token context window.
+#: Source: developers.openai.com/api/docs/pricing (gpt-5.6-luna read 2026-09-03 and 2026-09-15;
+#: gpt-6-luna read 2026-09-23).
+GUARDED_OPENAI_PRICES: dict[str, tuple[float, float, float, float]] = {
+    "gpt-5.6-luna": (.2, 1.2, .4, 1.8),
+    "gpt-6-luna": (.1, .5, .2, .75),
+}
+
+
 class StudentPolicy(BranchablePolicy):
     branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step")
 
@@ -775,8 +786,10 @@ class StudentPolicy(BranchablePolicy):
         if urlparse(self.base_url).hostname.rstrip(".") == "api.openai.com":
             if not self.session_ledger:
                 raise ValueError("OpenAI calls require FORKLOOP_SESSION_LEDGER")
-            if body.get("model") != "gpt-5.6-luna":
+            prices = GUARDED_OPENAI_PRICES.get(body.get("model"))
+            if prices is None:
                 raise ValueError("no verified conservative bound configured for this OpenAI model")
+            short_in, short_out, long_in, long_out = prices
             output_limit = body.get("max_completion_tokens", body.get("max_tokens"))
             if type(output_limit) is not int or not 0 < output_limit <= self.max_tokens:
                 raise ValueError("explicit output-token cap missing or overridden")
@@ -789,9 +802,9 @@ class StudentPolicy(BranchablePolicy):
             # Verified model pricing (2026-09-15): include the 1.25x cache-write
             # premium on top of the 2x long-context input rate. Reserve a full
             # context per choice; do not assume automatic caching is a discount.
-            upper = n * (1_050_000 * .50 + output_limit * 1.80) / 1e6
+            upper = n * (1_050_000 * long_in * 1.25 + output_limit * long_out) / 1e6
             ledger = SessionLedger(self.session_ledger)
-            operation = ledger.reserve("openai", upper, label="chat/completions:gpt-5.6-luna",
+            operation = ledger.reserve("openai", upper, label=f"chat/completions:{body['model']}",
                                        evidence={"max_output_tokens": output_limit, "n": n, "input_bound": 1050000,
                                                  "cache_write_multiplier": 1.25})
         self.n_requests += 1
@@ -810,7 +823,7 @@ class StudentPolicy(BranchablePolicy):
                     if (any(type(value) is not int or value < 0 for value in (inp, out, cached, written))
                             or cached + written > inp):
                         raise ValueError("invalid provider token usage; retaining full reservation")
-                    p_in, p_out = (.4, 1.8) if inp > 272000 else (.2, 1.2)
+                    p_in, p_out = (long_in, long_out) if inp > 272000 else (short_in, short_out)
                     cost = ((inp - cached - written) * p_in + cached * p_in * .1
                             + written * p_in * 1.25 + out * p_out) / 1e6
                     ledger.reconcile(operation, cost, status="response_usage", evidence={"usage": usage, "response_id": data.get("id")})

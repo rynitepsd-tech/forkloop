@@ -155,6 +155,25 @@ async def test_openai_cache_writes_are_reserved_and_charged_at_long_context_rate
         await policy.aclose()
 
 
+async def test_gpt6_luna_is_reserved_and_charged_at_its_own_rates(tmp_path):
+    ledger = SessionLedger.create(tmp_path / "ledger.sqlite")
+    reserved = (1_050_000 * .2 * 1.25 + 100 * .75) / 1e6
+
+    def respond(request):
+        assert ledger.summary()["services"]["openai"]["pending_upper_usd"] == pytest.approx(reserved)
+        return httpx.Response(200, json={"choices": [], "usage": {"prompt_tokens": 10_000, "completion_tokens": 100}})
+
+    policy = StudentPolicy("https://api.openai.com/v1", "gpt-6-luna", hosted_reasoning=True, max_tokens=100,
+                           session_ledger=str(ledger.path), transport=httpx.MockTransport(respond))
+    try:
+        await policy._post({"model": "gpt-6-luna", "max_completion_tokens": 100})
+        assert ledger.summary()["services"]["openai"]["actual_usd"] == pytest.approx((10_000 * .1 + 100 * .5) / 1e6)
+        with pytest.raises(ValueError, match="no verified conservative bound"):
+            await policy._post({"model": "gpt-6-sol", "max_completion_tokens": 100})
+    finally:
+        await policy.aclose()
+
+
 def test_measurements_count_secondary_failures_setup_and_losing_branches(tmp_path):
     ep=_ep([{'in':100,'out':10}],reward=0,wall=100)
     ep['dir']=tmp_path

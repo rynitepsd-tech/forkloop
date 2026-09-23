@@ -54,6 +54,8 @@ MODEL_PRICES_PER_M: dict[str, tuple[float, float]] = {
     "gpt-5.6-luna": (0.2, 1.2),
     "gpt-5.6-terra": (2.0, 12.0),
     "gpt-5.6-sol": (4.0, 20.0),
+    # gpt-6-luna, same page read 2026-09-23 (short context)
+    "gpt-6-luna": (0.1, 0.5),
 }
 CACHE_READ_MULT, CACHE_WRITE_MULT = 0.1, 1.25
 

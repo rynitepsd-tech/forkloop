@@ -51,6 +51,7 @@ def test_prompt_file_content_not_filename_identifies_policy(tmp_path):
 @pytest.mark.parametrize("options", [
     {"base_url": "http://api.openai.com/v1", "model": "gpt-5.6-luna"},
     {"base_url": "https://api.openai.com/v1", "model": "gpt-5.6-luna", "max_tokens": 0},
+    {"base_url": "https://api.openai.com/v1", "model": "gpt-6-sol"},
 ])
 def test_invalid_hosted_configuration_fails_without_allocating(tmp_path, monkeypatch, options):
     monkeypatch.setenv("OPENAI_API_KEY", "private-value")

@@ -88,8 +88,9 @@ def configure_policy(raw: dict, base: Path, *, require_env: bool = True) -> Conf
             raise ValueError(f"{name}: student requires an explicit model")
         if urlsplit(url).hostname.rstrip(".") == "api.openai.com":
             key_env = key_env or "OPENAI_API_KEY"
-            if model != "gpt-5.6-luna":
-                raise ValueError("The guarded OpenAI path currently supports gpt-5.6-luna only")
+            from .policies.student import GUARDED_OPENAI_PRICES
+            if model not in GUARDED_OPENAI_PRICES:
+                raise ValueError(f"The guarded OpenAI path supports {', '.join(GUARDED_OPENAI_PRICES)} only")
             options.setdefault("hosted_reasoning", True)
             options.setdefault("max_tokens", 4096)
             options.setdefault("image_detail", "high")
