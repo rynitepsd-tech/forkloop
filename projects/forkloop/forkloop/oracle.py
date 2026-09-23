@@ -278,7 +278,9 @@ def _norm(v: Any) -> Any:
         s = v.strip()
         try:
             f = float(s)
-            if f.is_integer() and s.lstrip("-").isdigit():
+            digits = s.lstrip("-")
+            # Canonical integers only: "0123" is an identifier and must not equal "123".
+            if f.is_integer() and digits.isdigit() and (digits == "0" or not digits.startswith("0")):
                 return int(f)
         except ValueError:
             pass

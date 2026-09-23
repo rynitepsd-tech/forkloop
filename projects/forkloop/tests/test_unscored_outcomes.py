@@ -112,3 +112,11 @@ async def test_backend_failure_steps_carry_the_backend_prefix(world, backend):
     assert str(info["error"]).startswith(BACKEND_FAILURE_PREFIX)
     await env.close()
     await pool.close()
+
+
+def test_identifiers_with_leading_zeros_are_not_numbers():
+    from forkloop.oracle import _compare
+
+    assert _compare("eq", "0123", "0123")
+    assert not _compare("eq", "123", "0123")
+    assert _compare("eq", "7", 7) and _compare("eq", "0", 0) and _compare("eq", "-5", -5)
