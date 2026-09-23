@@ -60,8 +60,10 @@ async def create_desktop(
 ) -> Desktop:
     """create_desktop on the unified /sandboxes route (kind=desktop). This is the
     only route that accepts from_snapshot; DesktopClient.create does not."""
-    from forkloop.spending import require_solari_lifetime_bound
-    require_solari_lifetime_bound()
+    from forkloop.spending import BudgetExceeded
+    # Spike allocators bypass the session ledger and the enforced lifetime: always refuse.
+    # Use the forkloop CLI (ledger + FORKLOOP_SOLARI_MAX_LIFETIME_MIN) for live work.
+    raise BudgetExceeded("spike allocators are retired; use forkloop commands with a session ledger")
     return await client.create_desktop(
         # A snapshot already implies its template; the gateway may reject both together.
         template=None if from_snapshot else "default",

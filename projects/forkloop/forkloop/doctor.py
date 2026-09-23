@@ -134,10 +134,12 @@ async def doctor(*, world: str = "claims-ops-v1", family: str = "resolve_denial"
         add("solari.plan", "pass" if plan == "starter" else "fail", "Starter safety bounds selected; actual account plan is not verified." if plan == "starter" else "Current safety guard supports Starter only.",
             "Verify a funded Starter account in the Solari console; setting SOLARI_PLAN never upgrades your account.")
         try:
-            require_solari_lifetime_bound()
+            hours = require_solari_lifetime_bound()
+            add("solari.lifetime", "pass", f"Each machine is killed after {hours * 60:.0f} minutes; run "
+                f"`forkloop reap --older-than-min {hours * 60:.0f}` from a second process as the safety net.")
         except BudgetExceeded as exc:
             add("solari.lifetime", "fail", str(exc),
-                "Use the no-account workflow. Resume paid allocations only after an enforceable provider lifetime or spending bound is established.")
+                "Set the lifetime and balance-bound variables to opt in, or use the no-account workflow.")
         try:
             pricing = load_solari_pricing(pricing_file)
             hourly = pricing.hourly(cpu, mem_mb, desktop=kind == "desktop")

@@ -38,4 +38,4 @@ def reviewed_solari_pricing(tmp_path, monkeypatch):
 def simulated_solari_lifetime(monkeypatch):
     """Exercise lifecycle mechanics using test-local SDK fakes, never a provider."""
     monkeypatch.setattr("forkloop.spending.SolariPricing.reservation", lambda self, hourly_usd: hourly_usd)
-    monkeypatch.setattr("forkloop.spending.require_solari_lifetime_bound", lambda: None)
+    monkeypatch.setattr("forkloop.spending.require_solari_lifetime_bound", lambda: 5.0)

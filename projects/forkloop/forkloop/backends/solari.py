@@ -297,6 +297,34 @@ class SolariBackend:
         self.session_ledger = session_ledger or os.environ.get("FORKLOOP_SESSION_LEDGER")
         self.pricing_file = pricing_file or os.environ.get("FORKLOOP_SOLARI_PRICING_FILE")
         self.resources: dict[str, dict] = {}
+        self._enforcer: Optional[asyncio.Task] = None
+
+    def _ensure_lifetime_enforcer(self) -> None:
+        enforcer = getattr(self, "_enforcer", None)
+        if enforcer is None or enforcer.done():
+            self._enforcer = asyncio.get_running_loop().create_task(self._enforce_lifetimes())
+
+    async def enforce_lifetimes_once(self, now: Optional[float] = None) -> list[str]:
+        """Kill every open machine past its hard deadline (FORKLOOP_SOLARI_MAX_LIFETIME_MIN).
+        A machine killed here fails its next action, which the env scores as an
+        infrastructure error, never as the policy's failure."""
+        now = time.time() if now is None else now
+        killed = []
+        for machine_id, resource in list(self.resources.items()):
+            if resource.get("closed") or not resource.get("deadline") or now < resource["deadline"]:
+                continue
+            try:
+                await self.kill_machine(machine_id)
+                resource["killed_at_deadline"] = True
+                killed.append(machine_id)
+            except Exception as exc:  # noqa: BLE001 - retried on the next pass
+                resource["deadline_kill_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        return killed
+
+    async def _enforce_lifetimes(self) -> None:
+        while any(not r.get("closed") for r in self.resources.values()):
+            await asyncio.sleep(30)
+            await self.enforce_lifetimes_once()
 
     def record_resource_closed(self, machine_id: str) -> None:
         resource = self.resources.get(machine_id)
@@ -319,9 +347,9 @@ class SolariBackend:
                      record: Optional[bool] = None, metadata: Optional[dict[str, str]] = None,
                      timeout_ms: int = 30 * 60_000, disk_gb: Optional[int] = None) -> SolariMachine:
         from ..spending import SessionLedger, load_solari_pricing, require_solari_lifetime_bound
-        # First: when allocations are held, ledger or pricing advice would send the user
-        # to fixes that cannot help.
-        require_solari_lifetime_bound()
+        # First: without an explicit lifetime bound, ledger or pricing advice would send the
+        # user to fixes that cannot help.
+        lifetime_h = require_solari_lifetime_bound()
         if not self.session_ledger:
             raise BackendError("Solari creates require FORKLOOP_SESSION_LEDGER; initialize it with forkloop ledger --create")
         if self.plan != "starter":
@@ -359,7 +387,9 @@ class SolariBackend:
             raise _wrap_error(e)
         self.counters["create"] += 1
         self.resources[d.id] = {"operation": operation, "started_at": started,
-                                "hourly_usd": hourly, "closed": False}
+                                "hourly_usd": hourly, "closed": False,
+                                "deadline": started + lifetime_h * 3600}
+        self._ensure_lifetime_enforcer()
         ledger.reconcile(operation, None, status="resource_running",
                          evidence={"machine_id": d.id, **self.resources[d.id]})
         m = SolariMachine(d, self, parse_resolution(resolution), meta, kind=self.kind)
@@ -426,6 +456,9 @@ class SolariBackend:
         self.record_resource_closed(machine_id)
 
     async def close(self) -> None:
+        enforcer = getattr(self, "_enforcer", None)
+        if enforcer is not None and not enforcer.done():
+            enforcer.cancel()
         try:
             await self._client.aclose()
         except Exception:  # noqa: BLE001

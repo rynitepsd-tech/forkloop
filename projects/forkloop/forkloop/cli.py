@@ -23,6 +23,7 @@ import json
 import math
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlsplit
@@ -447,8 +448,16 @@ async def _reap(args: argparse.Namespace) -> int:
     def owned(info: Any) -> bool:
         return args.all_sessions or info.id in machine_operations or info.metadata.get("spend_operation") in operations
 
+    def old_enough(info: Any) -> bool:
+        """--older-than-min: only machines whose ledger records a start at least that long ago."""
+        if getattr(args, "older_than_min", None) is None:
+            return True
+        operation = machine_operations.get(info.id) or info.metadata.get("spend_operation")
+        started = (operations.get(operation, {}).get("evidence") or {}).get("started_at")
+        return isinstance(started, (int, float)) and time.time() - started >= args.older_than_min * 60
+
     try:
-        infos = [info for info in await b.list_machines(metadata={"forkloop": "1"}) if owned(info)]
+        infos = [info for info in await b.list_machines(metadata={"forkloop": "1"}) if owned(info) and old_enough(info)]
         for info in infos:
             if info.state not in active:
                 continue
@@ -466,7 +475,7 @@ async def _reap(args: argparse.Namespace) -> int:
                                  evidence={**evidence, "machine_id": info.id, "closed": True})
         if not args.dry_run:
             remaining = [info for info in await b.list_machines(metadata={"forkloop": "1"})
-                         if owned(info) and info.state in active]
+                         if owned(info) and old_enough(info) and info.state in active]
             print(f"{len(remaining)} selected machines remain active")
             return 1 if remaining else 0
         print(f"{len(infos)} selected machines listed; no resources changed")
@@ -721,6 +730,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--ledger", default=None, help="session ledger; defaults to FORKLOOP_SESSION_LEDGER")
     p.add_argument("--all-sessions", action="store_true", help="explicitly select all Forkloop-tagged machines on the account")
+    p.add_argument("--older-than-min", type=float, default=None, metavar="MINUTES",
+                   help="only machines the ledger started at least this long ago (the out-of-process lifetime safety net; "
+                        "run it in a loop beside a live session)")
     p.set_defaults(fn=lambda a: asyncio.run(_reap(a)))
 
     argv = list(sys.argv[1:] if argv is None else argv)

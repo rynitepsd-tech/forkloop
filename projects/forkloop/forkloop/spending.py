@@ -15,34 +15,59 @@ import sqlite3
 import time
 import uuid
 from pathlib import Path
-from typing import NoReturn
 
 
 class BudgetExceeded(RuntimeError):
     pass
 
 
-def require_solari_lifetime_bound() -> NoReturn:
-    """Refuse allocation until provider enforcement can bound billable lifetime.
+SOLARI_LIFETIME_ENV = "FORKLOOP_SOLARI_MAX_LIFETIME_MIN"
+SOLARI_BALANCE_ENV = "FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND"
+SOLARI_SETUP_MARGIN_H = 10 / 60
 
-    This is a capability hold, not ledger state or a pricing acknowledgment.
-    Idle timeouts and a controller-side watchdog do not survive every failure.
+
+def require_solari_lifetime_bound() -> float:
+    """Return the enforced maximum machine lifetime in hours, or refuse allocation.
+
+    Solari VMs have only a rolling idle timeout, and two desktops were once observed
+    running ~10 h. Live allocation therefore needs an explicit operator opt-in to a bound
+    Forkloop can defend, in three layers:
+
+    1. ``FORKLOOP_SOLARI_MAX_LIFETIME_MIN`` (5–300): a hard lifetime the backend enforces
+       in-process — every machine is killed at its deadline;
+    2. ``forkloop reap --older-than-min N`` run from a separate process (e.g. a loop or
+       cron) kills ledger-owned machines past the same age if the controller died;
+    3. ``FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND=1`` acknowledges that if both controller
+       layers fail, the provider-side limit is the prepaid balance ("we don't bill past your
+       balance"; keep auto top-up off).
+
+    Reservations are sized from (1). Idle timeouts remain requested as defence in depth.
     """
-    raise BudgetExceeded(
-        "Solari allocations are paused: no verified hard lifetime bound. "
-        "Observed desktops exceeded the five-hour reservation assumption. "
-        "A new ledger or pricing review cannot clear this hold; offline workflows "
-        "and existing-resource cleanup remain available."
-    )
+    raw = os.environ.get(SOLARI_LIFETIME_ENV)
+    if not raw or os.environ.get(SOLARI_BALANCE_ENV) != "1":
+        raise BudgetExceeded(
+            "Solari allocations need an explicit lifetime bound: set "
+            f"{SOLARI_LIFETIME_ENV}=<5-300 minutes> (enforced by the controller, plus "
+            "`forkloop reap --older-than-min` from a second process) and "
+            f"{SOLARI_BALANCE_ENV}=1 (the prepaid balance is the provider-side cap; keep auto "
+            "top-up off). VM timeouts are idle-based; observed desktops once ran ~10 h."
+        )
+    try:
+        minutes = float(raw)
+    except ValueError:
+        raise BudgetExceeded(f"{SOLARI_LIFETIME_ENV} must be a number of minutes") from None
+    if not (math.isfinite(minutes) and 5 <= minutes <= 300):
+        raise BudgetExceeded(f"{SOLARI_LIFETIME_ENV} must be between 5 and 300 minutes")
+    return minutes / 60
 
 
 def solari_allocation_status() -> str:
     """One line for diagnostics: whether guarded Solari allocations can run."""
     try:
-        require_solari_lifetime_bound()
+        hours = require_solari_lifetime_bound()
     except BudgetExceeded as exc:
         return f"solari: blocked — {exc}"
-    return "solari: allocations permitted by the lifetime guard"
+    return f"solari: allocations permitted; each machine is killed after {hours * 60:.0f} minutes"
 
 
 @dataclass(frozen=True)
@@ -71,8 +96,8 @@ class SolariPricing:
         return hourly
 
     def reservation(self, hourly_usd: float) -> float:
-        """No finite reservation is defensible under the unresolved lifetime hold."""
-        return require_solari_lifetime_bound()
+        """The enforced lifetime plus a setup margin, at the machine's hourly rate."""
+        return hourly_usd * (require_solari_lifetime_bound() + SOLARI_SETUP_MARGIN_H)
 
     def public_info(self) -> dict:
         return {
