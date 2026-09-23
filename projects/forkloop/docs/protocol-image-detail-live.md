@@ -125,3 +125,39 @@ Session ledger `runs/image-detail-live-20260923/session-ledger.sqlite`: Solari c
   episode and about 3 min of setup, the expected compute cost is **$0.8–1.6**.
 
 Both projections fit inside the caps, so the seed count stays at 14.
+
+## Run 2 (pre-registered 2026-09-23, before any run-2 allocation)
+
+**Why a second run.** Run 1 (seeds 100300–100313) completed all 28 cells: 0/14 vs 0/14, p = 1.
+After it finished, the step-0 screenshots showed that every cell in both arms had opened on the
+**payer portal's login page**, whose credentials no task gives. The cause was a reset defect: the
+stale-policy Chrome relaunch added in `a3d255c` lost the portal session on the Sept 15 golden. The
+full task was infeasible in both arms, so run 1's primary result cannot test the hypothesis. Run 1
+is reported in full, unchanged, in `docs/live-image-detail-comparison.md`, and none of its cells is
+rerun or replaced.
+
+**What changes.** Only two things change:
+
+- the environment fix in `f3e1b1e`: the reset logs back into the portal and fails, leaving the cell
+  unscored, if a portal screen cannot be confirmed. It was verified live on `heldout_seeds` 100400,
+  which opened on the denied-claims list as `agent`;
+- new, never-used seeds: `heldout_seeds` **100314–100327** (14 seeds). Half A has 100314–100320
+  and half B 100321–100327, in `runs/image-detail-live2-20260923/`.
+
+Everything else is identical to run 1: arms and their `configuration_sha256` (`45eabeae8ee6…` high,
+`7ade20a70d7a…` low), policy source `997f8816…`, budget (120 actions, 1200 s), fork resets,
+alternating order, the primary metric, the exact two-sided McNemar test at α = 0.05, the secondary
+metrics, and the stopping and retry rules. The budget was not changed after seeing run 1: in run 1
+the 120-action cap ended 27 of 28 cells, but those cells were spent at a login wall, so run 1 says
+nothing about the budget a feasible task needs.
+
+**The primary result of this experiment is run 2's.** Run 1 is reported next to it as a
+descriptive record. No further runs follow from run 2's outcome.
+
+**Ledger.** Run 1's ledger books each Solari desktop at its worst-case reservation, $0.123 per
+desktop, and never reconciles actual charges. Run 1's 30 desktops are booked at $3.69 against about
+$0.57 of recorded compute time. With the owner's approval, run 2 uses its own ledger,
+`runs/image-detail-live2-20260923/session-ledger.sqlite`, with a Solari ceiling of $5 (stop $4.00;
+28 reservations are $3.44) and an OpenAI ceiling of $23.79, which is $25 minus run 1's $1.21.
+Projected run-2 spend: OpenAI about $1.2 (run 1 actual: $1.20), and Solari compute about $0.6
+(run 1: $0.56).

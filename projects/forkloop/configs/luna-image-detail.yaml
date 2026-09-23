@@ -9,7 +9,8 @@ backend: solari
 family: resolve_denial
 split: heldout_seeds
 reset_mode: fork   # a fresh desktop per cell: no machine outlives FORKLOOP_SOLARI_MAX_LIFETIME_MIN
-seeds: [100300, 100301, 100302, 100303, 100304, 100305, 100306, 100307, 100308, 100309, 100310, 100311, 100312, 100313]
+# Run 1 used 100300-100313 (a reset defect made the task infeasible; docs/live-image-detail-comparison.md).
+seeds: [100314, 100315, 100316, 100317, 100318, 100319, 100320, 100321, 100322, 100323, 100324, 100325, 100326, 100327]
 budget:
   max_steps: 120
   max_seconds: 1200
