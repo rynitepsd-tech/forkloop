@@ -31,3 +31,4 @@ jobs:
           forkloop doctor --backend fake
           forkloop demo --out "$RUNNER_TEMP/demo"
           forkloop compare --config configs/offline-comparison.yaml --out "$RUNNER_TEMP/cmp"
+          forkloop compare --config configs/custom-agent.yaml --out "$RUNNER_TEMP/custom"
