@@ -161,3 +161,34 @@ $0.57 of recorded compute time. With the owner's approval, run 2 uses its own le
 28 reservations are $3.44) and an OpenAI ceiling of $23.79, which is $25 minus run 1's $1.21.
 Projected run-2 spend: OpenAI about $1.2 (run 1 actual: $1.20), and Solari compute about $0.6
 (run 1: $0.56).
+
+### Run 2 execution deviation (recorded 2026-09-23 22:45 UTC, before any resumed cell started)
+
+The controller host (this laptop) went to sleep from 22:09:35 to 22:38:22 UTC. That caused:
+
+- two model requests failed with `ReadError` as the network dropped, at 22:09:14 and 22:09:17
+  (seed 100315 low detail, seed 100322 high detail). Both cells are unscored infrastructure
+  failures;
+- desktop creates in flight for seeds 100315 (high) and 100323 (high) timed out after the wake.
+  Both halves stopped with `setup_error`. The two desktops were reaped at 22:43;
+- no episode was running during the sleep, so no scored cell's clock was affected.
+
+Scored before the interruption: seed 100314 (neither) and seed 100321 (high detail only), plus
+seed 100322 low detail (`NOT_DONE`).
+
+Resumption, decided before any resumed outcome existed:
+
+- The planned seeds that have no scored pair are run as they were planned, with the same arms,
+  budget and configs, in `resume-a` (100315–100320) and `resume-b` (100322–100327). No seed is
+  added or replaced.
+- An infrastructure-failed cell gets its one pre-registered retry inside the resume. For seed
+  100322 the pair keeps its original scored low-detail cell, and the resume's extra low-detail
+  cell is reported but not counted. As a sensitivity check, the report also shows the result
+  using the resume's own pair for that seed.
+- Arm order restarts at index 0 within each resume, so the order on resumed seeds differs from
+  the original alternation. Every cell is still a fresh fork.
+- To fit the $4.00 Solari stop, the per-machine lifetime bound drops from 45 to 35 minutes, which
+  reserves $0.101 per desktop instead of $0.123, and the reaper threshold from 50 to 40 minutes.
+  The longest possible cell (20-minute episode, reset and setup) is about 27 minutes, so this
+  cannot end an episode early.
+- `caffeinate` holds the host awake for the rest of the run.
