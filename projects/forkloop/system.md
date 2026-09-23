@@ -56,6 +56,17 @@ saved observations. It improves exact reading and immediate action selection
 there; complete-workflow success was measured at **0/2 for both base and v3**
 in the paired development evaluation. No positive learning curve is established.
 
+### Current state — September 22 review and repairs
+
+A full review fixed scoring and cleanup defects without any live run: infrastructure
+and oracle failures are unscored everywhere; inbox reads are not collateral edits;
+authorization PDFs no longer carry their number in the title; held-out compositions
+guard insurance fields; the pool kills unhealthy machines, keeps a worker whose kill
+failed and recognises Solari's raw 409 as a revert refusal; `compare` reports an exact
+McNemar test, names a leader only at p < 0.05 and has distinct exit codes; mysql
+batch output is decoded correctly. The student diagnosis and recipe v4-notes
+(history notes in training and serving) are in `docs/student-diagnosis.md`.
+
 ### Current product — September 15 recovery
 
 New Solari allocations are paused by `require_solari_lifetime_bound`, including
@@ -557,8 +568,15 @@ stable_after_action, max_invalid, ...)`.
   against `max_invalid` and never touch the machine), applies it, waits
   `settle_s` (or for a stable screen), takes the after-screenshot, records
   the step, and decides termination: `done` action, `max_steps`,
-  `max_seconds`, or the invalid-action limit. On termination it runs the
-  oracle and returns its reward; otherwise reward is 0.0.
+  `max_seconds`, the invalid-action limit, or three consecutive backend
+  failures. A backend/transport exception while applying an action (dead
+  machine, dropped channel, timeout) is an *infrastructure* error: it is
+  recorded as `backend failed: …`, does not count as an invalid action, and three
+  in a row end the episode as `end_reason: infrastructure_error` with verdict
+  reason `INFRA_ERROR`. An action the backend rejects for its content (for
+  example an SDK `ActionError`) is `apply failed: …` and counts as the policy's
+  invalid action. On termination it runs the oracle and returns its reward;
+  otherwise reward is 0.0.
 - `verify()` is idempotent and fixes up reason codes for truncation. After
   the oracle it asks the world for `ui_milestones(dbs, baseline, task)` and
   stores the answer under `verdict.details["ui_milestones"]` (analysis only,
@@ -633,7 +651,7 @@ expected values omitted unless asked).
 
 ### 4.16 `metrics.py`
 
-`wilson(k, n)` and `summarize_run(run_dir)` report success, milestones and invalid actions with Wilson intervals. Secondary failures come from the complete verdict, including collateral/safety checks. Selected-attempt rates are separate from all-attempt token and timing totals.
+`wilson(k, n)` and `summarize_run(run_dir)` report success, milestones and invalid actions with Wilson intervals. Rates are over *scored* episodes: no verdict, `ORACLE_ERROR` and `INFRA_ERROR` (`UNSCORED_REASONS`) are counted in `n_unscored` and left out, and a rate with nothing scored is `None`, not 0%. Secondary failures come from the complete verdict, including collateral/safety checks. Selected-attempt rates are separate from all-attempt token and timing totals.
 
 `accounting.json` records experiment-wide policy usage even on failure and after branch adoption. Usage is cumulative: maximum over repeated step counters, never their sum; accounting includes losing branches and discarded output. Legacy runs without this file may still omit failed calls and are flagged. Model response token usage is authoritative usage; multiplying it by a price is a cost calculation, not an invoice.
 

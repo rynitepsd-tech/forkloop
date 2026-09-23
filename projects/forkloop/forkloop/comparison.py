@@ -313,7 +313,11 @@ async def run_comparison(world: World | str, backend: Backend, variants: Sequenc
             state["events"] = list(pool.events)
         state["finished_at"] = _now()
         _atomic(root / "execution.json", state)
-        write_comparison_report(root)
+        try:
+            write_comparison_report(root)
+        except Exception as exc:  # noqa: BLE001 - never mask the run's own error
+            state["report_error"] = _error(exc)
+            _atomic(root / "execution.json", state)
     return summarize_comparison(root)
 
 
