@@ -61,6 +61,10 @@ class Worker:
         t0 = time.monotonic()
         if self.pool.mode == "revert":
             if self.machine is None or not await self.machine.healthy():
+                if self.machine is not None:
+                    # An unhealthy machine still bills until it is killed.
+                    await self.machine.kill()
+                    self.machine = None
                 self.machine = await self.pool._create(from_snapshot=self.pool.golden)
                 if self.pool.golden is None:
                     sid, built_here = await self.pool._ensure_golden(self.machine)
@@ -207,10 +211,14 @@ class WorkerPool:
 
     async def release(self, worker: Worker, *, healthy: bool = True) -> None:
         worker.busy = False
-        if not healthy and worker.machine is not None:
-            await worker.machine.kill()
-            worker.machine = None
-        self._free.put_nowait(worker)
+        try:
+            if not healthy and worker.machine is not None:
+                await worker.machine.kill()
+                worker.machine = None
+        finally:
+            # A failed kill must not lose the worker: the next acquire() would wait forever.
+            # The machine handle is kept so close()/restore() try the kill again.
+            self._free.put_nowait(worker)
 
     async def close(self) -> None:
         results = await asyncio.gather(*(w.kill() for w in self.workers), return_exceptions=True)

@@ -33,6 +33,10 @@ def _wrap_error(e: Exception) -> Exception:
         return ConcurrencyError(f"Solari concurrency cap (429): {e}")
     if isinstance(e, se.NoCapacityError):
         return CapacityError(f"Solari has no warm desktop hosts right now (503): {e}")
+    if isinstance(e, se.GatewayError) and getattr(e, "status", None) == 409:
+        # "Not revertable" and similar state conflicts; the pool's revert-refusal
+        # detection only recognises forkloop BackendErrors.
+        return BackendError(f"Solari refused the request (409): {e}")
     return e
 
 
