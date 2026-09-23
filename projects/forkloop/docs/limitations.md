@@ -1,4 +1,15 @@
-# Limitations and verification boundaries — 2026-09-10
+# Limitations and verification boundaries — updated 2026-09-22
+
+**Changes on 2026-09-22 (offline-verified; not yet exercised live).** Opening a portal
+inbox message no longer fails a task as `COLLATERAL_EDIT` (`messages.is_read` is a
+bookkeeping column). Authorization letters no longer show their number in the PDF title.
+A missing required attachment reports `MISSING_ATTACHMENT`, not `WRONG_ATTACHMENT`.
+Held-out compositions now guard insurance fields like family 2. Backend and oracle
+failures are `INFRA_ERROR`/`ORACLE_ERROR` and **unscored** in `metrics` and `compare`
+(previously `metrics` counted them, and episodes without a verdict, as failures).
+`compare` reports an exact McNemar p-value and names a leader only at p < 0.05. Pool
+cleanup no longer leaks an unhealthy machine or loses a worker when a kill fails. These
+change generated manifests for affected seeds; historical runs were not rewritten.
 
 The supported user path is **evaluate a policy on `resolve_denial`, inspect
 `forkloop report`** ([README](../README.md), [contracts](contracts.md)). Other task
@@ -61,10 +72,13 @@ see the stopped diagnostic rather than restarting the superseded training propos
   task. On Solari it is scoped application database verification, not global safety.
 - **Checksums are scoped.** The world lists 14 checksummed tables across the two
   applications; roughly 300 other OpenEMR tables are not diffed. Unlisted changes
-  can be invisible. Reports expose the allow-list and exemptions; they do not
+  can be invisible — including OpenEMR `globals` (the agent is logged in as admin, so
+  it could, for example, change audit settings without a checksum failure), facilities,
+  categories and forms. `forbidden_screens` covers portal paths only. Reports expose the allow-list and exemptions; they do not
   expand this scope by rendering a green check.
 - **Audit is a tripwire.** Portal audit rows identify changed rows. OpenEMR evidence
-  is coarser and patient-keyed, with decoded SQL evidence for some bookkeeping.
+  is coarser and patient-keyed, with decoded SQL evidence for some bookkeeping; its
+  loose match accepts any `log` row for the patient, including a view.
   Direct writes plus plausible forged audit rows can evade this check. The policy
   interface has no shell or SQL channel, but this is not a hostile-code sandbox or
   cryptographic proof of UI-only writes.

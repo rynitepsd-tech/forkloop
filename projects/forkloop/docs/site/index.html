@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Forkloop runs two versions of a computer-use agent on the same seeded healthcare task and scores what actually persisted in the database.">
+<title>Forkloop</title>
+<style>
+:root {
+  --bg: #f4f5f7; --surface: #ffffff; --ink: #172333; --muted: #4a5668; --line: #d5dbe3;
+  --accent: #1d4ed8; --accent-ink: #12338e; --bad: #9b2525; --bad-bg: #fbecec; --good: #176447; --good-bg: #e8f5ee;
+  --code-bg: #eef1f5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141b; --surface: #161d27; --ink: #e6ebf2; --muted: #a3afbf; --line: #2a3442;
+    --accent: #7aa2ff; --accent-ink: #a9c2ff; --bad: #ff9b9b; --bad-bg: #3a1c1f; --good: #7fd6a8; --good-bg: #16302a;
+    --code-bg: #1f2833;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; background: var(--bg); color: var(--ink); }
+body { margin: 0; font-size: 17px; line-height: 1.6; }
+main { max-width: 980px; margin: 0 auto; padding: 40px 20px 96px; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--accent-ink); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.brand { font-weight: 700; letter-spacing: -.01em; margin: 0 0 40px; font-size: 18px; }
+h1 { font-size: clamp(2rem, 5.2vw, 3.3rem); line-height: 1.08; letter-spacing: -.03em; margin: 0 0 20px; max-width: 18ch; }
+.lede { font-size: clamp(1.05rem, 2.2vw, 1.25rem); color: var(--muted); max-width: 60ch; margin: 0 0 28px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 56px; }
+.btn { display: inline-block; padding: 12px 18px; border-radius: 8px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .btn.primary { color: #0f141b; } }
+.btn:hover { border-color: var(--accent); }
+section { margin: 0 0 56px; }
+h2 { font-size: 1.45rem; letter-spacing: -.015em; margin: 0 0 14px; }
+p { max-width: 68ch; margin: 0 0 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+.example { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 28px; align-items: center; }
+.example img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.pair { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 16px 0; font-size: 15px; }
+.pair dt { color: var(--muted); }
+.pair dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.v-bad { color: var(--bad); background: var(--bad-bg); padding: 0 6px; border-radius: 4px; }
+.v-good { color: var(--good); background: var(--good-bg); padding: 0 6px; border-radius: 4px; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 16px; overflow-x: auto; font-size: 14px; line-height: 1.5; margin: 12px 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.steps .card h3 { margin: 0 0 8px; font-size: 1.02rem; }
+.steps .card p { margin: 0; font-size: 15px; color: var(--muted); }
+.num { display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; background: var(--code-bg); font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+.small { font-size: 14px; color: var(--muted); }
+footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; color: var(--muted); }
+@media (max-width: 760px) {
+  .example, .steps { grid-template-columns: 1fr; }
+  main { padding-top: 28px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <p class="brand">Forkloop</p>
+
+  <h1>Did your agent get better, or just more confident?</h1>
+  <p class="lede">Forkloop runs two versions of a computer-use agent on the same seeded task, in real OpenEMR and a payer portal, and scores what actually persisted in the database. Every verdict links to the screenshots and rows behind it.</p>
+  <div class="cta">
+    <a class="btn primary" href="report.html">See a real failure report</a>
+    <a class="btn" href="https://github.com/rynitepsd-tech/forkloop/tree/main/projects/forkloop#try-it-in-two-minutes-no-account-no-api-key">Try it offline in 2 minutes</a>
+  </div>
+
+  <section class="card example" aria-labelledby="ex">
+    <a href="report.html"><img src="demo-poster.png" width="1080" height="1350" alt="Evidence report: the portal confirmed the appeal, but the stored authorization number was wrong."></a>
+    <div>
+      <h2 id="ex">The appeal went through. The number was wrong.</h2>
+      <p>A fine-tuned 4B GUI agent opened the patient's authorization letter in OpenEMR, then filed a denial appeal in the payer portal. The portal showed <em>“Appeal submitted.”</em> A screen recording would look like a success.</p>
+      <dl class="pair">
+        <dt>Required</dt><dd><span class="v-good">AUTH-36G14538</span></dd>
+        <dt>Persisted</dt><dd><span class="v-bad">AUTH-3614538</span></dd>
+        <dt>Verdict</dt><dd>WRONG_VALUE · reward 0</dd>
+      </dl>
+      <p class="small">From the retained 74-step episode. All patient and claims data is synthetic.</p>
+      <p><a href="report.html">Open the evidence report →</a> · <a href="demo.mp4">33-second explainer</a></p>
+    </div>
+  </section>
+
+  <section aria-labelledby="how">
+    <h2 id="how">How a comparison works</h2>
+    <div class="steps">
+      <div class="card"><span class="num">1</span><h3>Same world, twice</h3><p>Each seed resets both arms to one seeded snapshot. Task fingerprints, 14 table hashes and audit watermarks must match, or the pair is not compared.</p></div>
+      <div class="card"><span class="num">2</span><h3>One honest attempt</h3><p>Order alternates by seed, and each cell gets a fresh policy and exactly one attempt. Infrastructure failures stay unscored instead of counting against the model.</p></div>
+      <div class="card"><span class="num">3</span><h3>Scored by the database</h3><p>SQL checks for the right record, the right value, no duplicates, no collateral edits and no direct writes, with an exact paired test on the seeds where the arms disagree.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="try">
+    <h2 id="try">Try it without an account</h2>
+    <p>The demo runs the real portal and the real verifier against local stand-ins, and writes an HTML report for each of five controls: correct, wrong value, wrong record, duplicate, and interrupted.</p>
+<pre><code>git clone https://github.com/rynitepsd-tech/forkloop.git
+cd forkloop/projects/forkloop
+python3.11 -m venv .venv &amp;&amp; . .venv/bin/activate
+pip install '.[world]'
+forkloop demo --out runs/demo</code></pre>
+    <p>Then compare two versions of your own agent with a short YAML file: two variants, the same seeds. Your agent sees screenshots and its own history, never the expected values.</p>
+  </section>
+
+  <section aria-labelledby="ev">
+    <h2 id="ev">What has been measured so far</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Evidence</th><th>Result</th><th>Caveat</th></tr></thead>
+      <tbody>
+        <tr><td><a href="report.html">Live adapter episode</a></td><td>Full workflow completed; one character wrong → rejected</td><td>One episode</td></tr>
+        <tr><td><a href="navigation-comparison.html">Prompt comparison</a></td><td>Workflow prompt 2/2, compact prompt 0/2</td><td>Interrupted run; p = 0.5, not a winner</td></tr>
+        <tr><td>Image-detail study</td><td>Exact authorization typing 19/20 at high detail vs 0/20 at low</td><td>Recorded states; actions not executed</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="help">
+    <h2 id="help">Looking for one team to try it</h2>
+    <p>If you are deciding whether to keep a model, prompt, observation or memory change in a GUI agent, I would like to know whether this kind of evidence changes that decision, and what is missing.</p>
+    <p><a class="btn primary" href="https://github.com/rynitepsd-tech/forkloop/issues/2">Tell me on GitHub</a></p>
+  </section>
+
+  <footer>
+    Built on <a href="https://getsolari.com">Solari</a> desktops and <a href="https://www.open-emr.org/">OpenEMR</a>. Synthetic data only; not a HIPAA deployment. <a href="https://github.com/rynitepsd-tech/forkloop">Source (MIT)</a>.
+  </footer>
+</main>
+</body>
+</html>
