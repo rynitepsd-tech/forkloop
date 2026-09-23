@@ -8,7 +8,7 @@ Forkloop runs two versions of a GUI agent on the same seeded denial-appeal task 
 
 **[Install and try it offline in two minutes →](projects/forkloop/README.md)** It covers five verifier controls with HTML reports, a matched A/B `compare` with an exact paired test and CI-friendly exit codes, and a template for plugging in your own agent.
 
-Live Solari allocation is paused in code until VM lifetime can be bounded ([issue #1](https://github.com/rynitepsd-tech/forkloop/issues/1)). Everything offline works, and so does cleanup of existing machines.
+Live Solari runs need an explicit, controller-enforced lifetime bound, because Solari's idle timeout [renews itself on desktops](projects/forkloop/docs/solari-lifetime-probe.md).
 
 ## Solari Cookbook provenance
 

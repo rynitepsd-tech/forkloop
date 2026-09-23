@@ -9,6 +9,7 @@ world: claims-ops-v1
 backend: solari
 family: resolve_denial
 split: train
+reset_mode: fork   # a fresh desktop per cell: no machine outlives FORKLOOP_SOLARI_MAX_LIFETIME_MIN
 seeds: [200, 201, 202, 203, 204, 205, 206, 207, 208, 209]
 budget:
   max_steps: 120

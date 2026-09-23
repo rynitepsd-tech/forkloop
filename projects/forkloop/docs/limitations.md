@@ -113,11 +113,13 @@ enumerated by a baseline digest's table names.
 
 ## Operational limits
 
-New Forkloop Solari allocations are disabled by a release-wide capability hold,
-including the historical spike allocators. A fresh ledger or pricing review
-cannot clear it. The supported offline workflow and existing-resource cleanup
-remain available. No verified hard lifetime bound was found in the provider API;
-idle timers and local watchdogs do not provide one across every failure.
+Solari allocations require an explicit opt-in to a controller-enforced lifetime
+(`FORKLOOP_SOLARI_MAX_LIFETIME_MIN`) plus an acknowledgment that the prepaid balance is
+the last-resort provider cap (`FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND=1`). The provider's
+idle timeout is not a bound: [measured](solari-lifetime-probe.md), it renewed itself on an
+idle desktop. The in-process deadline dies with the controller; `forkloop reap
+--older-than-min` from a second process covers that case but not the loss of the whole
+controller machine, which leaves only the balance.
 
 - **No fresh-account claim.** The prior September 15 session completed a new
   golden build on the existing account; recovery confirmed that snapshot is

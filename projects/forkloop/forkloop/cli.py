@@ -516,7 +516,7 @@ async def _compare(args: argparse.Namespace) -> int:
         result = await run_comparison(
             world, backend, [PolicyVariant(p.name, p.identity, p.factory) for p in policies],
             config["seeds"], output=args.out, family=config["family"], split=config["split"],
-            budget_override=config["budget"],
+            budget_override=config["budget"], reset_mode=config["reset_mode"],
             history_k=max(8, *(int(p.identity["options"].get("history_k", 8)) for p in policies)),
         )
     finally:

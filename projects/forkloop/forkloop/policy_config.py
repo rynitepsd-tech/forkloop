@@ -171,7 +171,7 @@ def load_config(path: str | Path, *, require_env: bool = True) -> tuple[dict, li
     missing credential variables instead of refusing, so a config can be reviewed anywhere."""
     path = Path(path)
     config = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")), "comparison",
-                      {"version", "world", "backend", "family", "split", "seeds", "budget", "variants"})
+                      {"version", "world", "backend", "family", "split", "seeds", "budget", "variants", "reset_mode"})
     if type(config.get("version")) is not int or config["version"] != 1:
         raise ValueError("Comparison configuration requires version: 1")
     for key, default in (("world", "claims-ops-v1"), ("backend", "solari"), ("family", "resolve_denial"), ("split", "train")):
@@ -180,6 +180,11 @@ def load_config(path: str | Path, *, require_env: bool = True) -> tuple[dict, li
             raise ValueError(f"{key} must be a nonempty string")
     if config["backend"] not in ("solari", "fake"):
         raise ValueError("backend must be solari or fake")
+    # revert: one long-lived machine reverted per cell; fork: a fresh machine per cell, which keeps
+    # every machine's lifetime to one cell (fits FORKLOOP_SOLARI_MAX_LIFETIME_MIN).
+    config.setdefault("reset_mode", "revert")
+    if config["reset_mode"] not in ("revert", "fork"):
+        raise ValueError("reset_mode must be revert or fork")
     seeds = config.get("seeds")
     if not isinstance(seeds, list) or not seeds or any(type(s) is not int or s < 0 for s in seeds):
         raise ValueError("seeds must be a nonempty list of nonnegative integers")

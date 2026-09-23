@@ -2,7 +2,7 @@
 
 Guidance for Claude Code (and humans) working in this directory. Keep it short; the long-form explanation is `system.md`, the interface spec is `docs/contracts.md`.
 
-**Starting a fresh session?** Read `README.md` and the latest section of `docs/product-handoff.md` first. Supported offline commands include `demo`, fake `doctor`/`compare`, `compare-report`, and episode `report`. New Solari allocations are disabled by a release-wide lifetime capability hold, including spike helpers; no new ledger or pricing review bypasses it. The September 15 ledger and uncertain charges must be preserved. Metadata inspection and cleanup remain available. Historical handoffs are research diaries, not instructions to restart spending.
+**Starting a fresh session?** Read `README.md` and the latest section of `docs/product-handoff.md` first. Supported offline commands include `demo`, fake `doctor`/`compare`, `compare-report`, and episode `report`. Solari allocations require `FORKLOOP_SOLARI_MAX_LIFETIME_MIN` and `FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND=1` (the idle timeout renews itself on desktops — `docs/solari-lifetime-probe.md`); run `forkloop reap --older-than-min` beside any live session and use `reset_mode: fork`. Spike allocators are retired. The September 15 ledger and uncertain charges must be preserved. Metadata inspection and cleanup remain available. Historical handoffs are research diaries, not instructions to restart spending.
 
 ## What this is
 

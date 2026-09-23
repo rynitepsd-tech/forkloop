@@ -81,7 +81,19 @@ Reports are self-contained, script-free HTML. `--bundle` exports only regenerate
 
 Forkloop resets a Solari desktop from one snapshot that holds OpenEMR, the portal, both databases and the browser. Snapshot restore is only the first stage of a reset. Seeding, health checks, baseline capture and the initial screen follow, and every stage is timed.
 
-**Live allocation is currently paused in code.** Two desktops once ran about 10 hours despite a 30-minute kill-on-idle setting. Solari documents only a rolling idle timeout for VMs, not a hard lifetime. So `forkloop doctor --backend solari` reports `solari.lifetime` as failed, and creates stop before any provider call. The open question is tracked in [issue #1](https://github.com/rynitepsd-tech/forkloop/issues/1). Cleanup (`forkloop reap`) and everything offline keep working.
+**VM lifetime is bounded by Forkloop, not by the idle timeout.** A [measured probe](docs/solari-lifetime-probe.md) found that a desktop with a 5-minute kill-on-idle timeout and no activity was never idle-killed; its deadline renewed itself every five minutes. Live runs therefore need an explicit opt-in:
+
+```bash
+export FORKLOOP_SOLARI_MAX_LIFETIME_MIN=45        # every machine is killed at 45 minutes, in-process
+export FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND=1     # last resort: the prepaid balance (keep auto top-up off)
+forkloop ledger runs/session/ledger.sqlite --create --solari-usd 15
+export FORKLOOP_SESSION_LEDGER=runs/session/ledger.sqlite
+# in a second terminal, the out-of-process safety net:
+while true; do forkloop reap --older-than-min 50; sleep 60; done
+forkloop compare --config configs/fara-notes.yaml --out runs/fara-notes
+```
+
+Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop doctor --backend solari` checks all of this without allocating anything. Without both variables, creates refuse before any provider call.
 
 ## What has actually been measured
 

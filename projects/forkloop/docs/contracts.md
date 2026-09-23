@@ -733,14 +733,23 @@ Image content and arbitrary free text still require human review before sharing.
 
 ## 15. Session recovery and current spending bounds
 
-New Solari desktop and sandbox allocations are refused by a release-wide
-capability hold before any reservation or provider allocation. This also applies
-to the historical spike helpers. The guard is not stored in a session ledger and
-has no environment/configuration override: a fresh ledger, larger budget or
-pricing acknowledgment cannot establish provider lifetime enforcement.
-`doctor` emits a failed `solari.lifetime` check and only reports hourly prices,
-not a finite per-create cost bound. Offline controls, reports, metadata inspection
-and existing-resource cleanup remain available.
+**Solari allocation requires an explicit, enforced lifetime bound (2026-09-23).**
+Solari VM timeouts are idle-based, and a measured probe showed that a desktop with a
+5-minute kill-on-idle timeout and no client activity was never idle-killed: its
+`expiresAt` renewed itself about every five minutes (see `docs/cost.md`). Creates
+therefore refuse, before any reservation or provider call, unless both are set:
+
+- `FORKLOOP_SOLARI_MAX_LIFETIME_MIN` (5–300): `SolariBackend` records a deadline per
+  machine and kills it when the deadline passes (an in-process check every 30 s);
+  reservations are the hourly rate × (lifetime + 10 minutes of setup);
+- `FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND=1`: the operator acknowledges that if the
+  controller and the out-of-process reaper both fail, the provider-side cap is the
+  prepaid balance ("we don't bill past your balance"; keep auto top-up off).
+
+`forkloop reap --ledger L --older-than-min N` kills ledger-owned machines started at
+least N minutes ago; run it in a loop from a second process during live work. Use
+`reset_mode: fork` in comparison configs so no machine outlives one cell. The ledger-less
+spike allocators always refuse. `doctor` reports `solari.lifetime` pass/fail accordingly.
 
 `reap` requires an explicit session ledger or `FORKLOOP_SESSION_LEDGER`, unless
 the caller deliberately passes `--all-sessions`. Ownership is a saved machine ID
@@ -767,10 +776,11 @@ rates are positive finite numbers; the review window is at most 31 days. A revie
 cannot postpone the published storage start or authorize unbounded snapshot
 retention once storage billing begins. Updating rates does not clear a ledger hold.
 
-`timeout_ms` is an idle timeout, not an absolute runtime limit. September 15
-recovery observed two machines still reported running around ten hours after
-creation, invalidating the assumed five-hour cap for those reservations. Provider
-lifetime enforcement remains unresolved; pending accounting is not a guaranteed
+`timeout_ms` is an idle timeout, not an absolute runtime limit, and on desktops it
+was observed to renew itself without activity. September 15 recovery observed two
+machines still reported running around ten hours after creation, invalidating the
+assumed five-hour cap for those reservations. Provider lifetime enforcement remains
+absent, hence the controller-enforced bound above; pending accounting is not a guaranteed
 upper bound when marked blocked. Explicit shutdown and inventory checks remain
 necessary. The guarded OpenAI route uses the standard service tier, validates
 integer usage, and includes cache-write/long-context premiums. Other providers,
