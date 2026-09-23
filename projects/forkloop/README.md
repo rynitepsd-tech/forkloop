@@ -8,7 +8,7 @@ The question it answers: **did this change make the agent better at the workflow
 
 [![The portal said "Appeal submitted". The database held AUTH-3614538, not AUTH-36G14538.](docs/worked-example/demo-poster.png)](https://rynitepsd-tech.github.io/forkloop/)
 
-**[Open the example evidence report](https://rynitepsd-tech.github.io/forkloop/)** (no install). In it, an agent filed a denial appeal and the portal confirmed it, but the authorization number it typed was missing one character. The verifier rejected the episode as `WRONG_VALUE`. A demo video would have shown a success.
+**[Open the example evidence report](https://rynitepsd-tech.github.io/forkloop/report.html)** (no install). In it, an agent filed a denial appeal and the portal confirmed it, but the authorization number it typed was missing one character. The verifier rejected the episode as `WRONG_VALUE`. A demo video would have shown a success.
 
 ## Try it in two minutes (no account, no API key)
 

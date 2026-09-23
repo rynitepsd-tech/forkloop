@@ -4,7 +4,7 @@
 
 Forkloop runs two versions of a GUI agent on the same seeded denial-appeal task in **real OpenEMR 8.3 plus a synthetic payer portal** on Solari desktops. It checks what actually persisted and links every verdict to its screenshots and database rows. All patient and claims data is synthetic.
 
-**[See a real failure report](https://rynitepsd-tech.github.io/forkloop/)** (no install). An agent's appeal was accepted by the portal, but the authorization number it typed was missing one character, so the verifier rejected the episode as `WRONG_VALUE`.
+**[See a real failure report](https://rynitepsd-tech.github.io/forkloop/report.html)** (no install). An agent's appeal was accepted by the portal, but the authorization number it typed was missing one character, so the verifier rejected the episode as `WRONG_VALUE`.
 
 **[Install and try it offline in two minutes →](projects/forkloop/README.md)** It covers five verifier controls with HTML reports, a matched A/B `compare` with an exact paired test and CI-friendly exit codes, and a template for plugging in your own agent.
 

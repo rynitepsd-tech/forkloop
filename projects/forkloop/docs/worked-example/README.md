@@ -1,6 +1,6 @@
 # Recorded live failure: submitted, but the authorization was wrong
 
-**[Open the hosted evidence report](https://rynitepsd-tech.github.io/forkloop/)**.
+**[Open the hosted evidence report](https://rynitepsd-tech.github.io/forkloop/report.html)**.
 No Python, installation, account, model endpoint or Solari session is needed.
 For offline inspection, [download the self-contained HTML](report.html) using
 GitHub's **Download raw file** action and open it locally. The HTML embeds its
