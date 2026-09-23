@@ -186,7 +186,7 @@ class ClaimsOpsWorld(World):
         an ``http-request`` row whose decoded path is a document view for that patient (8.3
         base64-encodes ``comments``). The portal's ``page_views``: the claim page and the appeal
         form of the target claim; ``appeal_submitted`` is an appeal row for the target claim.
-        Added 2026-09-05 for the student staircase (docs/student-2026-09-06.md); analysis only.
+        Added 2026-09-05 for the student staircase (docs/archive/student-2026-09-06.md); analysis only.
         """
         expected = dict(getattr(task, "expected", None) or {})
         wm = dict(getattr(baseline, "watermarks", None) or {})

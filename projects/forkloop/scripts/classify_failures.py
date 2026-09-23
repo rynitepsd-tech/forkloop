@@ -1,6 +1,6 @@
 """Classify every failed episode of a run into the student bake-off failure classes.
 
-Classes (docs/student-2026-09-05.md, step 4): invalid/parse, wrong-record, transcription
+Classes (docs/archive/student-2026-09-05.md, step 4): invalid/parse, wrong-record, transcription
 (WRONG_VALUE on the authorization number that is not a decoy), decoy (the value is one of
 the task's decoy numbers), budget with sane actions, budget with looping. Reads only the
 run directory (verdict.json, manifest.json, steps.jsonl); prints a markdown table and the

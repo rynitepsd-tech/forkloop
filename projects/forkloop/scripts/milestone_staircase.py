@@ -1,5 +1,5 @@
 """The milestone staircase of one or more runs: the percentage of episodes that reached each
-UI rung (docs/student-2026-09-06.md, step 2).
+UI rung (docs/archive/student-2026-09-06.md, step 2).
 
 The rungs come from ``verdict.details["ui_milestones"]`` (``ClaimsOpsWorld.ui_milestones``:
 OpenEMR login, patient chart, document view, portal claim page, appeal form, appeal submitted),

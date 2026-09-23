@@ -176,7 +176,7 @@ async def _build(args: argparse.Namespace) -> int:
                              mem_mb=args.mem_mb or int(res.get("mem_mb", 4096)), disk_gb=args.disk_gb or res.get("disk_gb"),
                              metadata={"forkloop": "1", "run_id": "build"},
                              # The spend guard (backends/solari.py::create) refuses lifetimes above 30 minutes; the
-                             # last measured golden build took ~10 min (docs/HANDOFF.md). A build that outlives
+                             # last measured golden build took ~10 min (docs/archive/HANDOFF.md). A build that outlives
                              # this window is killed by Solari and must be restarted.
                              timeout_ms=30 * 60_000)
     try:

@@ -1,6 +1,6 @@
 # Historical handoff — before the overnight evidence repair
 
-**For the current product, read [product-handoff.md](product-handoff.md), the [README](../README.md) and [system.md](../system.md).** This file and the locally retained `overnight-handoff.md` are historical research records, not current authorization or an execution checklist. The old suggestion to train v2 was superseded; v3 training and paired evaluation subsequently happened. The saved base/SFT-v1/SFT-v2 results remain 0/30 each.
+**For the current product, read [product-handoff.md](../product-handoff.md), the [README](../../README.md) and [system.md](../../system.md).** This file and the locally retained `overnight-handoff.md` are historical research records, not current authorization or an execution checklist. The old suggestion to train v2 was superseded; v3 training and paired evaluation subsequently happened. The saved base/SFT-v1/SFT-v2 results remain 0/30 each.
 
 Historical commands below are archived context; some overwrite old artifacts or incur charges. Use only the current handoff commands.
 

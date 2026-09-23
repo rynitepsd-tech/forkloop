@@ -51,7 +51,7 @@ statements about later Starter capabilities.
 
 ## Training happened; workflow improvement remains unproven
 
-The [v3 training handoff](lambda-v3-handoff.md) records an H100 run completing
+The [v3 training handoff](archive/lambda-v3-handoff.md) records an H100 run completing
 **411/440 planned optimizer steps, 1.869169 epochs**, on 25 demonstrations / 1,758
 examples, in 380.87 minutes including final save. The remaining 29 steps were not
 run. Paired-image GPU forward/backward, checkpoint saving and subsequent serving

@@ -20,6 +20,6 @@ checkpoints/
 spikes/out/
 docs/worked-example/episodes/
 docs/worked-example/run.json
-docs/overnight-handoff.md
+docs/archive/overnight-handoff.md
 docs/archive/
 .claude/settings.local.json

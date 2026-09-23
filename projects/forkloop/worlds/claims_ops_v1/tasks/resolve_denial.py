@@ -8,7 +8,7 @@ distractor claims (no same-surname patient with an adjacent denied claim). Every
 other draw is shared with the standard task of the same seed — same patient, same
 claim, same authorization number, same decoys, same document count — so the two
 variants are directly comparable seed for seed. Added 2026-09-04 as the diagnostic
-rung of the student bake-off (docs/student-2026-09-05.md).
+rung of the student bake-off (docs/archive/student-2026-09-05.md).
 
 Randomisation: which document (and page) holds the number, distractor numbers
 on the same page, a same-surname distractor with its own denied claim that must

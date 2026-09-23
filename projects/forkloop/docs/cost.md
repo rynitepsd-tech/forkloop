@@ -103,7 +103,7 @@ receipts are local/gitignored and are not bundled with the portable worked examp
 | Session / record | Priced usage or compute estimate | Pending reservation / boundary |
 | --- | --- | --- |
 | Overnight repair, September 6 (locally retained diary) | OpenAI $0.1277158 from 160 calls' returned token usage; Solari compute estimate $0.0216692 | Solari $1.3846667 reserved pending billing; no GPU rented in that session |
-| [V3 training](lambda-v3-handoff.md) | Training did occur: 411/440 optimizer steps, 380.87 minutes including save | Consult its own training/provider receipts; the older overnight “GPU $0” is not an all-project total |
+| [V3 training](archive/lambda-v3-handoff.md) | Training did occur: 411/440 optimizer steps, 380.87 minutes including save | Consult its own training/provider receipts; the older overnight “GPU $0” is not an all-project total |
 | [Frozen v3 evaluation](frozen-v3-evaluation-results.md) | Lambda conservative compute estimate ≈ $2.03 | Lambda $12.4362 pending invoice; instance provider-confirmed terminated |
 | [Paired live evaluation](live-paired-v3-results.md#spending-reservations-and-cleanup-receipts) | Lambda $2.943227 and Solari $0.088467 compute estimates | Lambda $11.844 and new Solari $1.384667 reservations pending; confirmed cleanup does not reconcile billing |
 | [Stopped magnification, September 7](document-magnification-results.md#resources-spending-cleanup) | Solari compute estimate $0.132140; no Lambda launch or model calls | New Solari $1.384667 reserved; cumulative Solari accounted upper **$8.308000**, not compute spend or invoice |

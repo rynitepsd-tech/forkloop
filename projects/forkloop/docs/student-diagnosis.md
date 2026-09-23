@@ -1,6 +1,6 @@
 # Why small-model SFT stayed at 0/30, and the notes experiment
 
-*2026-09-22.* This summarizes a code-level review of the student pipeline (Fara1.5-4B, LoRA SFT on verified teacher trajectories, family 3 `resolve_denial`) and the follow-up experiment. The dated diaries it draws on are [student-2026-09-05.md](student-2026-09-05.md), [student-2026-09-06.md](student-2026-09-06.md), [lambda-v3-handoff.md](lambda-v3-handoff.md), [live-paired-v3-results.md](live-paired-v3-results.md) and [frozen-v3-evaluation-results.md](frozen-v3-evaluation-results.md).
+*2026-09-22.* This summarizes a code-level review of the student pipeline (Fara1.5-4B, LoRA SFT on verified teacher trajectories, family 3 `resolve_denial`) and the follow-up experiment. The dated diaries it draws on are [student-2026-09-05.md](archive/student-2026-09-05.md), [student-2026-09-06.md](archive/student-2026-09-06.md), [lambda-v3-handoff.md](archive/lambda-v3-handoff.md), [live-paired-v3-results.md](live-paired-v3-results.md) and [frozen-v3-evaluation-results.md](frozen-v3-evaluation-results.md).
 
 ## The main cause: the number was not in the input when the model had to type it
 

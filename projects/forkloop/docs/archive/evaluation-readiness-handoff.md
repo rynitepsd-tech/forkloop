@@ -2,7 +2,7 @@
 
 **Historical status on September 6, 2026: Solari was ready at the time tested, and the fixed-observation package was ready.** The recommendation then was a short GPU inference session: 40 saved observations first, followed by three matched live development seeds if time, infrastructure, and a new session's authorization permitted. No training, model inference, hardware rental, OpenAI request, push, deployment or publication occurred in this preparation session.
 
-**Current authority:** the [current product handoff](product-handoff.md) supersedes this historical readiness recommendation. The Solari spending hold remains unresolved. No command, readiness result, or proposed budget here authorizes new GPU, Solari, or other paid work; future execution requires fresh explicit authorization and resolution of the applicable hold.
+**Current authority:** the [current product handoff](../product-handoff.md) supersedes this historical readiness recommendation. The Solari spending hold remains unresolved. No command, readiness result, or proposed budget here authorizes new GPU, Solari, or other paid work; future execution requires fresh explicit authorization and resolution of the applicable hold.
 
 **Public-source scope:** the run evidence, saved-state dataset and images, adapter, transfer payload, ledgers, archived source, and environment receipts referenced here are retained locally and not distributed. Artifact identifiers beginning `projects/forkloop/` are repository-root-relative, unlinked references. Command paths refer to the stated historical working directories. Public clones do not contain the required retained artifacts or local environments.
 
@@ -94,7 +94,7 @@ The new fixed runner starts a fresh policy for each case, validates identities b
 
 ## Historical fresh-machine inference-only commands
 
-These are **historical retained-source instructions, not current restart commands**. They require the locally retained transfer archive, source, adapter, data, and environment receipts, none of which is supplied by a public clone. Any future GPU or Solari work requires fresh explicit authorization under the [current product handoff](product-handoff.md) and resolution of the applicable hold; the Solari hold is unresolved. The previous instance is terminated. Provisioning itself was deliberately outside these scripts. The historical recommendation was one H100 PCIe 80 GB, the previously validated architecture, with all provider credentials kept on the controller Mac.
+These are **historical retained-source instructions, not current restart commands**. They require the locally retained transfer archive, source, adapter, data, and environment receipts, none of which is supplied by a public clone. Any future GPU or Solari work requires fresh explicit authorization under the [current product handoff](../product-handoff.md) and resolution of the applicable hold; the Solari hold is unresolved. The previous instance is terminated. Provisioning itself was deliberately outside these scripts. The historical recommendation was one H100 PCIe 80 GB, the previously validated architecture, with all provider credentials kept on the controller Mac.
 
 The historical procedure first required starting the provider watchdog in the next subsection and confirming its fresh heartbeat. The Mac transfer example below starts at the repository root, with `GPU_HOST` set to a newly authorized host and a newly created remote directory:
 
@@ -160,7 +160,7 @@ For an explicitly authorized 180-minute combined session, use `--ceiling 15`. Th
 
 ## Historical live comparison after fixed results
 
-**Superseded on 2026-09-06 (later session):** `scripts/lambda_development_eval.py` is now the paired sequencer (`--plan trained:200,base:200,base:201,trained:201 --base-url … --trained-url …`, one reverted golden machine, at most one replacement allocation) and `scripts/compare_live_evaluation.py` takes `--out-dir`. The per-label commands below are retained as history; see [live-paired-v3-results.md](live-paired-v3-results.md).
+**Superseded on 2026-09-06 (later session):** `scripts/lambda_development_eval.py` is now the paired sequencer (`--plan trained:200,base:200,base:201,trained:201 --base-url … --trained-url …`, one reverted golden machine, at most one replacement allocation) and `scripts/compare_live_evaluation.py` takes `--out-dir`. The per-label commands below are retained as history; see [live-paired-v3-results.md](../live-paired-v3-results.md).
 
 At this preparation stage, `scripts/lambda_development_eval.py` took a fresh output/run ID, an explicit timezone-aware experiment deadline and a fresh ledger-bound watchdog heartbeat. The obsolete absolute September 6 deadline had been removed. It validated the loopback server's model identity before any VM creation. It used **seeds 200–202, best-of-one, one disposable golden fork per model/seed, 120 actions, 900 seconds**, the same policy contract and bounded setup/cleanup. The 120-call cap was retained too. Each model required its own clean reset; setup failures produced missing evidence, not model failures. A failure stopped further cases for that variant without retries.
 

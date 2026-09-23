@@ -136,9 +136,9 @@ the results of record, in order, are
 (the completed live paired comparison), and
 [document-magnification-results.md](docs/document-magnification-results.md)
 (a diagnostic stopped before model scoring). The
-[training handoff](docs/lambda-v3-handoff.md)
+[training handoff](docs/archive/lambda-v3-handoff.md)
 records how the weights were produced; the
-[evaluation readiness handoff](docs/evaluation-readiness-handoff.md)
+[evaluation readiness handoff](docs/archive/evaluation-readiness-handoff.md)
 records the frozen package. Their run proposals are historical.
 
 **Preserved weights.** The main adapter completed **411/440 planned optimizer
@@ -701,7 +701,7 @@ Summary VM costs estimate execution plus recorded reset/setup and fork lifetimes
   (`note_from_reply`; measured need in `docs/spikes.md` 2026-09-04) —, `--instruction-note`
   appends a policy-side text to every instruction the model sees (the world and
   the manifests are untouched; used by the 2026-09-05 login probes,
-  `docs/student-2026-09-06.md`), a `--system-prompt-file` may keep Fara's trained
+  `docs/archive/student-2026-09-06.md`), a `--system-prompt-file` may keep Fara's trained
   identity and `computer_use` schema through the `{fara_identity}` / `{fara_tools}`
   placeholders (`prompts/fara_no_user_v1.md`: the critical-points text replaced
   by a no-user rule, the v5 world conventions appended), every one of these knobs
@@ -946,7 +946,7 @@ base family name so patient, claim, number, decoys and document count are
 those of `resolve_denial` for the same seed. It is the diagnostic rung of the
 student bake-off, listed in `world.yaml` so `World.generate` accepts it, and
 excluded from nothing automatically — pass `--families` explicitly. Measured
-2026-09-04 (`docs/student-2026-09-05.md`): base `microsoft/Fara1.5-4B` scores
+2026-09-04 (`docs/archive/student-2026-09-05.md`): base `microsoft/Fara1.5-4B` scores
 0/30 on family 3 seeds 200–229 as shipped (invalid-action rate 20.8 %, all
 `visit_url`), 0/30 with `--nav-macro` (invalid 0 %; every episode stops at the
 OpenEMR login), and 0/30 on `resolve_denial_easy`.
@@ -1187,8 +1187,8 @@ complete-workflow success is inferred from these checks.
 | OpenEMR 8.3.0 released 2026-08-18, PHP 8.3+, MariaDB 10.6+; tarball asset and sha256; `InstallerAuto.php` args; `OPENEMR_ENABLE_INSTALLER_AUTO=1` | github.com/openemr/openemr v8_3_0 |
 | Docker tag `openemr/openemr:8.3.0-2026-08-30` (no `7.0.3` tag exists) | hub.docker.com |
 | Fara 1.5 (4B/9B/27B, Qwen3.5 base, `<tool_call>` format, 1000×1000 coordinate space) | huggingface.co/microsoft/Fara1.5-4B, github.com/microsoft/fara |
-| Fara 1.5 4B's 1000×1000 space against the 1280×720 screen is correctly handled by `coord_space=norm1000`, `image_max_side=1280` (the rescaled click sat on the named nav link); the base model emits `visit_url` on ~10 of its first 30 steps whatever the tool enum says, types `admin` and `pass` into one login field, guesses passwords, and stops with `ask_user_question` when unsure | measured live 2026-09-04, `docs/student-2026-09-05.md`, `runs/fara15-4b-base-f3-s200-229*` |
-| Told which word is the password (`--instruction-note`), base Fara 1.5 4B does the two-field login (30/30 episodes); without the critical-points prompt text it never calls `ask_user_question`; past the login it navigates OpenEMR by invented URLs and drops the session; OpenEMR 8.3 logs `login` rows with `success` 0/1 and `http-request-update` rows whose base64 `comments` are the request path; Chrome's post-login "Aw, Snap!" (error code 5) persists with `--disable-gpu` | measured live 2026-09-05, `docs/student-2026-09-06.md`, `runs/fara15-4b-fair-f3-s200-229` |
+| Fara 1.5 4B's 1000×1000 space against the 1280×720 screen is correctly handled by `coord_space=norm1000`, `image_max_side=1280` (the rescaled click sat on the named nav link); the base model emits `visit_url` on ~10 of its first 30 steps whatever the tool enum says, types `admin` and `pass` into one login field, guesses passwords, and stops with `ask_user_question` when unsure | measured live 2026-09-04, `docs/archive/student-2026-09-05.md`, `runs/fara15-4b-base-f3-s200-229*` |
+| Told which word is the password (`--instruction-note`), base Fara 1.5 4B does the two-field login (30/30 episodes); without the critical-points prompt text it never calls `ask_user_question`; past the login it navigates OpenEMR by invented URLs and drops the session; OpenEMR 8.3 logs `login` rows with `success` 0/1 and `http-request-update` rows whose base64 `comments` are the request path; Chrome's post-login "Aw, Snap!" (error code 5) persists with `--disable-gpu` | measured live 2026-09-05, `docs/archive/student-2026-09-06.md`, `runs/fara15-4b-fair-f3-s200-229` |
 | mlx-vlm 0.6.17 (mlx 0.32.2) loads `microsoft/Fara1.5-4B` (`Qwen3_5ForConditionalGeneration`) from the bf16 safetensors without conversion, needs `jinja2` for the chat template, applies the template's `<think>` default (the model closes it at once; `enable_thinking=false` gives identical output), parses `<tool_call>` into `tool_calls` only when the request carries `tools`, and leaves `<\|im_end\|>` in `content` | measured 2026-09-04 (`runs/logs/mlx-server-fara15-4b.log`) |
 | Computer-use toolset `computer_toolset_20260801` GA, member names, batch semantics, result shapes | platform.claude.com computer-use docs |
 | Gym-Anything converts software into agent environments; its CUA-World collection motivates realistic long-horizon software tasks. This is related work, not a matched rate comparison to Forkloop. | [Gym-Anything / CUA-World](https://arxiv.org/abs/2604.06126) |

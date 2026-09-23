@@ -2,7 +2,7 @@
 
 Lambda v3 student-learning experiment — September 6, 2026.
 
-**Historical record, not current operating instructions.** The [current product handoff](product-handoff.md) is authoritative. The Solari spending hold remains unresolved; this document authorizes no new GPU, Solari, or other paid work. Any future execution requires fresh explicit authorization and resolution of the applicable hold.
+**Historical record, not current operating instructions.** The [current product handoff](../product-handoff.md) is authoritative. The Solari spending hold remains unresolved; this document authorizes no new GPU, Solari, or other paid work. Any future execution requires fresh explicit authorization and resolution of the applicable hold.
 
 **Public-source scope:** all run evidence, datasets, images, checkpoints, archives, ledgers, and archived helper scripts referenced here are retained locally and not distributed in the public source release. Artifact identifiers beginning `projects/forkloop/` are relative to the repository root, not download links. Historical command paths are relative to their stated working directories; the required local artifacts and environments are absent from public clones.
 
@@ -121,7 +121,7 @@ The full archive and every member hash passed. The remote archive and the local 
 
 ## Historical reproduction record
 
-The commands below record the executed configuration using retained local source and artifacts; they are not runnable instructions for a public clone or authorization to restart spending. The [current product handoff](product-handoff.md) governs any future work, and the Solari hold remains unresolved. Only after fresh explicit authorization and resolution of the applicable hold could a new environment and output directory be prepared, without overwriting the completed artifacts. The former instance is terminated. Training/serving helpers assume the archived remote directory layout; adapt paths with the retained path/provenance checks. The adapter configuration contains the original local cache path, so the pinned base revision must be loaded explicitly before applying the adapter.
+The commands below record the executed configuration using retained local source and artifacts; they are not runnable instructions for a public clone or authorization to restart spending. The [current product handoff](../product-handoff.md) governs any future work, and the Solari hold remains unresolved. Only after fresh explicit authorization and resolution of the applicable hold could a new environment and output directory be prepared, without overwriting the completed artifacts. The former instance is terminated. Training/serving helpers assume the archived remote directory layout; adapt paths with the retained path/provenance checks. The adapter configuration contains the original local cache path, so the pinned base revision must be loaded explicitly before applying the adapter.
 
 The exact main command is preserved in `projects/forkloop/runs/lambda-v3-20260906/run_main.sh` (retained locally; not distributed):
 
@@ -165,7 +165,7 @@ PYTHONPATH=. ./venv/bin/python scripts/lambda_fixed_probe.py --label trained-cur
 python3 runs/lambda-v3-20260906/compare_results.py
 ```
 
-The live attempt used `scripts/lambda_development_eval.py --label base` after sourcing the existing local credential file and setting `FORKLOOP_SESSION_LEDGER` to this session's ledger. The historical harness required a fresh ledger/run ID/output and expired at that session's absolute deadline. A later revision accepted an explicit new deadline and verified the session watchdog and model identity; [evaluation-readiness-handoff.md](evaluation-readiness-handoff.md) records that historical revision, matched budgets, and deterministic scorer, not current restart instructions. The [current product handoff](product-handoff.md) remains authoritative. More reproduction context is in `projects/forkloop/runs/lambda-v3-20260906/reproduction-notes.md` (retained locally; not distributed).
+The live attempt used `scripts/lambda_development_eval.py --label base` after sourcing the existing local credential file and setting `FORKLOOP_SESSION_LEDGER` to this session's ledger. The historical harness required a fresh ledger/run ID/output and expired at that session's absolute deadline. A later revision accepted an explicit new deadline and verified the session watchdog and model identity; [evaluation-readiness-handoff.md](evaluation-readiness-handoff.md) records that historical revision, matched budgets, and deterministic scorer, not current restart instructions. The [current product handoff](../product-handoff.md) remains authoritative. More reproduction context is in `projects/forkloop/runs/lambda-v3-20260906/reproduction-notes.md` (retained locally; not distributed).
 
 ## Spending and confirmed cleanup
 
@@ -194,4 +194,4 @@ Cleanup proof:
 
 ## Historical next recommendation
 
-**The recommendation at the time was to run the larger saved-state comparison, then a matched live development comparison under a new authorized inference budget.** [evaluation-readiness-handoff.md](evaluation-readiness-handoff.md) records the later point-in-time readiness check and frozen development package. This recommendation is historical, not permission to execute: the [current product handoff](product-handoff.md) is authoritative and the Solari hold remains unresolved. The expensive training work is retained locally, not distributed. These fixed probes did not establish full workflow improvement or readiness for the sealed final evaluation.
+**The recommendation at the time was to run the larger saved-state comparison, then a matched live development comparison under a new authorized inference budget.** [evaluation-readiness-handoff.md](evaluation-readiness-handoff.md) records the later point-in-time readiness check and frozen development package. This recommendation is historical, not permission to execute: the [current product handoff](../product-handoff.md) is authoritative and the Solari hold remains unresolved. The expensive training work is retained locally, not distributed. These fixed probes did not establish full workflow improvement or readiness for the sealed final evaluation.
