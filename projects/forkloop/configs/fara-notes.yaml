@@ -1,0 +1,39 @@
+# Does a memory channel help a small GUI agent carry what it read? One variable: history_notes.
+# Both arms serve the same frozen Fara1.5-4B v3 adapter (scripts/lambda_serve.py on a GPU box,
+# reached through an SSH tunnel on 127.0.0.1:8011) with identical prompts and decoding.
+# Offline, the same adapter typed the exact authorization 37/38 times with notes vs 0/38
+# without them when the letter was off screen (docs/student-diagnosis.md).
+# Live: backend solari (paused until VM lifetime is bounded; see README "Running live on Solari").
+version: 1
+world: claims-ops-v1
+backend: solari
+family: resolve_denial
+split: train
+seeds: [200, 201, 202, 203, 204, 205, 206, 207, 208, 209]
+budget:
+  max_steps: 120
+  max_seconds: 900
+variants:
+  - name: Fara-4B v3 without notes
+    policy: student
+    system_prompt_file: ../forkloop/policies/prompts/fara_no_user_v1.md
+    options: &fara
+      base_url: http://127.0.0.1:8011/v1
+      model: fara-v3
+      prompt_style: fara
+      coord_space: norm1000
+      image_max_side: 1280
+      history_k: 8
+      prev_screenshot: true
+      nav_macro: true
+      instruction_note: "Credentials for OpenEMR: username admin, password pass. Click the Username field, type admin, click the Password field, type pass, click Login."
+      max_tokens: 512
+      temperature: 0
+      timeout_s: 180
+      history_notes: false
+  - name: Fara-4B v3 with notes
+    policy: student
+    system_prompt_file: ../forkloop/policies/prompts/fara_no_user_v1.md
+    options:
+      <<: *fara
+      history_notes: true
