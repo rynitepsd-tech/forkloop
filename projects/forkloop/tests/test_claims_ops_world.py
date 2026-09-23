@@ -67,7 +67,9 @@ def test_generators_deterministic_and_split_disjoint(world):
     held = generate("resolve_denial", 100001, "heldout_seeds")
     assert train.expected["patient_pid"] != held.expected["patient_pid"]
     comp = generate("resolve_denial", 200001, "heldout_compositions")
-    assert comp.difficulty.get("composition") and len(comp.oracle.effects) == 5
+    assert comp.difficulty.get("composition") and len(comp.oracle.effects) == 6
+    other = generate("update_insurance_reconcile", 200001, "heldout_compositions")
+    assert other.expected != comp.expected  # the two family ids are distinct tasks
 
 
 def test_manifest_roundtrip(world):
@@ -92,7 +94,58 @@ def test_authorization_validity_covers_the_approved_service_date():
         assert validity.group(1) <= service <= validity.group(2), (seed, split)
 
 
+def test_authorization_pdfs_do_not_put_a_number_in_their_title():
+    task = generate("resolve_denial", 4, "train")
+    for seed_file in task.seeding.files:
+        title = re.search(rb"/Title \(([^)]*)\)", seed_file.content)
+        assert title is None or b"AUTH-" not in title.group(1)
+        assert b"AUTH-" not in seed_file.content.split(b"/Title", 1)[-1][:80]
+
+
+def test_composition_oracle_guards_insurance_fields_like_family_2():
+    comp = generate("resolve_denial", 200002, "heldout_compositions")
+    ids = {c.id for c in comp.oracle.effects + comp.oracle.invariants}
+    assert {"openemr_plan", "insurance_fields_preserved", "c31_fields_preserved", "resubmission_member"} <= ids
+
+
 # ---------------------------------------------------------------- resolve_denial
+
+
+async def test_reading_an_inbox_message_is_not_a_collateral_edit(world, backend):
+    env = Env(world, backend, family="resolve_denial", settle_s=0)
+    try:
+        await env.reset(4)
+        task = env.ep.task
+        c = portal_client(env)
+        inbox = c.get("/messages")
+        message_ids = re.findall(r'href="/messages/(\d+)"', inbox.text)
+        assert message_ids, "the inbox should list messages"
+        assert c.get(f"/messages/{message_ids[0]}").status_code == 200
+        c.post(f"/claims/{task.expected['claim_number']}/appeal",
+               data={"reason_code": "PRECERT_OBTAINED", "authorization_number": task.expected["auth_number"],
+                     "narrative": "Prior authorization was obtained before the service date."})
+        await env.step(Action.done())
+        v = await env.verify()
+        assert v.reward == 1.0 and v.reason_code == "OK", v.to_dict()
+    finally:
+        await env.close()
+
+
+async def test_a_missing_attachment_is_reported_as_missing(world, backend):
+    env = Env(world, backend, family="resolve_denial", settle_s=0)
+    try:
+        await env.reset(1)
+        task = env.ep.task
+        assert task.difficulty["require_attachment"]
+        c = portal_client(env)
+        c.post(f"/claims/{task.expected['claim_number']}/appeal",
+               data={"reason_code": "PRECERT_OBTAINED", "authorization_number": task.expected["auth_number"],
+                     "narrative": "Prior authorization was obtained."})
+        await env.step(Action.done())
+        v = await env.verify()
+        assert v.reward == 0.0 and v.reason_code == "MISSING_ATTACHMENT", v.to_dict()
+    finally:
+        await env.close()
 
 
 async def test_resolve_denial_ui_path_success(world, backend):

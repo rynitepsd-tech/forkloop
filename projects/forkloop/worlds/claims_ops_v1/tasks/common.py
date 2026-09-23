@@ -302,7 +302,9 @@ def authorization_letter(rng: random.Random, person: Person, auth_number: str, d
                                      f"Claim tracking id: {d}"]))
         paras += ["", f"Page {pg} of {total}"]
         pages.extend(text_pages(paras, lines_per_page=60))
-    return build_pdf(pages, title=f"Authorization {auth_number}")
+    # A generic title: Chrome's PDF viewer shows it in its toolbar, and a number there would
+    # hand every letter's authorization (decoys included) to the agent without reading the page.
+    return build_pdf(pages, title="Utilization management correspondence")
 
 
 def auth_number(rng: random.Random) -> str:

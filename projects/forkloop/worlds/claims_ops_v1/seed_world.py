@@ -46,7 +46,8 @@ def generate(family: str, seed: int, split: str = "train") -> TaskInstance:
 def _composition(family: str, seed: int, split: str) -> TaskInstance:
     """Update insurance in OpenEMR, resubmit the CO-31 claim, and appeal the CO-197 claim — leaving a third denial alone."""
     base = load_base()
-    rng = rng_for("composition", seed, split)
+    # Keyed by family too: both family ids used to generate the identical task.
+    rng = rng_for(f"composition:{family}", seed, split)
     ids = base.next_ids()
     eid = episode_id_base(seed)
     ids["pid"] = ids["portal_patient"] = eid
@@ -76,6 +77,9 @@ def _composition(family: str, seed: int, split: str) -> TaskInstance:
         Check(id="openemr_policy", kind="query", db="openemr",
               sql="SELECT policy_number FROM insurance_data WHERE pid = ? AND type = 'primary' ORDER BY date DESC, id DESC",
               params=[person.pid], equals=new_member, reason_code="WRONG_VALUE"),
+        Check(id="openemr_plan", kind="query", db="openemr",
+              sql="SELECT plan_name FROM insurance_data WHERE pid = ? AND type = 'primary' ORDER BY date DESC, id DESC",
+              params=[person.pid], equals=new_plan, reason_code="WRONG_VALUE"),
         Check(id="c31_resubmitted", kind="query", db="portal", sql="SELECT status FROM claims WHERE id = ?", params=[c31.id],
               equals="RESUBMITTED", reason_code="NOT_DONE"),
         Check(id="c31_member", kind="query", db="portal", sql="SELECT submitted_member_id FROM claims WHERE id = ?", params=[c31.id],
@@ -86,6 +90,17 @@ def _composition(family: str, seed: int, split: str) -> TaskInstance:
               params=[c197.id], equals=real.upper(), reason_code="WRONG_VALUE"),
     ]
     invariants = [
+        # The same field-level guards as family 2: the row-level checksum allowance on
+        # insurance_data would otherwise accept edits to payer, group or subscriber fields.
+        Check(id="insurance_fields_preserved", kind="preserve_fields", db="openemr",
+              sql="SELECT * FROM insurance_data WHERE id = ?", params=[person.insurance_id],
+              mutable_fields=["plan_name", "policy_number"], reason_code="COLLATERAL_EDIT"),
+        Check(id="c31_fields_preserved", kind="preserve_fields", db="portal",
+              sql="SELECT * FROM claims WHERE id = ?", params=[c31.id],
+              mutable_fields=["submitted_member_id", "status", "updated_at"], reason_code="COLLATERAL_EDIT"),
+        Check(id="resubmission_member", kind="count", db="portal",
+              sql="SELECT COUNT(*) FROM resubmissions WHERE claim_id = ? AND member_id = ?",
+              params=[c31.id, new_member], equals=1, reason_code="WRONG_VALUE"),
         Check(id="c29_untouched", kind="query", db="portal", sql="SELECT status FROM claims WHERE id = ?", params=[c29.id],
               equals="DENIED", reason_code="WRONG_RECORD"),
         Check(id="single_appeal", kind="count", db="portal", sql="SELECT COUNT(*) FROM appeals WHERE claim_id IN (?, ?, ?)",

@@ -43,6 +43,9 @@ oracle:
   # every viewed patient into a COLLATERAL_EDIT. Real edits still change other columns.
   ignore_columns:
     openemr: [uuid, last_updated, revision]
+    # Opening an inbox message marks it read; viewing is not an edit (2026-09-22 review:
+    # any inbox visit failed the task as COLLATERAL_EDIT).
+    portal: [is_read]
   checksum_tables:
     portal: [patients, claims, appeals, resubmissions, providers, users, messages]
     openemr: [patient_data, insurance_data, openemr_postcalendar_events, documents, categories_to_documents, users, insurance_companies]

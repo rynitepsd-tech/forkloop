@@ -106,12 +106,14 @@ def generate(family: str, seed: int, split: str, base: BaseData | None = None) -
               params=[target.id], equals=real.upper(), reason_code="WRONG_VALUE"),
     ]
     if require_attachment:
-        effects.append(Check(id="attachment_hash", kind="query", db="portal",
-                             sql="SELECT attachment_sha256 FROM appeals WHERE claim_id = ? ORDER BY id DESC",
-                             params=[target.id], equals=doc_hash, reason_code="WRONG_ATTACHMENT"))
+        # Presence first: the first failed effect names the verdict, so a missing file must
+        # not be reported as the wrong file.
         effects.append(Check(id="attachment_present", kind="query", db="portal",
                              sql="SELECT COUNT(*) FROM appeals WHERE claim_id = ? AND attachment_sha256 IS NOT NULL",
                              params=[target.id], equals=1, reason_code="MISSING_ATTACHMENT"))
+        effects.append(Check(id="attachment_hash", kind="query", db="portal",
+                             sql="SELECT attachment_sha256 FROM appeals WHERE claim_id = ? ORDER BY id DESC",
+                             params=[target.id], equals=doc_hash, reason_code="WRONG_ATTACHMENT"))
     invariants = [
         Check(id="single_appeal", kind="count", db="portal", sql="SELECT COUNT(*) FROM appeals WHERE claim_id = ?",
               params=[target.id], equals=1, reason_code="DUPLICATE_SIDE_EFFECT"),
