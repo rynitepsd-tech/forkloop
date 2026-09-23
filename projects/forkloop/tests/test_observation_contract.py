@@ -122,3 +122,35 @@ async def test_empty_choices_are_still_charged_and_state_clone_does_not_copy_cli
         await clone.aclose()
         assert not pol._client.is_closed
     finally: await pol.aclose()
+
+
+@pytest.mark.parametrize('style', ['fara', 'compact'])
+async def test_v4_notes_render_identically_in_training_and_serving(tmp_path, style):
+    """Recipe v4-notes: the notes a record carries are the notes serving shows, and serving
+    derives them from Fara replies with the same function the dataset uses."""
+    from forkloop.policies.student import note_from_reply
+
+    previous, current = png('red'), png('blue')
+    paths = []
+    for i, data in enumerate([previous, current]):
+        p = tmp_path / f'{i}.png'; p.write_bytes(data); paths.append(str(p))
+    history = ['click(640, 360)', 'type("admin")', 'click(100, 200)']
+    teacher_raw = ['Open the documents tab.\nclick(640, 360)', 'Log in.\ntype("admin")',
+                   'The authorization number is AUTH-12A34567.\nclick(100, 200)']
+    notes = [note_from_reply(r) for r in teacher_raw]
+    rec = dict(images=paths, instruction='Enter the value.', history=history, step=3, notes=notes,
+               screen_size=[1280, 720], target='type("AUTH-12A34567")')
+    ds = SFTExamples([rec], max_image_side=640, style=style, history_k=8, coord_space='auto')
+    pol = StudentPolicy('http://local.test/v1', 'test', image_max_side=640, prompt_style=style,
+                        history_k=8, prev_screenshot=True, history_notes=True)
+    try:
+        # What the student itself replied on those steps, in Fara's tool-call format.
+        fara_replies = ['\n</think>\n\n' + r.rsplit('\n', 1)[0] + '\n<tool_call>\n{"name": "computer_use", '
+                        '"arguments": {"action": "wait", "time": 1}}\n</tool_call>' for r in teacher_raw]
+        pol._notes = {i: note_from_reply(r) for i, r in enumerate(fara_replies)}
+        obs = Observation(current, rec['instruction'], 3, history, 1280, 720, previous)
+        messages, _ = pol.build_messages(obs)
+        assert canonical_http(messages) == ds[0]['prompt_messages']
+        assert 'AUTH-12A34567' in json.dumps(messages)  # carried by the note, not the target
+    finally:
+        await pol.aclose()

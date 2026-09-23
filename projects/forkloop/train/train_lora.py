@@ -271,7 +271,8 @@ def build_messages(record: dict, style: str, history_k: int, image_size: tuple[i
     prompt = observation_messages(
         instruction=str(rec.get("instruction", "")), history=list(rec.get("history") or []), step=rec.get("step"),
         screen=screen, coords=coords, style=style, history_k=history_k, image_count=len(rec["images"]),
-        system_template=system_prompt_template, instruction_note=instruction_note, nav_macro=nav_macro)
+        system_template=system_prompt_template, instruction_note=instruction_note, nav_macro=nav_macro,
+        notes=rec.get("notes"))  # recipe v4-notes; None keeps the notes-free v3 prompt byte-identical
     target = target_text(rec, style)
     full = prompt + [{"role": "assistant", "content": [{"type": "text", "text": target}]}]
     return prompt, full, target

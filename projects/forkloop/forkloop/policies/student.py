@@ -243,6 +243,8 @@ def format_prompt_override(text: str, coord_size: tuple[int, int], fara_allowed:
 
 
 _ACT_RE = re.compile(r"^\s*(\w+)\s*\((.*)\)\s*$", re.S)
+_TOOL_CALL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.S)
+_THINK_TAG_RE = re.compile(r"</?think>")
 
 
 def loop_warning(history: list[str] | None, *, min_repeats: int = 3, px: int = 20) -> str | None:
@@ -309,11 +311,27 @@ def note_from_reply(text: str, *, max_chars: int = 160) -> str:
     to see next to that action in later turns when ``history_notes`` is on. Measured need
     (2026-09-04, runs/luna-v9-fam1-s0-9): the history is compact actions only, so the
     "CURRENT -> TARGET" line the prompt asks for never reached the next turn and the policy
-    re-derived the target from whatever the date field showed (two of five failures)."""
-    lines = [ln.strip() for ln in (text or "").strip().splitlines() if ln.strip()]
+    re-derived the target from whatever the date field showed (two of five failures).
+
+    Fara replies wrap the action in ``<tool_call>`` JSON (and may carry ``<think>`` tags): the
+    tags and tool call are dropped, except that a ``pause_and_memorize_fact`` fact is kept, so a
+    Fara reply and the compact training target with the same reasoning yield the same note.
+    ``train.make_sft --with-notes`` builds training notes with this function."""
+    text = text or ""
+    facts = []
+    for block in _TOOL_CALL_RE.findall(text):
+        try:
+            call = json.loads(block)
+        except ValueError:
+            continue
+        args = call.get("arguments") if isinstance(call, dict) else None
+        if isinstance(args, dict) and args.get("action") == "pause_and_memorize_fact" and args.get("fact"):
+            facts.append("Memorized: " + str(args["fact"]))
+    text = _TOOL_CALL_RE.sub(" ", _THINK_TAG_RE.sub(" ", text))
+    lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
     if lines and _ACT_RE.match(lines[-1]):
         lines = lines[:-1]
-    note = " ".join(" ".join(lines).split())
+    note = " ".join(" ".join(lines + facts).split())
     if len(note) > max_chars:
         note = note[: max_chars - 1].rstrip() + "…"
     return note

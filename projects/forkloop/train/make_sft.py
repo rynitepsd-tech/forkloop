@@ -190,7 +190,8 @@ def _target_for(step: dict) -> str | None:
 
 
 def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: Stats | None = None,
-                    instruction: str | None = None, with_reasoning: bool = False) -> list[dict]:
+                    instruction: str | None = None, with_reasoning: bool = False,
+                    with_notes: bool = False) -> list[dict]:
     """One record per (valid) step of an episode. ``instruction`` replaces the manifest's stored text
     (``--rerender-instructions``: the current generator wording for the same seed)."""
     m = ep.manifest
@@ -208,6 +209,12 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
     }
     out: list[dict] = []
     history: list[str] = []
+    notes: list[str] = []  # parallel to history: the reasoning note serving shows next to each action
+
+    def note_for(step: dict) -> str:
+        from forkloop.policies.student import note_from_reply
+        return note_from_reply(step.get("raw_action") if isinstance(step.get("raw_action"), str) else "")
+
     for index, step in enumerate(ep.steps):
         if stats is not None:
             stats.steps_seen += 1
@@ -218,6 +225,7 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
                 stats.steps_invalid_skipped += 1
             if target:
                 history.append(target)  # the model saw its own invalid attempt in history
+                notes.append(note_for(step))
             continue
         if target is None:
             if stats is not None:
@@ -228,6 +236,7 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
             if stats is not None:
                 stats.steps_no_image += 1
             history.append(target)
+            notes.append(note_for(step))
             continue
         image_path = (ep.episode_dir / shot).resolve()
         rec = dict(base)
@@ -237,10 +246,15 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
             "target": target,
             "step": int(step.get("i", len(out))),
         })
+        if with_notes:
+            # recipe v4-notes: the serving policy's history_notes channel, filled with the notes
+            # the model would have written on the earlier steps (its reasoning lines).
+            rec["notes"] = list(notes[-history_k:]) if history_k > 0 else []
+            rec["recipe"] = "v4-notes"
         if with_reasoning:
             reasoning = reasoning_from_raw(step.get("raw_action"))
             rec["reasoning"] = reasoning  # "" when the teacher replied with the action only
-            rec["recipe"] = "v2-reasoning"
+            rec["recipe"] = "v4-notes" if with_notes else "v2-reasoning"
             if stats is not None and reasoning:
                 stats.steps_with_reasoning += 1
         out.append(rec)
@@ -249,6 +263,7 @@ def episode_records(ep: Episode, *, history_k: int, keep_invalid: bool, stats: S
             t = action.get("type") if isinstance(action, dict) else "raw"
             stats.per_action_type[t] = stats.per_action_type.get(t, 0) + 1
         history.append(target)
+        notes.append(note_for(step))
     return out
 
 
@@ -302,6 +317,7 @@ def build_sft_records(
     keep_invalid: bool = False,
     rerender_world: str | None = None,
     with_reasoning: bool = False,
+    with_notes: bool = False,
 ) -> tuple[list[dict], Stats]:
     """Collect SFT records from one or more run directories.
 
@@ -360,7 +376,7 @@ def build_sft_records(
             if instruction != str(ep.manifest.get("instruction", "")):
                 stats.instructions_changed += 1
         recs = episode_records(ep, history_k=history_k, keep_invalid=keep_invalid, stats=stats, instruction=instruction,
-                               with_reasoning=with_reasoning)
+                               with_reasoning=with_reasoning, with_notes=with_notes)
         records.extend(recs)
         fam_counter[str(ep.manifest.get("family"))] += 1
         split_counter[str(ep.manifest.get("split"))] += 1
@@ -398,6 +414,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--with-reasoning", action="store_true",
                    help="recipe v2-reasoning: add the teacher's reasoning line (from raw_action) to each record so the "
                         "assistant turn is reasoning-then-action instead of the action alone")
+    p.add_argument("--with-notes", action="store_true",
+                   help="recipe v4-notes: each record carries the reasoning notes of its history steps, the input "
+                        "StudentPolicy(history_notes=True) sees at serving time; train_lora renders them")
     p.add_argument("--rerender-instructions", default=None, metavar="WORLD",
                    help="replace each stored instruction with WORLD's current generator text for the same seed")
     p.add_argument("--history-k", type=int, default=8, help="previous actions kept in each record's history")
@@ -417,6 +436,7 @@ def main(argv: list[str] | None = None) -> int:
         run_dirs, limit=args.limit, families=families, exclude_splits=args.exclude_split,
         history_k=args.history_k, min_reward=args.min_reward, keep_invalid=args.keep_invalid,
         exclude_seeds=args.exclude_seeds, rerender_world=args.rerender_instructions, with_reasoning=args.with_reasoning,
+        with_notes=args.with_notes,
     )
     if args.exclude_seeds:
         ranges = parse_seed_ranges(args.exclude_seeds)

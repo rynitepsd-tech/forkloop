@@ -1,10 +1,10 @@
-# Day-1 spikes — results template
+# Solari spikes and measurements (2026-09-01 → 09-06)
 
-**Status: no numbers have been measured yet.** Every cell that says
-*not yet measured* is exactly that. The scripts in `spikes/` are written
-against the verified SDK surface (see "Verified so far" at the bottom) but
-have not been run: they need a `SOLARI_API_KEY` on a paid plan (desktops
-return `402 FeatureRequiresPlan` on Free).
+**Status: measured.** This is the dated record of every Solari measurement taken while
+building Forkloop: restore latency, fork independence, revert, snapshot, recording and
+the reset benchmark. The original template text below predates the numbers; sections
+now carry the measured values and dates. Live allocations are paused as of 2026-09-15
+(see the README's "Running live on Solari"), so none of these have been re-measured since.
 
 Run everything: `SOLARI_API_KEY=... ./spikes/run_all.sh`. Each spike prints a
 table and appends `{"spike", "ts", "metric", "value", "unit", "notes"}` lines

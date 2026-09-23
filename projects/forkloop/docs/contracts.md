@@ -222,7 +222,8 @@ class Check:
     exempt_tables: list[str] | None = None   # baseline_checksum: append-only tables ignored (audit_log, log, page_views, appeals, resubmissions)
     # Row hashes leave out `world.yaml` `oracle.ignore_columns` ({db: [column, ...]}): columns the app rewrites by
     # itself when a record is merely displayed (OpenEMR backfills `uuid` on first access). Without this, viewing a
-    # patient was a COLLATERAL_EDIT (measured 2026-09-02).
+    # patient was a COLLATERAL_EDIT (measured 2026-09-02). The portal's `messages.is_read` is listed for the same
+    # reason: opening an inbox message is a view, not an edit (2026-09-22).
 
 @dataclass
 class OracleSpec:
@@ -246,6 +247,17 @@ Standard reason codes (world generators must use these when they apply):
 `COLLATERAL_EDIT`, `DIRECT_DB_WRITE`, `FORBIDDEN_SCREEN`, `MISSING_ATTACHMENT`,
 `WRONG_ATTACHMENT`, `PROVIDER_CHANGED`, `WRONG_SLOT`, `BUDGET_EXCEEDED`,
 `INVALID_ACTION_LIMIT`.
+
+Two further codes mark verdicts that say nothing about the policy and are
+**unscored** everywhere (`metrics.UNSCORED_REASONS`, `compare`, `report`):
+`ORACLE_ERROR` — a check raised (for example a database the controller could not
+reach); the check's detail carries `error` and its own `reason_code` is
+`ORACLE_ERROR`, never its configured policy code — and `INFRA_ERROR` — the episode
+ended because three consecutive actions failed in the backend
+(`end_reason: infrastructure_error`, step errors prefixed `backend failed:`).
+An action the backend rejects because of its content (for example an SDK
+`ActionError` for an empty key) is the policy's invalid action (`apply failed:`)
+and stays scored.
 
 For a failed `kind=count`, `op=eq` check configured with
 `DUPLICATE_SIDE_EFFECT`, a count below the required value is classified
@@ -445,10 +457,16 @@ denial codes and wording, amounts, which document/page holds the fact,
 distractor count and similarity (same surname, off-by-one claim numbers), row
 ordering, inbox noise, one-system vs both-systems, partial starting state.
 
-Splits: `train` seeds 0–9999; `heldout_seeds` 100000–109999 (disjoint value
-pools: different surname list, different provider subset, different claim
-number range); `heldout_compositions` 200000–209999 (two-step compositions:
-update insurance **then** appeal the correct one of two denials).
+Splits: `train` seeds 0–99999; `heldout_seeds` 100000–199999; `heldout_compositions`
+200000–299999 (two-step compositions: update insurance **then** appeal the correct one
+of two denials, keyed by family so the two family ids are different tasks). The splits
+use **disjoint surname pools** and independent random streams (so different values);
+providers come from the same pool and claim numbers repeat modulo 50000 across splits
+(train seed 200 and held-out seed 100200 are both C-60200, for different patients).
+
+Authorization and decoy letters carry a generic PDF title
+("Utilization management correspondence"): Chrome's viewer shows the title in its
+toolbar, and until 2026-09-22 it showed each letter's number there.
 
 ---
 
@@ -481,6 +499,16 @@ every episode with `verdict.reward == 1.0`:
 `schema_version: forkloop.observation.v3`. At step i>0, `images` contains the original `shot_before` for steps i-1 and i, in that order; at step 0 it contains only current. `image_roles`, `image_steps`, `screen_size`, and `history_coordinate_space: screen` are required v3 metadata. The exporter rejects missing/gapped/out-of-episode images. History is the last k executed contract actions (including invalid raw actions and waits), with k=0 meaning none.
 
 `policies/observation.py` constructs the shared user content: task/history text, label for the previous screen/action, previous image, label for current, current image. Pointer history is converted from desktop pixels to the requested model coordinate system exactly once. The loader processes all images; the HF processor consumes them in that order. Targets/reasoning and controller metadata never enter prompt construction. The training collator tokenizes the exact inference prefix, then its assistant continuation separately to preserve the generation-boundary token IDs, masks all prompt/padding tokens and retains only continuation labels. No silent fallback template is allowed. Input rendering is pure; observation state advances once per environment step, including macro boundaries.
+
+Recipe **v4-notes** (2026-09-22): `make_sft --with-notes` adds `notes`, parallel to
+`history`, holding `student.note_from_reply(raw_action)` of each history step: the
+reasoning line the serving policy shows next to that action when
+`StudentPolicy(history_notes=True)`. `note_from_reply` strips `<think>` tags and
+`<tool_call>` blocks (keeping a `pause_and_memorize_fact` fact as `Memorized: …`), so a
+Fara reply and the compact training target with the same reasoning give the same note.
+`train_lora` renders `notes` when present; records without them render exactly as
+before. Notes are the policy's own earlier output, not controller metadata; the
+target's own reasoning never enters its prompt.
 
 **Attempts.** `collect --retry-failed N` re-runs every seed whose reward is
 below 1.0 up to N more times, each on a fresh reset (a new fork in fork mode),
@@ -597,7 +625,10 @@ Reset protocol (fixed order):
 `success_rate`, `milestone_score`, `median_steps`, `median_wall_s`,
 `cost_per_success_usd`, `invalid_action_rate`, `wrong_record_rate`,
 `duplicate_side_effect_rate`, `collateral_edit_rate`, with Wilson 95% CIs on
-rates. `forkloop/metrics.py` computes them from a run directory.
+rates. `forkloop/metrics.py` computes them from a run directory. Rates are over
+**scored** episodes: those without a verdict, or with `ORACLE_ERROR`/`INFRA_ERROR`,
+are reported as `n_unscored` and excluded; a rate with nothing scored is `null`
+(unavailable), not 0%.
 
 Estimated cost: `cost_total_usd = cost_vm_usd + cost_tokens_usd`. VM estimate includes recorded execution + setup + fork lifetime, divided by 3600 × `vm_hour_usd` (default 0.134, Starter 2 vCPU/4 GB with
 screen). Token cost prices the episode's usage with `MODEL_PRICES_PER_M[model]`
