@@ -680,10 +680,13 @@ not invalid model output. Return `(None, {"note": ...})` for an invalid action,
 or a terminal action for giving up. Built-in teacher, student, scripted and
 callback policies follow this distinction; provider errors expressed as either
 booleans or diagnostic strings remain unscored.
-Incomplete/non-comparable evidence cannot recommend a leader. Small complete
-samples remain descriptive, not statistically established reliability or deployment
-advice. `compare` exits 2 for incomplete/non-comparable evidence, 1 for a
-comparable B regression when `--fail-on-regression` is requested, otherwise 0.
+Incomplete/non-comparable evidence cannot recommend a leader. A complete sample
+reports an exact McNemar test on the discordant pairs (`paired_test`) and names a
+leader only when p < 0.05; otherwise it reports the observed direction and how many
+one-sided discordant pairs would be needed. Each arm also carries a Wilson 95%
+interval. Exit codes: 0 finished, 1 comparable B regression when
+`--fail-on-regression` is requested, 2 invalid command-line usage, 3 incomplete or
+non-comparable evidence, 4 configuration or runtime error.
 
 `compare-report` reads artifacts without live calls. HTML output normally stays
 inside the comparison directory to preserve relative links. `--format html

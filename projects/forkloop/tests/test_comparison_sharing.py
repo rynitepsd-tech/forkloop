@@ -52,9 +52,7 @@ async def test_bundle_crops_copies_and_keeps_all_cell_links(tmp_path):
     assert originals == {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in shots}
     assert all("PRIVATE_CONTROLLER_SENTINEL" not in p.read_text() for p in files)
     # A second export must not replace a user's reviewed bundle.
-    with pytest.raises(SystemExit) as error:
-        main(["compare-report", str(source), "--format", "html", "--bundle", str(bundle)])
-    assert error.value.code == 2
+    assert main(["compare-report", str(source), "--format", "html", "--bundle", str(bundle)]) == 4
     assert (bundle / "comparison.html").read_text() == summary
 
 

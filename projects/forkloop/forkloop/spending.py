@@ -36,6 +36,15 @@ def require_solari_lifetime_bound() -> NoReturn:
     )
 
 
+def solari_allocation_status() -> str:
+    """One line for diagnostics: whether guarded Solari allocations can run."""
+    try:
+        require_solari_lifetime_bound()
+    except BudgetExceeded as exc:
+        return f"solari: blocked — {exc}"
+    return "solari: allocations permitted by the lifetime guard"
+
+
 @dataclass(frozen=True)
 class SolariPricing:
     """Reviewed rates and historical assumptions, never a lifetime guarantee."""

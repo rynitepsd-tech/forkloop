@@ -63,7 +63,10 @@ def html_comparison(summary: dict[str, Any]) -> str:
     names = {'both_pass': 'Both pass', 'A_only': 'A only · B regression', 'B_only': 'B only · B improvement', 'neither': 'Neither passes'}
     for key, count in summary['paired_outcomes'].items():
         parts.append('<dt>' + names[key] + '</dt><dd>' + _text(count) + '</dd>')
-    parts.append('</dl><p>Discordant seeds: ' + _text(summary['discordant_seeds']) + '</p></section>')
+    test = summary.get('paired_test')
+    test_text = (f" · exact McNemar p = {test['p_value']:.3g} on {test['discordant']} discordant pairs"
+                 if isinstance(test, dict) and 'p_value' in test else '')
+    parts.append('</dl><p>Discordant seeds: ' + _text(summary['discordant_seeds']) + _text(test_text) + '</p></section>')
     parts.append('<section id="changes"><h2>What changed</h2>')
     changes = summary.get('configuration_changes')
     if changes:

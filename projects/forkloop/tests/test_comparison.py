@@ -396,3 +396,14 @@ async def test_provider_timeout_is_not_confused_with_trajectory_deadline(environ
     assert result["cells"][1]["status"] == "completed"
     assert result["arms"]["B"]["scored"] == result["arms"]["B"]["failures"] == 1
     assert result["matched_pairs"] == 0
+
+
+def test_paired_test_is_an_exact_two_sided_mcnemar():
+    from forkloop.comparison import paired_test
+
+    assert paired_test(0, 0)["p_value"] == 1.0
+    assert paired_test(0, 2)["p_value"] == 0.5  # 0/2 vs 2/2 is not evidence of a difference
+    assert paired_test(0, 5)["p_value"] == 0.0625
+    assert paired_test(0, 6)["p_value"] == 0.03125
+    assert paired_test(1, 6)["p_value"] == 0.125
+    assert paired_test(3, 0)["discordant_needed"] == 6

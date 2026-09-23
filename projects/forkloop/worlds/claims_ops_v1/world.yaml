@@ -12,7 +12,7 @@ paths:
   openemr_root: /var/www/openemr
   openemr_docs: /var/www/openemr/sites/default/documents
   openemr_shim_db: /var/lib/forkloop/openemr_shim.db
-  downloads: /home/user/Downloads
+  downloads: /home/desktop/Downloads  # Chrome runs as the session user `desktop`
   build_dir: /opt/forkloop
 databases:
   portal:

@@ -24,6 +24,7 @@ class ConfiguredPolicy:
     name: str
     identity: dict[str, Any]
     factory: Callable[[], Any]
+    missing_env: tuple[str, ...] = ()
 
 
 def _mapping(value: Any, label: str, allowed: set[str] | None = None) -> dict:
@@ -41,7 +42,7 @@ def _public_options(value: Any) -> None:
     json.dumps(value, allow_nan=False)
 
 
-def configure_policy(raw: dict, base: Path) -> ConfiguredPolicy:
+def configure_policy(raw: dict, base: Path, *, require_env: bool = True) -> ConfiguredPolicy:
     spec = _mapping(raw, "variant", {"name", "policy", "factory", "options", "revision", "api_key_env", "system_prompt_file"})
     name = spec.get("name")
     if not isinstance(name, str) or not name.strip() or len(name) > 80:
@@ -110,7 +111,8 @@ def configure_policy(raw: dict, base: Path) -> ConfiguredPolicy:
             raise ValueError("Custom factories require an explicit revision identifying the evaluated code")
     else:
         raise ValueError(f"Unknown policy {kind!r}; choose student, teacher, scripted, random, or factory")
-    if key_env and not os.environ.get(key_env):
+    missing_env = (key_env,) if key_env and not os.environ.get(key_env) else ()
+    if missing_env and require_env:
         raise ValueError(f"{name}: required environment variable {key_env} is not set")
     # Validate keyword names before any machine allocation. Do not instantiate a
     # plugin here: constructors may connect to paid services or own async clients.
@@ -142,10 +144,12 @@ def configure_policy(raw: dict, base: Path) -> ConfiguredPolicy:
             return resolve()
         return checked_policy(policy)
 
-    return ConfiguredPolicy(name, identity, factory)
+    return ConfiguredPolicy(name, identity, factory, missing_env)
 
 
-def load_config(path: str | Path) -> tuple[dict, list[ConfiguredPolicy]]:
+def load_config(path: str | Path, *, require_env: bool = True) -> tuple[dict, list[ConfiguredPolicy]]:
+    """Validate a comparison file. ``require_env=False`` (``compare --check``) reports
+    missing credential variables instead of refusing, so a config can be reviewed anywhere."""
     path = Path(path)
     config = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")), "comparison",
                       {"version", "world", "backend", "family", "split", "seeds", "budget", "variants"})
@@ -170,7 +174,7 @@ def load_config(path: str | Path) -> tuple[dict, list[ConfiguredPolicy]]:
     variants = config.get("variants")
     if not isinstance(variants, list) or len(variants) != 2:
         raise ValueError("Comparison requires exactly two variants")
-    policies = [configure_policy(variant, path.parent) for variant in variants]
+    policies = [configure_policy(variant, path.parent, require_env=require_env) for variant in variants]
     if policies[0].name == policies[1].name:
         raise ValueError("Variant names must be distinct")
     return config, policies

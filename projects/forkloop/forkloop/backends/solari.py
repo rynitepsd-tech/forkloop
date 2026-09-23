@@ -318,7 +318,10 @@ class SolariBackend:
                      resolution: str = "1280x720", cpu: int = 2, mem_mb: int = 4096,
                      record: Optional[bool] = None, metadata: Optional[dict[str, str]] = None,
                      timeout_ms: int = 30 * 60_000, disk_gb: Optional[int] = None) -> SolariMachine:
-        from ..spending import SessionLedger, load_solari_pricing
+        from ..spending import SessionLedger, load_solari_pricing, require_solari_lifetime_bound
+        # First: when allocations are held, ledger or pricing advice would send the user
+        # to fixes that cannot help.
+        require_solari_lifetime_bound()
         if not self.session_ledger:
             raise BackendError("Solari creates require FORKLOOP_SESSION_LEDGER; initialize it with forkloop ledger --create")
         if self.plan != "starter":

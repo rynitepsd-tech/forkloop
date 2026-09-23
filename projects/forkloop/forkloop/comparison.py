@@ -24,7 +24,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .backends.base import Backend
 from .env import BACKEND_FAILURE_PREFIX, Env, act_with_deadline
-from .metrics import episode_tokens, failure_codes
+from .metrics import episode_tokens, failure_codes, wilson
 from .policies.base import Policy
 from .pool import WorkerPool
 from .trajectories import Recorder, load_episode
@@ -614,6 +614,7 @@ def summarize_comparison(output: str | Path) -> dict[str, Any]:
         arms[arm] = {"label": str(labels.get(arm, arm)) if isinstance(labels, dict) else arm, "planned": len(seeds),
                      "successes": successes, "scored": len(scored), "failures": len(scored) - successes,
                      "unscored": len(selected) - len(scored), "success_rate": successes / len(scored) if scored else None,
+                     "success_interval_95": ([round(x, 4) for x in wilson(successes, len(scored))[1:]] if scored else None),
                      "statuses": dict(Counter(c["status"] for c in selected)),
                      "recorded_setup_and_episode_seconds": sum(durations),
                      "duration_cells": len(durations),
@@ -639,9 +640,25 @@ def summarize_comparison(output: str | Path) -> dict[str, Any]:
                       "reset_equivalence": equivalence, "cells": {arm: c["id"] for arm, c in pair_cells.items()}})
     eligible = bool(pairs) and all(p["comparable"] for p in pairs) and execution.get("status") == "finished"
     controls = protocol.get("evidence_kind") != "live_policy_evaluation" or protocol.get("backend") == "fake"
-    leader = None
-    if eligible and not controls and outcomes["A_only"] != outcomes["B_only"]:
-        leader = "A" if outcomes["A_only"] > outcomes["B_only"] else "B"
+    test = paired_test(outcomes["A_only"], outcomes["B_only"])
+    observed = None
+    if outcomes["A_only"] != outcomes["B_only"]:
+        observed = "A" if outcomes["A_only"] > outcomes["B_only"] else "B"
+    # A leader is named only when the paired difference is unlikely under "no difference".
+    leader = observed if eligible and not controls and test["p_value"] < 0.05 else None
+    if controls:
+        message = "Constructed controls; not live policy performance."
+    elif not eligible:
+        message = "Recommendation withheld: incomplete or non-comparable evidence."
+    elif leader:
+        message = (f"{leader} solved more matched seeds ({test['A_only']} A-only vs {test['B_only']} B-only; "
+                   f"exact McNemar p={test['p_value']:.3g}). Descriptive for these seeds, not a deployment recommendation.")
+    elif observed:
+        message = (f"No reliable difference: {observed} is ahead on discordant seeds ({test['A_only']} A-only vs "
+                   f"{test['B_only']} B-only) but exact McNemar p={test['p_value']:.3g}. "
+                   f"{test['discordant_needed']} one-sided discordant pairs would be needed for p<0.05.")
+    else:
+        message = "Complete comparable sample with no difference on discordant seeds."
     return {"schema": SCHEMA, "protocol": protocol, "execution": execution, "issues": issues,
             "planned_pairs": len(seeds), "matched_pairs": sum(p["comparable"] for p in pairs),
             "arms": arms, "paired_outcomes": outcomes, "pairs": pairs, "cells": cells, "unplanned_attempts": extras,
@@ -650,11 +667,21 @@ def summarize_comparison(output: str | Path) -> dict[str, Any]:
             "discordant_seeds": [p["seed"] for p in pairs if p["outcome"] in ("A_only", "B_only")],
             "regression_seeds": [p["seed"] for p in pairs if p["outcome"] == "A_only"],
             "missing_cells": [c["id"] for c in cells if c["status"] == "missing"],
+            "paired_test": test,
             "recommendation": {"eligible": eligible and not controls, "observed_leader": leader,
-                               "message": "Constructed controls; not live policy performance." if controls else
-                               "Recommendation withheld: incomplete or non-comparable evidence." if not eligible else
-                               "Complete comparable sample; leader is descriptive only, not a deployment recommendation."},
+                               "observed_direction": observed, "message": message},
             "limits": LIMITS}
+
+
+def paired_test(a_only: int, b_only: int) -> dict[str, Any]:
+    """Exact McNemar test: a two-sided binomial test on the discordant pairs (both-pass and
+    neither pairs carry no information about which arm is better)."""
+    n = a_only + b_only
+    k = min(a_only, b_only)
+    p = 1.0 if n == 0 else min(1.0, 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n)
+    needed = next(m for m in range(1, 64) if 2 / 2 ** m < 0.05)  # all discordant pairs one way
+    return {"method": "exact McNemar (two-sided binomial on discordant pairs)", "A_only": a_only,
+            "B_only": b_only, "discordant": n, "p_value": round(p, 6), "discordant_needed": needed}
 
 
 def format_comparison(summary: dict[str, Any]) -> str:
@@ -666,10 +693,16 @@ def format_comparison(summary: dict[str, Any]) -> str:
         if summary["execution"].get(key):
             lines.append(f"Execution {key}: {summary['execution'][key]}")
     for arm, values in summary["arms"].items():
-        lines.append(f"{arm} / {values['label']}: {values['successes']}/{values['scored']} scored successes; "
-                     f"{values['failures']} failures; {values['unscored']} unscored; {values['planned']} planned")
+        interval = values.get("success_interval_95")
+        lines.append(f"{arm} / {values['label']}: {values['successes']}/{values['scored']} scored successes"
+                     + (f" (95% CI {interval[0]:.0%}–{interval[1]:.0%})" if interval else "")
+                     + f"; {values['failures']} failures; {values['unscored']} unscored; {values['planned']} planned")
     lines += ["", "Paired outcomes: " + ", ".join(f"{k}={v}" for k, v in summary["paired_outcomes"].items()),
-              "Discordant seeds: " + str(summary["discordant_seeds"]), ""]
+              "Discordant seeds: " + str(summary["discordant_seeds"])]
+    if summary.get("paired_test"):
+        t = summary["paired_test"]
+        lines.append(f"Paired test: {t['method']}, p={t['p_value']:.3g} ({t['discordant']} discordant pairs)")
+    lines.append("")
     for change in summary.get("configuration_changes", []):
         lines.append(f"Changed {change['path']}: A={_json(change['A'])}; B={_json(change['B'])}")
     for pair in summary["pairs"]:

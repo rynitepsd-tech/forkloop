@@ -1,16 +1,18 @@
 """``forkloop`` command line.
 
-    forkloop worlds                                  list worlds
-    forkloop task  --world W --family F --seed N      print a task (instruction + oracle ids; add --full for the manifest)
-    forkloop build-world --world W [--backend fake]   build the golden snapshot, print its id
-    forkloop run   --world W --family F --seed N --policy scripted|random|teacher|student  run one episode
-    forkloop collect --world W --families ... --seeds 0-199 --policy teacher [--retry-failed 2]  teacher data collection
-    forkloop export --run RUN_DIR --format jsonl|sft|osworld --out PATH
-    forkloop metrics --run RUN_DIR
-    forkloop report RUN_DIR|EPISODE_DIR              explain a recorded run or episode from its artifacts
-    forkloop ledger PATH --create --solari-usd 10     create the session spend ledger paid calls reserve against
-    forkloop reset-bench ...                          see forkloop.bench.reset_benchmark
-    forkloop reap                                     kill leftover forkloop machines on Solari
+Start here (no account needed):
+    forkloop doctor --backend fake                    check the installation
+    forkloop demo --out runs/demo                     five verifier controls with HTML reports
+    forkloop compare --config CONFIG --out DIR        matched A/B policy comparison on the same seeds
+    forkloop compare-report DIR [--format html]       read or share a comparison
+    forkloop report RUN_DIR|EPISODE_DIR               explain a recorded run or episode
+
+Inspect and operate:
+    forkloop worlds | task                            list worlds; print a generated task
+    forkloop run | metrics | export                   one episode; run summary; data export
+    forkloop ledger | reap                            spend ledger; clean up leftover Solari machines
+
+Research tools: build-world, collect, reset-bench (see system.md).
 """
 
 from __future__ import annotations
@@ -24,6 +26,9 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlsplit
+
+EXIT_INCOMPLETE = 3  # compare: planned pairs missing, interrupted or not comparable
+EXIT_ERROR = 4       # configuration or runtime error (argparse usage errors stay 2)
 
 
 def _backend(name: str, world: Any, latency: float = 0.0):
@@ -470,12 +475,20 @@ async def _reap(args: argparse.Namespace) -> int:
     return 0
 
 
+def _live_execution_note(backend: str) -> str:
+    if backend == "fake":
+        return "fake backend: offline, no provider spending"
+    from .spending import solari_allocation_status
+
+    return solari_allocation_status()
+
+
 async def _compare(args: argparse.Namespace) -> int:
     from .comparison import PolicyVariant, format_comparison, run_comparison
     from .policy_config import load_config
     from .world import load_world
 
-    config, policies = load_config(args.config)
+    config, policies = load_config(args.config, require_env=not args.check)
     world = load_world(config["world"])
     if config["family"] not in world.config.families:
         raise ValueError(f"Family {config['family']!r} is not supported by {world.name}")
@@ -483,6 +496,8 @@ async def _compare(args: argparse.Namespace) -> int:
         print(json.dumps({"world": world.name, "backend": config["backend"], "family": config["family"],
                           "seeds": config["seeds"], "budget": config["budget"],
                           "variants": [{"name": p.name, "identity": p.identity} for p in policies],
+                          "missing_environment": sorted({v for p in policies for v in p.missing_env}),
+                          "live_execution": _live_execution_note(config["backend"]),
                           "note": "Configuration only; no machine allocation or model request."}, indent=2))
         return 0
     if Path(args.out).exists():
@@ -500,7 +515,7 @@ async def _compare(args: argparse.Namespace) -> int:
     print(format_comparison(result))
     print(f"\nOpen {Path(args.out) / 'comparison.html'} in a browser.")
     if result["execution"]["status"] != "finished" or result["matched_pairs"] != result["planned_pairs"]:
-        return 2
+        return EXIT_INCOMPLETE
     return 1 if args.fail_on_regression and result["regression_seeds"] else 0
 
 
@@ -640,7 +655,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--config", required=True, help="versioned YAML; custom factories are trusted local Python code")
     p.add_argument("--out", required=True, help="new comparison directory; existing evidence is never overwritten")
     p.add_argument("--check", action="store_true", help="validate configuration without allocating machines or calling models")
-    p.add_argument("--fail-on-regression", action="store_true", help="exit 1 if B fails a comparable seed that A passes; incomplete evidence exits 2")
+    p.add_argument("--fail-on-regression", action="store_true",
+                   help="exit 1 if B fails a comparable seed that A passes (exit codes: 0 ok, 1 regression, "
+                        "2 usage, 3 incomplete evidence, 4 configuration or runtime error)")
     p.set_defaults(fn=lambda a: asyncio.run(_compare(a)))
     p = sub.add_parser("compare-report", help="inspect a recorded comparison without any account or model")
     p.add_argument("path", help="comparison directory containing protocol.json")
@@ -731,7 +748,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         return int(args.fn(args) or 0)
     except (ValueError, TypeError, OSError) as exc:
-        ap.error(str(exc))
+        # Distinct from argparse's usage errors (2) and incomplete comparison evidence (3).
+        print(f"forkloop {args.cmd}: error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ def test_invalid_or_unbounded_pricing_review_is_refused(tmp_path, monkeypatch, c
         load_solari_pricing(path, today=dt.date(2026, 10, 1))
 
 
-async def test_fractional_memory_cannot_underreserve_before_create(tmp_path, reviewed_solari_pricing):
+async def test_fractional_memory_cannot_underreserve_before_create(tmp_path, reviewed_solari_pricing, simulated_solari_lifetime):
     class Client:
         async def create_desktop(self, **kwargs):
             pytest.fail('invalid shape reached paid create')
