@@ -73,3 +73,27 @@ def test_sdk_409_is_recognised_as_a_revert_refusal():
     assert _is_revert_refusal(wrapped)
     # other statuses are not refusals
     assert not _is_revert_refusal(_wrap_error(se.GatewayError(500, "boom")))
+
+
+async def test_reap_spares_machines_created_by_sibling_pools_of_the_same_run(world, backend):
+    parent = WorkerPool(backend, world, size=1, mode="fork", run_id="run-shared")
+    branch = WorkerPool(backend, world, size=1, mode="fork", run_id="run-shared", reap_orphans_enabled=False)
+    w = await branch.acquire()
+    branch_machine = await w.restore()
+    assert await parent.reap_orphans() == []  # a live branch machine is not an orphan
+    await branch.release(w)
+    await branch.close()
+    await parent.close()
+    assert branch_machine.id
+
+
+async def test_reap_is_deferred_while_a_create_is_in_flight(world, backend):
+    from forkloop import pool as pool_module
+
+    p = WorkerPool(backend, world, size=1, mode="fork", run_id="run-inflight")
+    pool_module._INFLIGHT["run-inflight"] = 1
+    try:
+        assert await p.reap_orphans() == []
+        assert any(e["event"] == "reap_deferred_create_in_flight" for e in p.events)
+    finally:
+        pool_module._INFLIGHT["run-inflight"] = 0
