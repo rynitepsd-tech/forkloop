@@ -23,7 +23,7 @@ from typing import Any, Awaitable, Callable, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 from .backends.base import Backend
-from .env import Env, act_with_deadline
+from .env import BACKEND_FAILURE_PREFIX, Env, act_with_deadline
 from .metrics import episode_tokens, failure_codes
 from .policies.base import Policy
 from .pool import WorkerPool
@@ -243,7 +243,7 @@ async def run_comparison(world: World | str, backend: Backend, variants: Sequenc
                         raise RuntimeError(str(meta.get("note") or meta["error"]))
                     meta.setdefault("model_latency_s", time.monotonic() - call_start)
                     obs, _, terminated, truncated, step_info = await env.step(action, meta=meta)
-                    if str(step_info.get("error") or "").startswith("apply failed:"):
+                    if str(step_info.get("error") or "").startswith(BACKEND_FAILURE_PREFIX):
                         raise RuntimeError(step_info["error"])
                     if terminated or truncated:
                         verdict = await env.verify()
@@ -545,7 +545,7 @@ def summarize_comparison(output: str | Path) -> dict[str, Any]:
                                    "tokens": episode_tokens(episode) if episode["steps"] else None,
                                    "steps": len(episode["steps"]), "reset": episode["reset"],
                                    "wall_seconds": (verdict or {}).get("wall_seconds")}
-                if any(str(step.get("error") or "").startswith("apply failed:") for step in episode["steps"]):
+                if any(str(step.get("error") or "").startswith(BACKEND_FAILURE_PREFIX) for step in episode["steps"]):
                     row["issues"].append("backend action failure recorded in episode")
                 if not (episode_path / "steps.jsonl").is_file():
                     row["issues"].append("recorded steps are missing")

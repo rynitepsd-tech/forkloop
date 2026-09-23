@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .actions import Action, InvalidAction
-from .backends.base import Backend, Machine, apply_action
+from .backends.base import Backend, BackendError, Machine, apply_action
 from .dbaccess import DbAccess
 from .observe import wait_stable
 from .oracle import Baseline, Oracle, Verdict
@@ -60,6 +60,7 @@ class EpisodeState:
     verdict: Optional[Verdict] = None
     recorder: Optional[EpisodeRecorder] = None
     end_reason: str = ""
+    infra_errors: int = 0  # consecutive backend/transport failures while applying actions
 
 
 class Env:
@@ -83,6 +84,7 @@ class Env:
         self.settle_s = settle_s
         self.stable_after_action = stable_after_action
         self.max_invalid = max_invalid
+        self.max_infra_errors = 3
         self.resetter = reset_controller or ResetController(world)
         self.record_extra = record_extra or {}
         self.width, self.height = world.size
@@ -165,12 +167,16 @@ class Env:
             try:
                 await apply_action(ep.machine, parsed)
             except Exception as e:  # noqa: BLE001
-                error = f"apply failed: {type(e).__name__}: {e}"
-                parsed_ok = False
+                if _is_infrastructure_error(e):
+                    error = f"{BACKEND_FAILURE_PREFIX} {type(e).__name__}: {e}"
+                    # A dropped connection or dead machine is not the policy's mistake:
+                    # count it separately so it cannot end the episode as INVALID_ACTION_LIMIT.
+                    ep.infra_errors += 1
+                else:
+                    error = f"apply failed: {type(e).__name__}: {e}"
+                    ep.invalid += 1
             else:
-                parsed_ok = True
-            if not parsed_ok:
-                ep.invalid += 1
+                ep.infra_errors = 0
         # observe
         if parsed is not None and not parsed.is_terminal:
             if self.stable_after_action:
@@ -210,6 +216,9 @@ class Env:
         elif ep.invalid >= self.max_invalid:
             ep.truncated = True
             ep.end_reason = "invalid_actions"
+        elif ep.infra_errors >= self.max_infra_errors:
+            ep.truncated = True
+            ep.end_reason = "infrastructure_error"
         if ep.terminated or ep.truncated:
             verdict = await self.verify()
             reward = verdict.reward
@@ -227,6 +236,9 @@ class Env:
             verdict = await Oracle(ctx).evaluate(ep.task.oracle)
         except Exception as e:  # noqa: BLE001
             verdict = Verdict.error(f"{type(e).__name__}: {e}")
+        if ep.end_reason == "infrastructure_error" and verdict.reward < 1.0:
+            # Whatever the DB shows, the episode was cut short by the backend, not the policy.
+            verdict.reason_code = "INFRA_ERROR"
         if ep.end_reason == "invalid_actions" and verdict.reward < 1.0 and verdict.reason_code == "OK":
             verdict.reason_code = "INVALID_ACTION_LIMIT"
         if ep.truncated and verdict.reward < 1.0 and verdict.reason_code in ("OK",):
@@ -352,3 +364,21 @@ async def act_with_deadline(env: Env, policy: Any, obs: Observation):
 
 
 __all__ = ["Env", "EnvCheckpoint", "make", "run_episode", "Observation"]
+
+
+#: Step-error prefix for backend/transport failures (unscored); "apply failed:" marks an action
+#: the backend rejected because of its content, which is the policy's invalid action.
+BACKEND_FAILURE_PREFIX = "backend failed:"
+
+
+def _is_infrastructure_error(e: BaseException) -> bool:
+    """Backend/transport failures (dead machine, dropped channel, timeouts), as opposed to an
+    action the backend rejected because of its content (e.g. ValueError for an empty type())."""
+    if isinstance(e, (BackendError, ConnectionError, TimeoutError, asyncio.TimeoutError, OSError)):
+        return True
+    try:
+        from solari_core import errors as se  # type: ignore
+    except Exception:  # pragma: no cover - SDK absent
+        return False
+    return isinstance(e, (se.GatewayError, se.ConnectionError, se.TimeoutError))
+

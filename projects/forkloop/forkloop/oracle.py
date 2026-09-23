@@ -287,7 +287,10 @@ def _norm(v: Any) -> Any:
 
 
 def _failure_reason(check: Check, detail: dict[str, Any]) -> str:
-    """An exact-count shortfall is missing work, not a duplicate side effect."""
+    """An exact-count shortfall is missing work, not a duplicate side effect. A check that
+    raised could not observe the state, so it is an oracle error, not a policy failure."""
+    if "error" in detail:
+        return "ORACLE_ERROR"
     if (check.kind == "count" and check.op == "eq" and check.reason_code == "DUPLICATE_SIDE_EFFECT"
             and detail.get("passed") is False and "error" not in detail):
         actual, expected = detail.get("actual"), detail.get("expected")
@@ -327,6 +330,8 @@ class Oracle:
         n_eff = len(spec.effects)
         milestones = (passed_effects / n_eff) if n_eff else (0.0 if failed else 1.0)
         reward = 1.0 if not failed else 0.0
+        if any(isinstance(d, dict) and "error" in d for d in details.values()):
+            reason = "ORACLE_ERROR"  # unscorable: never report it as the policy's mistake
         return Verdict(reward=reward, milestones=milestones, reason_code=reason, failed=failed,
                        details=details, n_effects=n_eff, n_invariants=len(spec.invariants))
 
