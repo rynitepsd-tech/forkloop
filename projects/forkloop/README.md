@@ -99,6 +99,7 @@ Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop 
 
 | Evidence | Result | Caveat |
 | --- | --- | --- |
+| [Notes on/off, live, Sept 23](docs/live-notes-comparison.md) | Fara-4B v3: 1/10 with notes, 1/10 without; 20/20 cells scored, 10/10 resets equivalent (exact p = 1) | Development seeds; 16/20 episodes hit the 900 s budget |
 | [Retained live episode](docs/worked-example/) | Adapter-trained Fara-4B completed the full workflow and submitted one wrong character → `WRONG_VALUE` | One episode; 6 of 148 screenshots retained |
 | [Prompt comparison, Sept 15](docs/worked-example/navigation-comparison.html) | Workflow prompt 2/2 vs compact prompt 0/2 on two matched seeds (exact p = 0.5) | Run interrupted; 2 of 4 planned pairs |
 | [Image-detail study](docs/frozen-v3-evaluation-results.md) | Exact authorization typing: 19/20 at high image detail vs 0/20 at low | Recorded states; actions not executed |
