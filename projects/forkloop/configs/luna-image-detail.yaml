@@ -1,0 +1,39 @@
+# Does a common cost cut, low screenshot detail, silently break a GUI agent? One variable: image_detail.
+# Both arms run gpt-6-luna with the workflow v5 prompt and the "Luna workflow prompt v5" options of
+# configs/denial-navigation.json. Offline, on 20 recorded authorization screens, gpt-5.6-luna typed the exact
+# authorization 19/20 times at high detail vs 0/20 at low (docs/frozen-v3-evaluation-results.md).
+# Pre-registered in docs/protocol-image-detail-live.md. API keys and the session ledger come from the environment.
+version: 1
+world: claims-ops-v1
+backend: solari
+family: resolve_denial
+split: heldout_seeds
+reset_mode: fork   # a fresh desktop per cell: no machine outlives FORKLOOP_SOLARI_MAX_LIFETIME_MIN
+seeds: [100300, 100301, 100302, 100303, 100304, 100305, 100306, 100307, 100308, 100309, 100310, 100311, 100312, 100313]
+budget:
+  max_steps: 120
+  max_seconds: 1200
+variants:
+  - name: Luna high detail
+    policy: student
+    system_prompt_file: ../forkloop/policies/prompts/hosted_gui_agent_v5.md
+    options: &luna
+      base_url: https://api.openai.com/v1
+      model: gpt-6-luna
+      prompt_style: compact
+      image_max_side: 1280
+      image_detail: high
+      history_k: 16
+      prev_screenshot: true
+      history_notes: false
+      hosted_reasoning: true
+      max_tokens: 4096
+      timeout_s: 120
+      extra_body:
+        reasoning_effort: high
+  - name: Luna low detail
+    policy: student
+    system_prompt_file: ../forkloop/policies/prompts/hosted_gui_agent_v5.md
+    options:
+      <<: *luna
+      image_detail: low
