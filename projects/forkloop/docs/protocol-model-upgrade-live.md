@@ -169,3 +169,19 @@ actual and $0.79 kept for two probe requests rejected with HTTP 400), Solari $0.
 - **Solari.** 48 reservations × $0.1005 = **$4.82**, plus $0.25 already booked and about $0.20 for
   the smoke check: $5.27, under the $6.40 stop, leaving room for about 11 retries. Expected compute:
   about 12 machine-minutes per cell, **about $1.3**.
+
+## Execution notes (each recorded before the action it governs)
+
+- **2026-09-24 09:48–09:52 UTC, start.** Solari creates recovered at 09:48:56 UTC. The smoke check
+  (`runs/session-20260924/finder-check-3`, seed 100314) passed: both resets ran the feasibility gate
+  with all seven checks true, opened on the logged-in denied-claims list, and were equivalent. Both
+  halves started at 09:52 UTC. The first cell of each half opened on the logged-in denied-claims
+  list with its seeded claim visible (early world check passed).
+- **2026-09-24 ~10:30 UTC, seed 100330 arm B (`compare-a/B-000002`).** The OpenAI request for step 23
+  returned HTTP 400 with no body recorded; `compare` marked the cell `execution_error` (unscored).
+  Rebuilt offline from the recorded screenshots and history, the same request succeeded on
+  `gpt-6-luna` (`runs/session-20260924/repro_400.py`), so it is not a systematic incompatibility of
+  the arm. It is treated as an infrastructure failure under the pre-registered rule: exactly one
+  retry of seed 100330 arm B on a fresh fork, after both halves finish, in `retry-*`, marked
+  "retried". If a second provider 400 occurs in either arm, it is handled the same way and listed
+  here before its retry.
