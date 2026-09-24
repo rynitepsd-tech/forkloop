@@ -13,7 +13,11 @@
 | [live-notes-comparison.md](live-notes-comparison.md) | The first complete live comparison: Fara-4B v3 with and without notes (Sept 23) |
 | [live-image-detail-comparison.md](live-image-detail-comparison.md) | Live comparison, screenshot detail high vs low on gpt-6-luna: 4/14 vs 0/14, p = 0.125 (Sept 23) |
 | [protocol-image-detail-live.md](protocol-image-detail-live.md) | Pre-registered protocol for the live image-detail comparison (Sept 23) |
+| [reading-model-upgrade-results.md](reading-model-upgrade-results.md) | Offline paired reading study: gpt-5.6-luna 20/20 vs gpt-6-luna 10/20 exact authorization, p = 0.002 (Sept 24) |
+| [protocol-reading-model-upgrade.md](protocol-reading-model-upgrade.md) | Pre-registered protocol for that study (Sept 24) |
+| [protocol-model-upgrade-live.md](protocol-model-upgrade-live.md) | Pre-registered protocol for the live model-upgrade comparison, gpt-5.6-luna vs gpt-6-luna (Sept 24) |
 | [solari-lifetime-probe.md](solari-lifetime-probe.md) | Measured: desktop idle timeouts renew themselves (Sept 23) |
+| [solari-platform-notes.md](solari-platform-notes.md) | Everything we measured about Solari desktops, dated, with evidence |
 | [worked-example/](worked-example/) | The public evidence report, the recovered prompt comparison and the explainer video |
 | [product-handoff.md](product-handoff.md) | Dated session handoffs, newest first |
 

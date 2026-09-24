@@ -95,6 +95,8 @@ forkloop compare --config configs/fara-notes.yaml --out runs/fara-notes
 
 Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop doctor --backend solari` checks all of this without allocating anything. Without both variables, creates refuse before any provider call.
 
+[Solari platform notes](docs/solari-platform-notes.md) lists what we measured about Solari desktops while running Forkloop (restore times, lifetime, SDK quirks, capacity errors), each dated and linked to its evidence.
+
 ## What has actually been measured
 
 | Evidence | Result | Caveat |
