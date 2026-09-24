@@ -99,6 +99,7 @@ Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop 
 
 | Evidence | Result | Caveat |
 | --- | --- | --- |
+| [Image detail high/low, live, Sept 23](docs/live-image-detail-comparison.md) | gpt-6-luna: 4/14 full-task successes at high detail vs 0/14 at low (all 4 discordant pairs favour high; exact p = 0.125). Low detail never logged in: 99% of its clicks landed in the 512 × 288 corner. High detail filed 10 appeals; the portal confirmed all 10 and the database rejected 6 for a misread authorization | Not significant at the pre-registered α = 0.05; a first run was voided by a reset defect and rerun under a new pre-registration |
 | [Notes on/off, live, Sept 23](docs/live-notes-comparison.md) | Fara-4B v3: 1/10 with notes, 1/10 without; 20/20 cells scored, 10/10 resets equivalent (exact p = 1) | Development seeds; 16/20 episodes hit the 900 s budget |
 | [Retained live episode](docs/worked-example/) | Adapter-trained Fara-4B completed the full workflow and submitted one wrong character → `WRONG_VALUE` | One episode; 6 of 148 screenshots retained |
 | [Prompt comparison, Sept 15](docs/worked-example/navigation-comparison.html) | Workflow prompt 2/2 vs compact prompt 0/2 on two matched seeds (exact p = 0.5) | Run interrupted; 2 of 4 planned pairs |

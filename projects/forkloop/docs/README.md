@@ -11,6 +11,7 @@
 | [cost.md](cost.md) | Prices, formulas and the recorded spend of past sessions |
 | [student-diagnosis.md](student-diagnosis.md) | Why small-model SFT stayed at 0/30, and the notes (memory channel) experiment |
 | [live-notes-comparison.md](live-notes-comparison.md) | The first complete live comparison: Fara-4B v3 with and without notes (Sept 23) |
+| [live-image-detail-comparison.md](live-image-detail-comparison.md) | Live comparison, screenshot detail high vs low on gpt-6-luna: 4/14 vs 0/14, p = 0.125 (Sept 23) |
 | [protocol-image-detail-live.md](protocol-image-detail-live.md) | Pre-registered protocol for the live image-detail comparison (Sept 23) |
 | [solari-lifetime-probe.md](solari-lifetime-probe.md) | Measured: desktop idle timeouts renew themselves (Sept 23) |
 | [worked-example/](worked-example/) | The public evidence report, the recovered prompt comparison and the explainer video |

@@ -617,8 +617,12 @@ Reset protocol (fixed order):
    openemr_sql (mysql, in a transaction), run post_commands
 3. health — both apps 200, `SELECT 1` on both DBs, expected row counts
 4. baseline checksums and `preserve_fields` query rows (controller memory only)
-5. initial screen — focus browser, `ctrl+l`, type URL, `Return`, wait for two
-   consecutive identical screenshot hashes (≤ 15 s), else `ResetError`
+5. initial screen — focus browser, `ctrl+l`, type URL, `Return`. For a portal
+   screen, read the window title (controller channel): on the portal login page,
+   log in with the build account (`agent`/`agent`, never in a task) and navigate
+   again; if no logged-in portal screen can be confirmed, the reset fails and the
+   cell is unscored (added 2026-09-23 after a Chrome relaunch lost the session).
+   Then wait for two consecutive identical screenshot hashes (≤ 15 s), else `ResetError`
 6. return `Observation`
 
 ---

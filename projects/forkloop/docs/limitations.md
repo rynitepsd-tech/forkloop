@@ -126,7 +126,8 @@ controller machine, which leaves only the balance.
   present. This was not repeated and does not prove installation on another account.
 - **Guard is narrow.** Solari creates admit Starter and the September 2026 price
   bounds, failing closed on/after 2026-10-01. The student endpoint guard covers exact
-  host `api.openai.com` and `gpt-5.6-luna`; arbitrary compatible endpoints, Anthropic
+  host `api.openai.com` and the models in `GUARDED_OPENAI_PRICES` (`gpt-5.6-luna`,
+  `gpt-6-luna`); arbitrary compatible endpoints, Anthropic
   and GPU rental are not guarded by that path. A ledger is not universal spending
   protection. See [cost](cost.md).
 - **Observed lifetime-bound failure.** Recovery found two session desktops still
@@ -139,6 +140,12 @@ controller machine, which leaves only the balance.
   dollars are a calculation. Legacy runs can omit failed calls, idle and storage.
   Solari/Lambda pending reservations remain until billing reconciliation even after
   provider-confirmed termination. Do not interpret `actual_usd: 0` as free compute.
+- **Equivalent is not the same as usable.** Reset equivalence compares the two arms with each
+  other: baseline tables, watermarks and the initial screenshot. On 2026-09-23 it held on 14/14
+  pairs of a run in which every cell opened on the portal login page, so the task was infeasible
+  in both arms ([run 1](live-image-detail-comparison.md)). The reset now confirms a logged-in
+  portal screen; other world-usability failures could still pass equivalence. Look at step-0
+  screenshots before trusting a tie.
 - **Desktop instability affects outcomes.** Historical restores were bimodal
   (~22 s or 70–160 s). Chrome renderer crashes interrupted the adapter and stopped
   magnification preparation; in-episode crash symptoms can end as `NOT_DONE` or

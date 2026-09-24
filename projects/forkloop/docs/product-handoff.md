@@ -1,6 +1,53 @@
 # Forkloop publication handoff
 
-## Current handoff — September 22–23 review, repairs and first complete live comparison
+## Current handoff — September 23 live image-detail comparison (0.2.3)
+
+**Start here:** [README](../README.md) · [image-detail comparison](live-image-detail-comparison.md) ·
+[its protocol](protocol-image-detail-live.md).
+
+### Measured
+
+- **Run 2 (primary).** On `gpt-6-luna`, high detail completed 4 of 14 held-out tasks and low detail
+  0 of 14. The 4 discordant pairs all favour high detail, but at exact p = 0.125 the difference is
+  not significant.
+  - Low detail never logged into OpenEMR: 99% of its clicks landed in the 512 × 288 corner,
+    because it answered in the downsampled image's pixel frame.
+  - High detail filed 10 appeals. The portal confirmed all 10; the database rejected 6 for a
+    misread authorization.
+- **Run 1 (void for the primary metric).** Every cell in both arms opened on the portal login
+  page, so the task was infeasible. Cause: a Chrome relaunch added in `a3d255c` lost the portal
+  session. Reset equivalence still held, because both arms were equally broken.
+
+### What changed
+
+- **Reset.** For portal screens it reads the window title, logs back in as the build account if
+  needed, and fails the reset (an unscored cell) if no logged-in portal screen can be confirmed
+  (`f3e1b1e`).
+- **Model guard.** `GUARDED_OPENAI_PRICES` holds per-model rates, and `gpt-6-luna` was added at
+  $0.10/$0.50 per million tokens.
+- **Docs.** Dated diaries moved to `docs/archive/`. The contracts, system and limitations docs
+  describe the new reset check.
+
+### Awaiting the owner
+
+- Push to `main`: the work branch `image-detail-live` holds every commit.
+- Upstream PR `desktop-snapshot-revert-py`: the branch is on the fork, live-verified, pinned to
+  `solari-sandbox==0.2.1`.
+- Upstream issues, drafted locally in `runs/image-detail-live-20260923/`: the tightened #79
+  comment, and a new report that `solari-sandbox` 0.2.2 leaks a desktop on every
+  `create_desktop` (SessionHooks has no `park`). The desktop `recordingUrl` problem no longer
+  reproduces on 0.2.1, so no issue was drafted for it.
+- Repo description change.
+
+### Next experiment
+
+- A paired `gpt-5.6-luna` vs `gpt-6-luna` comparison, both at high detail, on new held-out
+  seeds. Observationally, 6 Luna's first authorization read was exact in 3 of 14 run-1 episodes,
+  against 89 of 109 for 5.6 Luna on Sept 15.
+- **Keep the controller awake.** A laptop sleep interrupted run 2. Use `caffeinate`, keep the
+  lid open, or run the controller elsewhere.
+
+## Historical handoff — September 22–23 review, repairs and first complete live comparison
 
 **Start here:** [README](../README.md) · [live notes comparison](live-notes-comparison.md) ·
 [student diagnosis](student-diagnosis.md) · [Solari lifetime probe](solari-lifetime-probe.md).
@@ -32,7 +79,7 @@
    - the same live comparison with vLLM serving (one client per server) and a longer budget;
    - then a reading intervention (verify or magnify the letter) as the B arm.
 
-## Current handoff — September 16 diagnostic and 0.2.1 repairs
+## Historical handoff — September 16 diagnostic and 0.2.1 repairs
 
 The continuation completed a bounded recorded-observation study and two source
 repairs. The [0.2.1 prerelease](https://github.com/rynitepsd-tech/forkloop/releases/tag/v0.2.1)

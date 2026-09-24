@@ -476,7 +476,7 @@ matches on the public `name:` or the directory name. `World` provides:
 `mysql` entry with `shim_path` becomes SQLite), `oracle_context`,
 `checksum_tables/watermark_tables/primary_keys`, and the hooks
 `build`, `health` (DB pings, HTTP health when the machine has the `http`
-capability), `open_initial_screen` (ctrl+l, URL, Return), `before_episode`,
+capability), `open_initial_screen` (ctrl+l, URL, Return; re-login and a fail-closed check for portal screens), `before_episode`,
 `gui_factory`, and `ui_milestones(dbs, baseline, task)` (2026-09-05: the
 staircase rungs read from the audit trails after an episode; the base class
 returns None, `Env.verify` stores a non-None answer under
@@ -872,7 +872,9 @@ tables, entity names, audit-id lookups, page views).
   initialises the portal SQLite, loads `openemr/shim_schema.sql` and the
   OpenEMR base SQL into the shim, and snapshots.
 - `health` adds row-count checks for both patient tables.
-- `open_initial_screen` uses only agent-channel keys.
+- `open_initial_screen` navigates with agent-channel keys. For portal screens it reads the window
+  title over the controller channel, logs in again as the build account if Chrome lost the portal
+  session, and raises (an unscored reset) when no logged-in portal screen can be confirmed.
 
 `build.sh` (runs as root inside the VM): apt packages, a venv for the portal,
 `portal.db init` + `seed-base`, the `forkloop-portal` systemd service on

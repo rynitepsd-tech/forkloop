@@ -129,8 +129,27 @@ These are usage-derived estimates, not invoices.
 Both Lambda instances were terminated by API and confirmed; each also had a local
 terminate-at-deadline watchdog. No Solari machines remained (`reap --dry-run`: 0 selected;
 account inventory: 0 machines). Two Lambda filesystems (about 18.5 GB each) and five Solari
-snapshots (42.7 GB) remain: storage the owner should prune, since Solari snapshot billing
-starts October 1.
+snapshots (42.7 GB) remained at the end of that session; both were pruned on September 23 (below).
+
+## September 23 image-detail session
+
+Usage-derived estimates, not invoices. Two session ledgers, both local:
+`runs/image-detail-live-20260923/` (Solari $6, OpenAI $25) and `runs/image-detail-live2-20260923/`
+(Solari $5, OpenAI $23.79).
+
+| Service | Item | Estimate |
+| --- | --- | ---: |
+| OpenAI | `gpt-6-luna`, run 1 (28 cells) plus the two-request compatibility check | $1.20 |
+| OpenAI | `gpt-6-luna`, run 2 (33 cells, including retries and one unplanned cell) | $1.00, plus ≤ $0.53 kept reserved for two failed requests |
+| Solari | Run 1: 28 fork desktops, 4.15 recorded hours | ≈ $0.56 compute; ledger upper bound $3.69 (with 2 smoke desktops) |
+| Solari | Run 2: 33 fork desktops, 4.03 recorded hours, plus two desktops orphaned by a controller sleep (~34 min each) | ≈ $0.54 + $0.15 compute; ledger upper bound $3.52 |
+| Solari | Upstream example and SDK checks: 6 short desktops outside the ledger, including one orphaned for 16 s by the broken `solari-sandbox` 0.2.2 | ≈ $0.02 |
+| Lambda / Anthropic | none | $0 |
+
+Afterwards the account listed 0 machines and a single snapshot, `snap_dlft9omnpkyw` (9.6 GB, inside
+the 10 GB free tier). The owner deleted the four older snapshots (33.1 GB) and both Lambda
+filesystems (37 GB) on 2026-09-23; a read-only listing afterwards showed no Lambda instances or
+filesystems.
 
 ## Guard and accounting boundaries
 
