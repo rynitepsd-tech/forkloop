@@ -162,8 +162,11 @@ Per cell, `gpt-5.6-luna` cost $0.041 of model tokens at the median ($0.108 at mo
 
 - One task family, one prompt, 24 held-out seeds, one attempt per cell. This establishes a
   regression on this workflow, not a general ranking of the two models.
-- The prompt (workflow v5) was developed against `gpt-5.6-luna` in September. A prompt tuned for
-  `gpt-6-luna` might close part of the gap; that is a separate experiment.
+- The prompt (workflow v5) was developed against `gpt-5.6-luna` in September. An exploratory
+  follow-up on the frozen screens found that neither a character-by-character transcription
+  instruction nor 2× magnified tiles improved `gpt-6-luna`'s reading (11, 9 and 9 of 20), and 5 states
+  got the identical wrong string in every arm ([follow-up](reading-model-upgrade-results.md#follow-up-exploratory-is-it-the-prompt)).
+  A prompt may still fix the Patient Finder behaviour; that would need its own live run.
 - Model aliases as served on 2026-09-24, not pinned weights.
 - Evidence (local): `runs/model-upgrade-live-20260924/` (`pooled.json`, `pool.py`, the cell files,
   episode directories and the step-0 contact sheet); HTML bundles in `runs/share-model-upgrade/`
