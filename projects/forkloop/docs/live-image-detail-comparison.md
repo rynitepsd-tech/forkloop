@@ -124,6 +124,11 @@ defect.** Checked after the run; run 2 is not re-scored.
   Finder menu), a new top search, or text in the finder's own "Search:" box (which takes
   precedence over `search_any`) gets out of it. All 11 episodes that found the patient typed
   the surname into the top search first.
+- *Reproduced live on 2026-09-24* (seed 100314, one fork desktop, a scripted replay of the
+  agent's clicks; not a scored cell): after the top search for "Benjamin Fontaine", the finder's
+  name filter "Fontaine" showed "No matching records found" ("filtered from 43 total entries"); in
+  a fresh finder from the Finder menu the same filter listed three Fontaines, including the target
+  born 1946-07-03. The same reset's feasibility gate confirmed the patient, claim and letter by SQL.
 - *What changed.* Nothing in the world: this is how the real application behaves, and a GUI agent
   has to recover from it. Separately, every reset now runs a controller-side **feasibility gate**
   after seeding (`136e5c5`): it checks via SQL that the target patient (with the instruction's
