@@ -102,6 +102,35 @@ completion, not correct completion.
 - **A portal confirmation is not evidence.** Six "Appeal submitted" banners at high detail
   stored the wrong number. A demo recording would have shown ten successes.
 
+**Addendum, 2026-09-24: the three "patient not found" seeds were agent behaviour, not a world
+defect.** Checked after the run; run 2 is not re-scored.
+
+- *The patients existed.* The Patient Finder's own footer counts every row of `patient_data`:
+  it read "filtered from 43 total entries" on seeds 100314 and 100319 and "42" on 100316, which
+  is exactly the 40 base patients plus the 3, 3 and 2 patients each seed inserts. The names are
+  ordinary (Benjamin Fontaine, Charlotte Ashworth, Noah Joubert), with no hyphen, apostrophe,
+  suffix or accent.
+- *What the agent did.* In all three episodes the first search was the full name in OpenEMR's
+  top search box. That opens the Patient Finder with `search_any=<full name>`. The agent then
+  typed the **surname alone** into the finder's name column 21–22 times per episode (plus the
+  first name, the DOB and prefixes such as `Ash`, `Jou`), and every search returned "No matching
+  records found".
+- *Why, from OpenEMR 8.3's source* (`interface/main/finder/dynamic_finder.php` and
+  `dynamic_finder_ajax.php`, tag `v8_3_0`): the finder bakes `search_any` into its DataTables
+  server URL, so every later request carries it; the source's own comment says the URL "persists
+  not allowing easy way to unset any for normal search". The any-search matches the whole string
+  against each demographics field separately (`field LIKE '%Benjamin Fontaine%'`), so a full name
+  matches nothing, and each column filter is ANDed onto that empty result. A fresh finder (the
+  Finder menu), a new top search, or text in the finder's own "Search:" box (which takes
+  precedence over `search_any`) gets out of it. All 11 episodes that found the patient typed
+  the surname into the top search first.
+- *What changed.* Nothing in the world: this is how the real application behaves, and a GUI agent
+  has to recover from it. Separately, every reset now runs a controller-side **feasibility gate**
+  after seeding (`136e5c5`): it checks via SQL that the target patient (with the instruction's
+  name and DOB), the denied claim and the authorization document (row and file bytes) exist, and
+  fails the reset, leaving the cell unscored, otherwise. The portal-login check from `f3e1b1e`
+  stays.
+
 ## Deviations
 
 - **Controller host slept (22:09–22:38 UTC).** Two model requests failed with `ReadError`
