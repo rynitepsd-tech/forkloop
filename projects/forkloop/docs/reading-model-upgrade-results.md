@@ -114,3 +114,29 @@ Observed: 10/20 and 20/20, gap 10. **GO.** The live model-upgrade A/B is registe
   2026-09-24.
 - Evidence (local): `runs/reading-model-upgrade-20260924/` (`protocol.json`, `results.json`,
   `analysis.json`, `ledger.json`), runner and analyzer beside it.
+
+## Follow-up (exploratory): is it the prompt?
+
+Frozen before any request in [`protocol-gpt6-reading-probe.md`](protocol-gpt6-reading-probe.md), after
+the results above were known, so it suggests a cause rather than establishing one. `gpt-6-luna` only,
+the same 20 authorization states, one request per arm and state:
+
+| Arm | Exact / 20 |
+| --- | ---: |
+| `base`: the identical request again (noise check) | 11 |
+| `careful`: v5 prompt plus a paragraph asking for character-by-character transcription and a check of repeated characters | 9 |
+| `tiles`: the base request plus 2 × 2 tiles of both screenshots, enlarged 2× | 9 |
+
+- **Noise is about one state.** The rerun agreed with the reading study's `gpt-6-luna` result on
+  17 of 20 states (11/20 now vs 10/20 then).
+- **Neither change helped.** `careful` vs `base`: 0 repaired, 2 broken (p = 0.5). `tiles` vs `base`:
+  1 repaired, 3 broken (p = 0.63).
+- **The misreads are close to deterministic.** 8 states were wrong in all three arms, and on 5 of
+  them all three arms typed the *identical* wrong string (for example `AUTH-50G9800` for
+  `AUTH-50G98800`, `AUTH-66M4149` for `AUTH-66M44149`), including the arm told to check repeated
+  characters. 29 of the 31 wrong values in this follow-up are shorter than the truth.
+
+So, on this evidence, the reading regression is not prompt fit and not image resolution: the same
+pixels at 2× give the same dropped digits. It looks like a property of how `gpt-6-luna` transcribes
+digit strings, most often collapsing a repeated character. A prompt could still fix the separate
+Patient Finder behaviour (4 of `gpt-6-luna`'s 20 live failures). 60 requests, $0.043.
