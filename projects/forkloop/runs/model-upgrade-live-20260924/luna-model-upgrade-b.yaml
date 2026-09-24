@@ -1,0 +1,42 @@
+# Does a model upgrade silently regress a real workflow? One variable: the model string.
+# Both arms copy the "Luna high detail" arm of configs/luna-image-detail.yaml exactly (workflow prompt v5,
+# image_detail high, 16-action history, previous screenshot, reasoning_effort high, 4,096-token cap).
+# Offline, on 20 frozen authorization screens, gpt-5.6-luna typed the exact authorization 20/20 times and
+# gpt-6-luna 10/20 (p = 0.002, docs/reading-model-upgrade-results.md).
+# Half B of the pre-registered run; differs from configs/luna-model-upgrade.yaml only in seeds and the prompt path depth.
+# Pre-registered in docs/protocol-model-upgrade-live.md. API keys and the session ledger come from the environment.
+version: 1
+world: claims-ops-v1
+backend: solari
+family: resolve_denial
+split: heldout_seeds
+reset_mode: fork   # a fresh desktop per cell: no machine outlives FORKLOOP_SOLARI_MAX_LIFETIME_MIN
+# Never used before this experiment (evidence in the protocol). 100300-100327 were the image-detail runs.
+seeds: [100340, 100341, 100342, 100343, 100344, 100345, 100346, 100347, 100348, 100349, 100350, 100351]
+budget:
+  max_steps: 120
+  max_seconds: 1200
+variants:
+  - name: Luna 5.6
+    policy: student
+    system_prompt_file: ../../forkloop/policies/prompts/hosted_gui_agent_v5.md
+    options: &luna
+      base_url: https://api.openai.com/v1
+      model: gpt-5.6-luna
+      prompt_style: compact
+      image_max_side: 1280
+      image_detail: high
+      history_k: 16
+      prev_screenshot: true
+      history_notes: false
+      hosted_reasoning: true
+      max_tokens: 4096
+      timeout_s: 120
+      extra_body:
+        reasoning_effort: high
+  - name: Luna 6
+    policy: student
+    system_prompt_file: ../../forkloop/policies/prompts/hosted_gui_agent_v5.md
+    options:
+      <<: *luna
+      model: gpt-6-luna
