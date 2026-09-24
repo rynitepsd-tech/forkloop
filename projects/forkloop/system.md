@@ -505,8 +505,12 @@ that repeats consecutively, or `ScreenNotStable`.
 ### 4.10 `reset.py`
 
 `ResetController.reset(worker, task)` executes the fixed protocol:
-`restore` → `seed` → `before_episode` → `health` → `baseline` →
-`initial_screen` → `stable_screen`. Each stage is a `StageTiming` in a
+`restore` → `seed` → `before_episode` → `health` → `feasibility` → `baseline` →
+`initial_screen` → `stable_screen`. `feasibility` (2026-09-24) asks the world whether the
+task's own seeded records exist with their generated values; `ClaimsOpsWorld` checks the
+patient row against the instruction's name and DOB, the claim (number, `DENIED` for
+`resolve_denial`, same person in both apps), the authorization document's row and file
+bytes, and the calendar event. Its checks are kept in the stage note. Each stage is a `StageTiming` in a
 `ResetReport`; a failure raises `ResetError` carrying the partial report and
 the env marks the worker unhealthy so the pool replaces its machine. The
 report is what the reset benchmark measures.
@@ -1147,7 +1151,7 @@ complete-workflow success is inferred from these checks.
    allocation forks/builds it; healthy reused workers revert and reconnect;
    fork mode replaces the machine). The completed paired v3 evaluation used
    one reused machine, not fork mode for every cell. Then seed SQL/files,
-   `before_episode`, health, baseline hashes/watermarks, initial screen and
+   `before_episode`, health, the task feasibility gate, baseline hashes/watermarks, initial screen and
    stable-screen capture. Retries repeat this pipeline according to pool mode.
    `reset.json` records every stage; task-state equivalence is checked rather
    than assuming clock pixels or all VM bytes are identical.

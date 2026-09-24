@@ -192,6 +192,12 @@ class World:
         """Hook after seeding, before the agent's first observation."""
         return None
 
+    async def feasibility(self, machine: "Machine", dbs: dict[str, DbAccess], task: TaskInstance) -> HealthReport:
+        """Controller-side check, after seeding, that the task's own records exist with their
+        generated values. A failure fails the reset, so the cell is unscored instead of an
+        infeasible task being scored as the agent's failure. Worlds that cannot tell return ok."""
+        return HealthReport(ok=True, checks={})
+
     async def ui_milestones(self, dbs: dict[str, DbAccess], baseline: Any, task: TaskInstance) -> Optional[dict[str, Any]]:
         """Controller-side progress rungs read from the databases after an episode (which UI
         screens the agent reached), stored under ``verdict.details["ui_milestones"]``. Analysis

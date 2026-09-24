@@ -81,6 +81,18 @@ class ResetController:
             report.error = f"health: {health.checks}"
             report.total_seconds = time.monotonic() - t_all
             raise ResetError(report.error, report)
+        # 3b. feasibility: the task's own seeded records exist with their generated values
+        # (a reset can be healthy and equivalent across arms and still be infeasible: run 1 of
+        # docs/live-image-detail-comparison.md)
+        feasible = await stage("feasibility", self.world.feasibility(machine, dbs, task))
+        report.stages[-1].note = str(feasible.checks)  # kept on success too: per-cell evidence
+        if not feasible.ok:
+            report.stages[-1].ok = False
+            report.stages[-1].note = str(feasible.checks)
+            report.ok = False
+            report.error = f"feasibility: {feasible.checks}"
+            report.total_seconds = time.monotonic() - t_all
+            raise ResetError(report.error, report)
         # 4. baseline
         baseline = await stage("baseline", Baseline.capture(dbs, self.world.checksum_tables(), self.world.primary_keys(),
                                                             self.world.watermark_tables(),

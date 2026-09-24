@@ -644,3 +644,44 @@ async def test_milestone_staircase_script_reads_a_run(world, backend, tmp_path):
     res_old = mstair.staircase(rec.dir)
     assert res_old["has_ui_milestones"] is False and res_old["counts"]["auth_typed"] == 1
     assert "needs a re-run" in mstair.format_table([res_old])
+
+
+# ------------------------------------------------------- feasibility gate
+
+
+@pytest.mark.parametrize("family", ["resolve_denial", "resolve_denial_easy", "update_insurance_reconcile",
+                                    "reschedule_constrained"])
+async def test_feasibility_gate_passes_on_every_family(world, backend, family):
+    env = Env(world, backend, family=family, settle_s=0)
+    try:
+        _, info = await env.reset(7)
+        stage = next(s for s in info["reset"]["stages"] if s["name"] == "feasibility")
+        assert stage["ok"]
+        report = await world.feasibility(env.ep.machine, env.ep.dbs, env.ep.task)
+        assert report.ok and report.checks and all(v is True for v in report.checks.values()), report.checks
+    finally:
+        await env.close()
+
+
+async def test_feasibility_gate_fails_the_reset_when_the_task_is_infeasible(world, backend):
+    """Seeding that silently drops the authorization letter, or a patient whose stored name is
+    not the one the instruction gives, must fail the reset (unscored), not reach the agent."""
+    import dataclasses
+
+    from forkloop.reset import ResetError
+
+    good = world.generate("resolve_denial", 100314, "heldout_seeds")
+    no_letter = dataclasses.replace(good, seeding=dataclasses.replace(good.seeding, files=[]))
+    renamed = dataclasses.replace(good, seeding=dataclasses.replace(
+        good.seeding, openemr_sql=good.seeding.openemr_sql.replace("'Benjamin', 'Fontaine', '1946-07-03'",
+                                                                   "'Benjamin', 'Fontain', '1946-07-03'", 1)))
+    assert renamed.seeding.openemr_sql != good.seeding.openemr_sql
+    for task, failing in ((no_letter, "openemr.document_file"), (renamed, "openemr.patient_matches_instruction")):
+        env = Env(world, backend, family="resolve_denial", split="heldout_seeds", settle_s=0)
+        try:
+            with pytest.raises(ResetError) as err:
+                await env.reset(task.seed, task=task)
+            assert err.value.report.stages[-1].name == "feasibility" and not err.value.report.ok
+            assert failing in err.value.report.error
+        finally:
+            await env.close()

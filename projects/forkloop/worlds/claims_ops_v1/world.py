@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import base64
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -154,6 +155,60 @@ class ClaimsOpsWorld(World):
             rep.ok = False
             rep.checks["error"] = f"{type(e).__name__}: {e}"
         return rep
+
+    # ----------------------------------------------------------- feasibility
+    async def feasibility(self, machine: Any, dbs: dict[str, DbAccess], task: Any) -> HealthReport:
+        """The records the task names exist with the values the generator wrote: the patient
+        (name and DOB as the instruction states them), the claim (number, denied, and the same
+        person in the portal), the authorization document (row and file bytes) and the event.
+        Read-only; runs before the baseline. Added 2026-09-24 after run 1 of the image-detail
+        comparison showed that equivalent resets can still be infeasible."""
+        expected, checks = task.expected, {}
+
+        def check(name: str, good: bool, detail: Any = None) -> None:
+            checks[name] = True if good else f"failed: {detail}"
+
+        try:
+            person = None
+            if "patient_pid" in expected:
+                rows = await dbs["openemr"].query("SELECT fname, lname, DOB FROM patient_data WHERE pid = ?",
+                                                  [expected["patient_pid"]])
+                check("openemr.patient", len(rows) == 1, f"{len(rows)} rows for pid {expected['patient_pid']}")
+                if len(rows) == 1:
+                    person = rows[0]
+                    name, dob = f"{person['fname']} {person['lname']}", str(person["DOB"])[:10]
+                    check("openemr.patient_matches_instruction",
+                          name in task.instruction and f"DOB {dob}" in task.instruction, f"{name} {dob}")
+            if "claim_id" in expected:
+                rows = await dbs["portal"].query(
+                    "SELECT c.claim_number, c.status, p.first_name, p.last_name, p.dob FROM claims c "
+                    "JOIN patients p ON p.id = c.patient_id WHERE c.id = ?", [expected["claim_id"]])
+                check("portal.claim", len(rows) == 1 and rows[0]["claim_number"] == expected["claim_number"],
+                      rows[0]["claim_number"] if rows else "no row")
+                if rows and task.family.startswith("resolve_denial"):
+                    check("portal.claim_denied", rows[0]["status"] == "DENIED", rows[0]["status"])
+                if rows and person is not None:
+                    same = (rows[0]["first_name"], rows[0]["last_name"], str(rows[0]["dob"])[:10]) == \
+                           (person["fname"], person["lname"], str(person["DOB"])[:10])
+                    check("portal.claim_patient_is_openemr_patient", same,
+                          f"{rows[0]['first_name']} {rows[0]['last_name']} {rows[0]['dob']}")
+            if expected.get("doc_name"):
+                rows = await dbs["openemr"].query(
+                    "SELECT hash FROM documents WHERE foreign_id = ? AND name = ?",
+                    [expected["patient_pid"], expected["doc_name"]])
+                check("openemr.document_row", len(rows) == 1 and rows[0]["hash"] == expected["doc_hash"],
+                      f"{len(rows)} rows")
+                paths = [f.path for f in task.seeding.files if f.path.endswith("/" + expected["doc_name"])]
+                digest = hashlib.sha256(await machine.read_file(paths[0])).hexdigest() if len(paths) == 1 else None
+                check("openemr.document_file", digest == expected["doc_hash"], digest or f"{len(paths)} seeded paths")
+            if "event_id" in expected:
+                n = await dbs["openemr"].scalar(
+                    "SELECT COUNT(*) FROM openemr_postcalendar_events WHERE pc_eid = ? AND pc_pid = ?",
+                    [expected["event_id"], str(expected["patient_pid"])])
+                check("openemr.event", int(n or 0) == 1, n)
+        except Exception as e:  # noqa: BLE001
+            checks["error"] = f"{type(e).__name__}: {e}"
+        return HealthReport(ok=bool(checks) and all(v is True for v in checks.values()), checks=checks)
 
     # ------------------------------------------------------- initial screen
     async def open_initial_screen(self, machine: Any, screen: dict[str, Any]) -> None:
