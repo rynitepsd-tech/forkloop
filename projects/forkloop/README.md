@@ -6,6 +6,8 @@ Forkloop runs two versions of a GUI agent (a new model, prompt, observation or m
 
 The question it answers: **did this change make the agent better at the workflow, or just more confident?**
 
+**Measured:** swapping `gpt-5.6-luna` for `gpt-6-luna` in the same agent dropped full-task success from 23/24 to 4/24 on held-out seeds (exact p = 3.8 × 10⁻⁶), while the portal confirmed 17 of the newer model's appeals: the database showed 13 of them carried a wrong authorization number. [Report](docs/live-model-upgrade-comparison.md).
+
 [![The portal said "Appeal submitted". The database held AUTH-3614538, not AUTH-36G14538.](docs/worked-example/demo-poster.png)](https://rynitepsd-tech.github.io/forkloop/)
 
 **[Open the example evidence report](https://rynitepsd-tech.github.io/forkloop/report.html)** (no install). In it, an agent filed a denial appeal and the portal confirmed it, but the authorization number it typed was missing one character. The verifier rejected the episode as `WRONG_VALUE`. A demo video would have shown a success.
@@ -101,6 +103,8 @@ Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop 
 
 | Evidence | Result | Caveat |
 | --- | --- | --- |
+| [Model upgrade gpt-5.6-luna → gpt-6-luna, live, Sept 24](docs/live-model-upgrade-comparison.md) | Same agent, only the model changed: **23/24 vs 4/24** full-task successes on held-out seeds; all 19 discordant pairs favour the older model, **exact p = 3.8 × 10⁻⁶**. gpt-6-luna filed 17 appeals; the portal confirmed all 17 and the database rejected 13, 12 of them missing one digit | Pre-registered; one task family and one prompt (developed on gpt-5.6-luna) |
+| [Reading study, same frozen screens, Sept 24](docs/reading-model-upgrade-results.md) | Exact authorization typed 20/20 by gpt-5.6-luna vs 10/20 by gpt-6-luna (10–0, exact p = 0.002) | Recorded states from gpt-5.6-luna's own episodes; actions not executed |
 | [Image detail high/low, live, Sept 23](docs/live-image-detail-comparison.md) | gpt-6-luna: 4/14 full-task successes at high detail vs 0/14 at low (all 4 discordant pairs favour high; exact p = 0.125). Low detail never logged in: 99% of its clicks landed in the 512 × 288 corner. High detail filed 10 appeals; the portal confirmed all 10 and the database rejected 6 for a misread authorization | Not significant at the pre-registered α = 0.05; a first run was voided by a reset defect and rerun under a new pre-registration |
 | [Notes on/off, live, Sept 23](docs/live-notes-comparison.md) | Fara-4B v3: 1/10 with notes, 1/10 without; 20/20 cells scored, 10/10 resets equivalent (exact p = 1) | Development seeds; 16/20 episodes hit the 900 s budget |
 | [Retained live episode](docs/worked-example/) | Adapter-trained Fara-4B completed the full workflow and submitted one wrong character → `WRONG_VALUE` | One episode; 6 of 148 screenshots retained |

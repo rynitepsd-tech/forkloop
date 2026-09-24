@@ -151,6 +151,21 @@ the 10 GB free tier). The owner deleted the four older snapshots (33.1 GB) and b
 filesystems (37 GB) on 2026-09-23; a read-only listing afterwards showed no Lambda instances or
 filesystems.
 
+## September 24 model-upgrade session
+
+Usage-derived estimates, not invoices. Session ledger `runs/session-20260924/` (Solari $8, OpenAI $20).
+
+| Service | Item | Estimate |
+| --- | --- | ---: |
+| OpenAI | Reading study (80 requests) and two probe requests | $0.05 |
+| OpenAI | Live comparison: 48 counted cells, the retry pair and one failed request | ≈ $2.03 |
+| OpenAI | Kept reserved for three requests rejected with HTTP 400 (no usage returned) | ≤ $1.05 |
+| Solari | 54 fork desktops (comparison, retry, smoke check), 4.07 recorded hours | ≈ $0.54 compute; ledger upper bound $5.47 |
+| Solari | Upstream example: 3 live runs of 3 headless sandboxes, seconds each; diagnostic creates during the outage (one succeeded and was deleted at once) | < $0.01 |
+| Lambda / Anthropic | none | $0 |
+
+Afterwards the account listed 0 machines and one snapshot, `snap_dlft9omnpkyw`.
+
 ## Guard and accounting boundaries
 
 **Public-release continuation.** The new authorization is a $100 total ceiling,

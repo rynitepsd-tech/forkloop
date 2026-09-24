@@ -1,6 +1,41 @@
 # Forkloop publication handoff
 
-## Current handoff — September 23 live image-detail comparison (0.2.3)
+## Current handoff — September 24 model-upgrade comparison (0.2.4)
+
+**Start here:** [README](../README.md) · [live model-upgrade comparison](live-model-upgrade-comparison.md) ·
+[reading study](reading-model-upgrade-results.md) · [Solari platform notes](solari-platform-notes.md).
+
+### Measured
+
+- **Live, pre-registered:** same agent, only the model changed. `gpt-5.6-luna` 23/24 vs
+  `gpt-6-luna` 4/24 on held-out seeds 100328–100351, 19–0 discordant, exact p = 3.8 × 10⁻⁶.
+  The portal confirmed 17 `gpt-6-luna` appeals; the database rejected 13 (12 missing one digit).
+- **Offline, paired, frozen screens:** exact authorization 20/20 vs 10/20, p = 0.002. It decided
+  the live run (GO rule registered in advance).
+- **Image-detail "patient not found" seeds:** agent behaviour. OpenEMR's Patient Finder keeps a
+  full-name top search attached to the tab; reproduced live on seed 100314.
+
+### What changed
+
+- **Reset:** a `feasibility` stage after seeding checks the task's patient, denied claim and
+  authorization letter (row and bytes) by SQL and fails the reset, leaving the cell unscored,
+  otherwise (`136e5c5`). Checks are kept in `reset.json`.
+- **Docs:** [Solari platform notes](solari-platform-notes.md) (dated measurements with evidence),
+  `scripts/reset_times.py`, both protocols and both reports.
+
+### Awaiting the owner (`~/Desktop/Solari/posts/2026-09-24/APPROVALS.md`)
+
+- Upstream PR `examples/sandbox-orphan-cleanup-py` (branch on the fork, run live 3 times).
+- The #79 comment; an optional report of the Sept 24 create outage.
+- Push `model-upgrade-20260924` to `main`, update `gh-pages`, tag `v0.2.4`.
+
+### Next
+
+- A prompt tuned for `gpt-6-luna` as the B arm, to test whether the regression is the model or
+  the prompt's fit to it.
+- Solari was unavailable for creates 06:12–09:45 UTC on Sept 24; check the platform notes first.
+
+## Historical handoff — September 23 live image-detail comparison (0.2.3)
 
 **Start here:** [README](../README.md) · [image-detail comparison](live-image-detail-comparison.md) ·
 [its protocol](protocol-image-detail-live.md).

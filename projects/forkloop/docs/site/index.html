@@ -72,6 +72,7 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; 
 
   <h1>Did your agent get better, or just more confident?</h1>
   <p class="lede">Forkloop runs two versions of a computer-use agent on the same seeded task, in real OpenEMR and a payer portal, and scores what actually persisted in the database. Every verdict links to the screenshots and rows behind it.</p>
+  <p><strong>Measured:</strong> swapping <code>gpt-5.6-luna</code> for <code>gpt-6-luna</code> in the same agent dropped task success from 23/24 to 4/24 on held-out seeds (exact p = 3.8 × 10⁻⁶). The portal confirmed 13 of the newer model's appeals that the database rejected for a wrong authorization number. <a href="https://github.com/rynitepsd-tech/forkloop/blob/main/projects/forkloop/docs/live-model-upgrade-comparison.md">Read the report →</a></p>
   <div class="cta">
     <a class="btn primary" href="report.html">See a real failure report</a>
     <a class="btn" href="https://github.com/rynitepsd-tech/forkloop/tree/main/projects/forkloop#try-it-in-two-minutes-no-account-no-api-key">Try it offline in 2 minutes</a>
@@ -118,6 +119,8 @@ forkloop demo --out runs/demo</code></pre>
     <table>
       <thead><tr><th>Evidence</th><th>Result</th><th>Caveat</th></tr></thead>
       <tbody>
+        <tr><td><a href="https://github.com/rynitepsd-tech/forkloop/blob/main/projects/forkloop/docs/live-model-upgrade-comparison.md">Model upgrade 5.6 → 6 Luna</a> (live, 24 held-out seeds)</td><td>Full task 23/24 vs 4/24; all 19 discordant pairs favour the older model; the database rejected 13 of 17 portal-confirmed appeals from the newer one</td><td>p = 3.8 × 10⁻⁶, pre-registered; one task family and one prompt</td></tr>
+        <tr><td>Reading study, same frozen screens</td><td>Exact authorization typed 20/20 by 5.6 Luna vs 10/20 by 6 Luna</td><td>p = 0.002; recorded states, actions not executed</td></tr>
         <tr><td>Image detail high/low (live, 14 held-out seeds)</td><td>Full task 4/14 vs 0/14; low detail never logged in; high detail filed 10 appeals and the database rejected 6 for a misread number</td><td>p = 0.125, not significant; a first run was voided by a reset defect</td></tr>
         <tr><td>Notes on/off (live, 10 matched seeds)</td><td>1/10 vs 1/10; both arms typed the same wrong digit on one seed</td><td>Time budget decided 16 of 20 cells</td></tr>
         <tr><td><a href="report.html">Live adapter episode</a></td><td>Full workflow completed; one character wrong → rejected</td><td>One episode</td></tr>
