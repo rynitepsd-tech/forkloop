@@ -85,6 +85,8 @@ class ClaimsOpsWorld(World):
         """One-time golden build. Idempotent where the underlying scripts are."""
         if machine.backend_name == "fake":
             return await self._build_fake(machine, log)
+        if machine.backend_name == "docker":
+            return await self._build_docker(machine, log)
         paths = self.config.paths
         build_dir = paths["build_dir"]
         log("uploading world sources")
@@ -131,6 +133,16 @@ class ClaimsOpsWorld(World):
         await machine.write_file(p["portal_uploads"] + "/.keep", b"")
         log("fake claims-ops world built (portal sqlite + openemr shim)")
         return await machine.snapshot(f"{self.name}-golden-fake")
+
+    async def _build_docker(self, machine: Any, log: Callable[[str], None]) -> str:
+        """Docker: the world is built into an image by worlds/claims_ops_v1/docker/build_image.sh (the same
+        build.sh + install.sh + browser_setup.sh), and ``machine`` was started from it; check it and return
+        the image as the golden id (docs/docker-world.md)."""
+        health = await self.health(machine, self.databases(machine))
+        if not health.ok:
+            raise RuntimeError(f"docker world image {machine.image} is unhealthy: {health.checks}")
+        log(f"golden image: {machine.image}  (export {self.config.golden_snapshot_env}={machine.image})")
+        return machine.image
 
     async def _upload_tree(self, machine: Any, src: Path, dst: str) -> None:
         for f in sorted(src.rglob("*")):
@@ -206,9 +218,53 @@ class ClaimsOpsWorld(World):
                     "SELECT COUNT(*) FROM openemr_postcalendar_events WHERE pc_eid = ? AND pc_pid = ?",
                     [expected["event_id"], str(expected["patient_pid"])])
                 check("openemr.event", int(n or 0) == 1, n)
+            await self._part_feasibility(machine, dbs, task, check)
         except Exception as e:  # noqa: BLE001
             checks["error"] = f"{type(e).__name__}: {e}"
         return HealthReport(ok=bool(checks) and all(v is True for v in checks.values()), checks=checks)
+
+    async def _part_feasibility(self, machine: Any, dbs: dict[str, DbAccess], task: Any, check: Any) -> None:
+        """compose_claims: every part's patient (name + DOB in the instruction), its denied claim, its
+        authorization document (row + file bytes), its appointment, and for a reschedule part that names its
+        provider only through a claim, that the claim's provider is the appointment's provider.
+        (Proposed and tested against 240 compositions by the task-family work, 2026-09-29.)"""
+        for i, part in enumerate(task.expected.get("parts") or []):
+            pfx = f"part{i}.{part.get('kind', '?')}"
+            pid = part.get("patient_pid")
+            rows = await dbs["openemr"].query("SELECT fname, lname, DOB FROM patient_data WHERE pid = ?", [pid])
+            person = rows[0] if len(rows) == 1 else None
+            check(f"{pfx}.openemr.patient_matches_instruction", person is not None
+                  and f"{person['fname']} {person['lname']}" in task.instruction
+                  and f"DOB {str(person['DOB'])[:10]}" in task.instruction, f"{len(rows)} rows for pid {pid}")
+            if part.get("claim_id") is not None:
+                c = await dbs["portal"].query(
+                    "SELECT c.claim_number, c.status, p.first_name, p.last_name, p.dob FROM claims c "
+                    "JOIN patients p ON p.id = c.patient_id WHERE c.id = ?", [part["claim_id"]])
+                ok = (len(c) == 1 and c[0]["claim_number"] == part["claim_number"] and c[0]["status"] == "DENIED"
+                      and person is not None and (c[0]["first_name"], c[0]["last_name"], str(c[0]["dob"])[:10])
+                      == (person["fname"], person["lname"], str(person["DOB"])[:10]))
+                check(f"{pfx}.portal.denied_claim_of_patient", ok, c[0] if c else "no row")
+            if part.get("doc_name"):
+                d = await dbs["openemr"].query("SELECT hash FROM documents WHERE foreign_id = ? AND name = ?",
+                                               [pid, part["doc_name"]])
+                check(f"{pfx}.openemr.document_row", len(d) == 1 and d[0]["hash"] == part["doc_hash"], f"{len(d)} rows")
+                paths = [f.path for f in task.seeding.files if f.path.endswith(f"/{pid}/{part['doc_name']}")]
+                digest = hashlib.sha256(await machine.read_file(paths[0])).hexdigest() if len(paths) == 1 else None
+                check(f"{pfx}.openemr.document_file", digest == part["doc_hash"], digest or f"{len(paths)} seeded paths")
+            if part.get("event_id") is not None:
+                n = await dbs["openemr"].scalar(
+                    "SELECT COUNT(*) FROM openemr_postcalendar_events WHERE pc_eid = ? AND pc_pid = ?",
+                    [part["event_id"], str(pid)])
+                check(f"{pfx}.openemr.event", int(n or 0) == 1, n)
+                if part.get("provider_claim"):
+                    billed = await dbs["portal"].scalar(
+                        "SELECT pr.npi FROM claims c JOIN providers pr ON pr.id = c.provider_id WHERE c.claim_number = ?",
+                        [part["provider_claim"]])
+                    booked = await dbs["openemr"].scalar(
+                        "SELECT u.npi FROM openemr_postcalendar_events e JOIN users u ON u.id = e.pc_aid WHERE e.pc_eid = ?",
+                        [part["event_id"]])
+                    check(f"{pfx}.provider_claim_names_the_appointment_provider",
+                          billed is not None and str(billed) == str(booked), f"{billed} vs {booked}")
 
     # ------------------------------------------------------- initial screen
     async def open_initial_screen(self, machine: Any, screen: dict[str, Any]) -> None:
