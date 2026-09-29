@@ -235,3 +235,11 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   phase 4. Main's A0/sw cells run in phase 5 (in the model list already; skips finished cells):
   main PER_MODEL=8 × 11 models = 88 worlds (< 96). Containers of the stopped runners reaped by tmux
   `reap-eval2` (log `reap-eval2.log`).
+- 11:05 UTC — repair pace measured: step wall median 15.4 s (full restart) / 13.0 s (checkpoint) vs
+  9.3 s in the demonstration collection; teacher latency median 8.7 / 7.1 s vs 4.7 s (64 concurrent
+  teacher branches vs 32), environment 6.7 / 5.7 s vs 4.3 s. Branch medians so far 32 / 21 min.
+  Revised: full restart ≈ 15:30, checkpoint ≈ 17:00 UTC (±1 h) → training ≈ 17:00–18:45, phase 5
+  ≈ 18:45–23:30 (aux `PER_MODEL=8` → 72 worlds, main `PER_MODEL=8` × 11 models = 88 < 96 cap).
+  **Renew main/aux leases (`forkloop ops renew RID --hours H`) at ≈ 20:00 if phase 5 will run past
+  01:00** (main lease ends ≈ 02:40, aux ≈ 03:45, dev ≈ 00:40 — terminate dev after its adapter is
+  fetched). Spend now expected ≈ $1,000–1,100 (Lambda ≈ $850–900, OpenAI ≈ $150).
