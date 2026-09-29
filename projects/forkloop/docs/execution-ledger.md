@@ -180,3 +180,17 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   restart demos; 6 preference pairs), evidence `runs/loop-solari-student/evidence/`; all 30 checkpoint
   snapshots deleted after a second delete round (only the pre-existing golden remains).
   Independent reviewer started on code + Solari artifacts.
+
+- 06:44–08:50 UTC — **S_W trained** (50 steps, loss 1.84 → 0.58, 52.5 min on one A100). Round 1 started
+  06:50; S_W solves some tasks (e.g. denial 14 of the first scored). vLLM transport `ReadError`s (~3 per
+  episode) made most round-1 episodes unscored under the symmetric rule → fixed with a transport retry for
+  self-hosted endpoints (`3a02943`). Operator error at ~08:35: killing the chain shell closed its tmux
+  session and the round-1 recorder with it (37 attempts interrupted, kept). Recovery job `exp1-resume`
+  (`scripts/exp1/phase3b_resume.sh`): reap, replacement attempts (round 1 ×2 passes, demos), then both
+  repair modes. Final evaluation list fixed to the 150 frozen `final_test` tasks (legacy sealed block
+  was wrongly included by `pool_tasks` default; shard parity unaffected). Aux A0 shard: 90 attempts,
+  81 unscored (ReadError), outcomes unread; replaced in phase 5.
+- **RESUME (updated 08:50)**: main tmux `exp1-resume` (log `~/programs/exp1/logs/resume.log`); then
+  `scripts/exp1/phase4_train_arms.sh` (8 runs on main) + the 9th (A3 seed 3) on dev; copy adapters to aux
+  (`~/programs/exp1aux/adapters`); `scripts/exp1/phase5_eval.sh` on main (shard 0/2) and
+  `scripts/exp1/phase5_eval_aux.sh` on aux (shard 1/2); `scripts/exp1/report.py --final`.
