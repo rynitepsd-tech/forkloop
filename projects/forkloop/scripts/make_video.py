@@ -33,14 +33,27 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
+def _wrap(d: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, width: int) -> list[str]:
+    rows, cur = [], ""
+    for word in text.split():
+        trial = f"{cur} {word}".strip()
+        if cur and d.textlength(trial, font=font) > width:
+            rows.append(cur)
+            cur = word
+        else:
+            cur = trial
+    return rows + [cur] if cur else rows or [""]
+
+
 def card(lines: list[tuple[str, int, tuple, bool]], sub: str = "") -> Image.Image:
     im = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(im)
     y = 200
     for text, size, color, bold in lines:
         f = _font(size, bold)
-        d.text((96, y), text, font=f, fill=color)
-        y += int(size * 1.35)
+        for row in _wrap(d, text, f, W - 192):
+            d.text((96, y), row, font=f, fill=color)
+            y += int(size * 1.35)
     if sub:
         d.text((96, H - 90), sub, font=_font(20), fill=MUTED)
     return im
@@ -83,9 +96,8 @@ def main(a: argparse.Namespace) -> None:
                          (f"real {('Solari desktops' if backend == 'solari' else 'Docker worlds')}, real OpenEMR 8.3 + synthetic payer portal", 26, MUTED, False)],
                         "All screens are real captures from recorded runs. Synthetic patient data."), 4.0))
     man = ep["manifest"]
-    frames.append((card([("The task", 44, INK, True), (man["instruction"][:95], 24, INK, False),
-                         (man["instruction"][95:190], 24, INK, False), (man["instruction"][190:285], 24, INK, False)],
-                        f"{man['task_id']}"), 5.0))
+    frames.append((card([("The task", 44, INK, True), (man["instruction"], 24, INK, False)],
+                        f"{man['task_id']}"), 6.0))
     n = len(steps)
     idx = sorted(set([0, 2, 4, ck["step"], n // 3, n // 2, (2 * n) // 3, n - 1]))
     for i in idx:
