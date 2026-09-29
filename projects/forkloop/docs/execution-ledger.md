@@ -83,3 +83,35 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   experiment `solari-flagship-1`, gpt-6-luna (agent under repair) on `resolve_denial` train
   900001–900002 with snapshot checkpoints. Resume: `runs/loop-solari-flagship/record.sh`.
   Competitor/deadline research: `docs/` pending; deadline confirmed 2026-09-30 (organizer's X post).
+- 03:05–03:35 UTC — **Main box** `forkloop-main-0929a` (gpu_8x_a100_80gb_sxm4, us-east-1, $22.32/h,
+  132.145.133.47, registry `lambda-instance-fa558e495a`, lease 24 h) + filesystem `forkloop-useast1`
+  (`lambda-filesystem-935505d54a`). Student stack pinned by the student agent (vLLM 0.30.0+cu129,
+  torch 2.13.0+cu129, transformers 5.17.0, peft 0.21.0); servers: Qwen3.8-27B on GPU0 :8000,
+  Holo-3.1-9B on GPU1 :8001; Mac tunnel 18000/18001. Docker world image `forkloop/claims-ops-v1:1`
+  (reset p50 12.4 s single, 30.1 s with 64 concurrent; replay fidelity exact).
+- **Decisions.** Student = Qwen3.8-27B (memory format 42/42 zero-shot vs Holo 5/42; grounding 25/28 vs
+  21/28; LoRA fits one 80 GB GPU; parity 32/32 live). Observation adds a 1.5x client-side upscale
+  (exact authorization reads 4/14 → 12/14; tokens per image 921 → 2081). Teacher = gpt-5.6-luna.
+  Prompt `agent_memory_v2` for both. Split policy `forkloop/splits.py` (train_v2/val_v2/final_test).
+- **Solari measured** (`solari-flagship-1`, gpt-6-luna under the memory prompt, dev seeds): 2/2
+  succeeded; snapshot capture 68–93 s; two-branch restore exact; lookups inconsistent (see
+  platform notes); all 12 checkpoint snapshots deleted. This run predates the checkpoint-clock fix.
+- 03:35 UTC — **Pilots started** on main: `pilot-baseline` (Qwen 1.5x alone, 10 train tasks/family ×
+  4 families), `pilot-teacher` (gpt-5.6-luna record with replay checkpoints, same tasks). Store
+  `~/programs/pilot/forkloop.sqlite`, synced to `/lambda/nfs/forkloop-useast1/programs/pilot`.
+  **Solari flagship** `solari-student-1` (Mac): student on 6 dev tasks with snapshot checkpoints →
+  failures → repair. Resume: `runs/loop-solari-student/run.sh`.
+- 04:00 UTC — **Pilot findings.** (1) Teacher gpt-5.6-luna (agent_memory_v2) on Docker :1, 10 train
+  tasks/family: insurance 8/10, denial 3/10 (6 failures typed an exact *decoy* authorization from a
+  letter that plainly says "for a different service (not this claim)"), compose 3/10, reschedule 0/10.
+  (2) Reschedule root cause is a **world defect**, not the agent: tasks are generated relative to
+  ANCHOR 2026-09-07 but Docker containers run on the real clock (2026-09-29), so the calendar opens
+  weeks after the appointment (on Solari the VM clock restores from the Sept 15 snapshot). Fix
+  requested: image `:3` with libfaketime at 2026-09-07 09:00 + a world-clock health check. Pilot
+  results on `:1` for reschedule/compose are void as capability evidence. (3) Prompt
+  `agent_memory_v3`: record a value only after checking the letter approves this claim's service.
+  (4) Student serving is prefill-bound: ~6–7 s/step at 40 concurrent on 7 A100 replicas (two 1.5x
+  screenshots ≈ 5.7k prompt tokens).
+- 04:10 UTC — **Aux box** `forkloop-aux-0929a` (gpu_8x_a100 40 GB, us-west-2, $15.92/h,
+  129.146.162.105, registry `lambda-instance-9c6d8f264c`, lease 24 h) + filesystem `forkloop-uswest2`
+  (`lambda-filesystem-3ceb9e5846`): Qwen TP=2 ×4 serving + worlds. No 8×80 GB capacity was available.
