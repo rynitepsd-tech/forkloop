@@ -252,3 +252,11 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   are never exported (unscored), so training data is unaffected. After exp1: map `-`→`minus`,
   `+`→`plus`, `=`→`equal` etc. in `backends/docker.py` (and Solari), with a test. **Until then sync only
   `scripts/exp1/` to the boxes**, never the whole repo.
+- 15:05 UTC — **repairs complete**; 15:08 phase 4 launched on main (8 runs, ~65 s/step → ≈ 17:00);
+  15:11 A3-s3 started on dev (`train_on_dev.sh start`, automatic). Matched-cost budget B = $29.53
+  (A1, the smallest arm). At B: A1 78 verified paths / 4,167 records; A2 9 / 558; A3 10 / 667.
+  All units: A2 40 verified of 121 failures ($151.52), A3 19 of 121 ($129.26).
+  Next (controller): `train_on_dev.sh fetch` when dev finishes; `copy_adapters_to_aux.sh` when main's
+  8 finish; then `PER_MODEL=8 scripts/exp1/phase5_eval.sh` on main (11 models × 8 = 88 < cap 96) and
+  **`PER_MODEL=7`** `scripts/exp1/phase5_eval_aux.sh` on aux (9 models × 7 = 63 < aux cap **64**; the
+  earlier note saying 8 was wrong for aux).
