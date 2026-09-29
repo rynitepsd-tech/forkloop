@@ -23,7 +23,7 @@ succeed more often on new full workflows?
 | Teacher (T) | gpt-5.6-luna, reasoning effort high, image detail high, same prompt/memory/history |
 | Episode budget | 120 actions; 3,600 s wall (never the binding limit by design; latency is reported) |
 | Checkpoints (collection) | replay strategy, every 4 steps + before each `type` + before `Return` |
-| Repair | `k = 3` branches per restart point, ≤ 2 restart points (evidence-ordered, step 0 last), stop after a verified branch, teacher feedback: none |
+| Repair | `k = 3` branches per restart point, ≤ 2 restart points (evidence-ordered, step 0 last), stop after a verified branch, teacher feedback: none; each branch may take up to 120 actions after its restore point (the same allowance as a demonstration from the initial state) |
 
 ## Pools
 

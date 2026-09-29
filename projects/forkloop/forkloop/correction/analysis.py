@@ -24,13 +24,14 @@ from typing import Any, Iterable, Optional
 from .store import FINISHED, Store
 
 
-def outcomes(store: Store, experiment_id: str, arms: dict[str, tuple[str, int]]) -> dict[str, Any]:
+def outcomes(store: "Store | list[Store]", experiment_id: str, arms: dict[str, tuple[str, int]]) -> dict[str, Any]:
     """{arm: {run: {task_id: 0/1/None}}} plus per-cell metadata. The latest attempt of a cell counts
     only if earlier ones were unscored (the predeclared replacement rule)."""
     table: dict[str, dict[int, dict[str, Optional[int]]]] = defaultdict(lambda: defaultdict(dict))
     meta: dict[tuple[str, int, str], dict] = {}
     by_cell: dict[str, list[dict]] = defaultdict(list)
-    for a in store.attempts(experiment_id=experiment_id):
+    stores = store if isinstance(store, list) else [store]
+    for a in (x for st in stores for x in st.attempts(experiment_id=experiment_id)):
         role = a["info"].get("role", "")
         if not role.startswith("eval:"):
             continue
