@@ -115,3 +115,17 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
 - 04:10 UTC — **Aux box** `forkloop-aux-0929a` (gpu_8x_a100 40 GB, us-west-2, $15.92/h,
   129.146.162.105, registry `lambda-instance-9c6d8f264c`, lease 24 h) + filesystem `forkloop-uswest2`
   (`lambda-filesystem-3ceb9e5846`): Qwen TP=2 ×4 serving + worlds. No 8×80 GB capacity was available.
+- 04:15 UTC — **Teacher prompt fixed**: `agent_memory_v3` → teacher denial 9/9 (was 3/10), insurance 8/10
+  (pilot-teacher-v3, image :1). **Untrained student**: 0/25 scored on pilot tasks; it cannot log into
+  OpenEMR (its password-field click lands ~140 px too high), so the protocol uses a shared warm start.
+  **Solari flagship** (`solari-student-1`): 6/6 student attempts failed (3 NOT_DONE denial, 3 insurance);
+  repairs running; the first restores the student's step-8 VM snapshot into two desktops (teacher
+  branches). A restart-point false positive ("origin" from a neighbouring claim number) was found and
+  fixed (`80f08d9`); the remaining flagship repairs will be re-run with the fix.
+- **Built since 03:00**: runner ids on machines + `reap-machines`; `--pool/--skip/--per-family`
+  selection from the split policy; shared `image_scale`; composition feasibility; evidence bundle
+  (`forkloop evidence` via `write_evidence`), `forkloop demo-loop` (offline, no keys); matched-cost
+  unit selection (`budget.py`), paired analysis + checkpoint tradeoffs (`analysis.py`); protocol draft
+  `docs/protocol-learning-experiment.md`; `configs/exp1.yaml`; `scripts/exp1/`.
+- **Waiting on**: image `:3` (world clock at the task anchor via rebuilt libfaketime; stock libfaketime
+  segfaults headed Chrome). Registration commit follows its digest.
