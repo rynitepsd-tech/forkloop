@@ -115,3 +115,6 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
      instruction (typed near misses still count).
   Phase-1 teacher collection (W, A1) ran before these changes; (2) could only have turned a few
   teacher failures into unscored cells, and those cells are not training data either way.
+- 2026-09-29 05:55 UTC — experiment id `exp1-final` (A0, aux shard) was started at 05:25 under the
+  pre-review scoring rules and stopped at 05:55 with its outcomes unread. It is **void** and never
+  analysed; all final-test cells run under `exp1-eval` with the fixed code (`4d7ef5d`).
