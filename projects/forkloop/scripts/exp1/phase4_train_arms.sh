@@ -1,6 +1,6 @@
 #!/bin/bash
 # exp1 phase 4: matched-cost datasets, then A1/A2/A3 x seeds 1-3 (100 optimizer steps each) on main GPUs 0-7.
-# The 9th run (A3 seed 3) goes to forkloop-dev (1x H100) via scripts/exp1/train_on_dev.sh from the controller.
+# The 9th run (A3 seed 3) goes to forkloop-dev (1x H100) via `scripts/exp1/train_on_dev.sh start|fetch` from the controller.
 set -u
 source "$(dirname "$0")/env.sh"
 OUT=/home/ubuntu/programs/exp1/datasets/budget
