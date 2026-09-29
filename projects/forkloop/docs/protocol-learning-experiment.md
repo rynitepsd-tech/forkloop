@@ -162,3 +162,25 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   is unscored under the infrastructure rule. Early in the repairs 7 of 64 finished branches (both
   modes) were lost this way. The mapping is left unchanged until exp1 ends, so every collection and
   evaluation cell runs with the same backend; affected cells are reported with the unscored counts.
+- 2026-09-29 15:45 UTC — **repairs were dominated by infrastructure; the registered infrastructure
+  rule is extended to repairs** (before any trained model was evaluated; no final-test outcome of any
+  model has been read). Of 1,029 repair branches, 622 failed on OpenAI HTTP 429 (the account's rate
+  limit at 64 concurrent teacher branches; the bounded retry gave up), 26 on the `ctrl+-` backend
+  bug and ~28 on hosted transport `ReadError`s; 60 checkpoint branches failed to restore. The
+  demonstration arm (A1) was collected at half that concurrency and its few unscored attempts were
+  replaced under the registered rule, so the arms were treated asymmetrically, and the first
+  matched-cost datasets (B = $29.53: A1 78 verified paths, A2 9, A3 10) mostly measured the rate
+  limit. Changes:
+  1. A repair with any unscored branch (infrastructure error, failed restore, interruption) is
+     unscored as a whole and replaced, up to 2 replacements; the first clean repair of a failure
+     counts (`repair.counted_repair`) — the same rule as for attempts and evaluation cells. A
+     failure with 3 unscored repairs is excluded and reported.
+  2. The cost of unscored work (unscored attempts, void repairs) is charged to no arm (it had been
+     charged to every arm). The earlier accounting remains available (`forkloop budget
+     --count-unscored-cost`) and its numbers are reported.
+  3. Replacement repairs run in the matched-cost selection order, 18 concurrent branches per mode
+     (the demonstrations ran 16 + 16 with no rate limit), with a longer 429 backoff (8 tries, up to
+     60 s). `forkloop budget` refuses to cut a budget past a failure whose repair is not settled.
+  The eight training runs on main and the dev run started 15:08–15:11 on the earlier datasets are
+  void and never evaluated; retraining uses `datasets/budget-v2` and `adapters-v2`. The earlier
+  datasets (`datasets/budget`) stay on disk and in the report.

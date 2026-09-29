@@ -890,9 +890,10 @@ class StudentPolicy(BranchablePolicy):
     #: reset, ReadError, RemoteProtocolError) is sent again, so a flaky serving connection never becomes a
     #: policy step. Hosted (billed) endpoints never retry: a failed request may still have been charged.
     TRANSPORT_RETRIES = 3
-    #: Any endpoint: an HTTP 429 is a received refusal, never billed, so it is re-sent after the
-    #: server's Retry-After (capped) or an exponential backoff, at most this many times.
-    RATE_LIMIT_RETRIES = 5
+    #: Any endpoint: an HTTP 429 is a received refusal, never billed, so it is re-sent after an
+    #: exponential backoff (at least the server's Retry-After; capped at 60 s), at most this many times
+    #: (~4 minutes in all). A sustained token-rate limit needs the growing wait, not Retry-After alone.
+    RATE_LIMIT_RETRIES = 8
 
     async def _post_with_transport_retry(self, body: dict, *, retry: bool) -> httpx.Response:
         attempts = self.TRANSPORT_RETRIES + 1 if retry else 1
@@ -912,10 +913,10 @@ class StudentPolicy(BranchablePolicy):
             limited += 1
             self.rate_limit_retries = getattr(self, "rate_limit_retries", 0) + 1
             try:
-                wait = float(resp.headers.get("retry-after", ""))
+                hinted = float(resp.headers.get("retry-after", ""))
             except ValueError:
-                wait = 2.0 ** limited
-            await asyncio.sleep(min(max(wait, 0.5), 60.0))
+                hinted = 0.0
+            await asyncio.sleep(min(max(hinted, 2.0 ** limited), 60.0))
 
     def _tokens(self, data: dict, n: int = 1) -> dict:
         if not isinstance(data, dict):

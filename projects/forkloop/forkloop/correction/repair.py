@@ -227,4 +227,29 @@ async def repair_attempt(store: Store, world: Any, backend: Any, attempt_id: str
     return RepairResult(repair_id, attempt_id, cfg.mode, verified, results, chosen, status)
 
 
-__all__ = ["repair_attempt", "RepairConfig", "RepairResult", "task_for"]
+#: Branch outcomes that are infrastructure, not the teacher's: they make the whole repair unscored.
+UNSCORED_BRANCH = ("infra_error", "restore_failed", "interrupted", "running")
+
+
+def repair_is_clean(store: Store, repair: dict) -> bool:
+    """A repair is scored only if it finished and none of its branches is unscored. One lost branch
+    would otherwise shrink its ``k`` tries (or skip to a later restart point), so it is replaced whole,
+    as an unscored attempt is."""
+    if repair["status"] not in ("verified", "unrepaired"):
+        return False
+    return not any(b["status"] in UNSCORED_BRANCH for b in store.branches(repair_id=repair["repair_id"]))
+
+
+def counted_repair(store: Store, attempt_id: str, *, experiment_id: Optional[str], mode: str) -> tuple[Optional[dict], int]:
+    """The registered replacement rule applied to repairs: the first clean repair of this attempt (in
+    start order) counts. Returns ``(that repair or None, number of repairs tried)``."""
+    where = {"attempt_id": attempt_id, **({"experiment_id": experiment_id} if experiment_id is not None else {})}
+    prior = [r for r in store.repairs(**where) if r["mode"] == mode]
+    for r in prior:
+        if repair_is_clean(store, r):
+            return r, len(prior)
+    return None, len(prior)
+
+
+__all__ = ["repair_attempt", "RepairConfig", "RepairResult", "task_for", "repair_is_clean", "counted_repair",
+           "UNSCORED_BRANCH"]

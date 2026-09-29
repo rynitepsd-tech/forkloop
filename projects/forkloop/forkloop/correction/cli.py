@@ -213,8 +213,16 @@ def cmd_repair(args: argparse.Namespace) -> int:
     backend = proj.backend(world)
     store = proj.store()
     cfg = replace(proj.repair, mode=args.mode, **({"k": args.k} if args.k else {}))
-    ids = args.attempt or [a["attempt_id"] for a in failures(store, experiment_id=args.source_experiment or args.experiment)
-                           if a["info"].get("role") == args.role]
+    fails = [a for a in failures(store, experiment_id=args.source_experiment or args.experiment)
+             if a["info"].get("role") == args.role]
+    if args.order == "budget":
+        # the matched-cost selection order (families round-robin, each in seed order), so the repairs
+        # inside a budget window finish first
+        from .budget import Unit, _task_key, interleave
+        fails = [a for u in interleave([Unit("", _task_key(a["task_id"]), a["task_id"], a["attempt_id"], None, [])
+                                        for a in fails])
+                 for a in fails if a["attempt_id"] == u.attempt_id]
+    ids = args.attempt or [a["attempt_id"] for a in fails]
     if args.limit:
         ids = ids[: args.limit]
 
@@ -222,7 +230,7 @@ def cmd_repair(args: argparse.Namespace) -> int:
         try:
             return await run_repairs(store=store, world=world, backend=backend, attempt_ids=ids,
                                      teacher_factory=proj.teacher.factory, cfg=cfg, experiment_id=args.experiment,
-                                     concurrency=args.concurrency or proj.concurrency)
+                                     concurrency=args.concurrency or proj.concurrency, infra_retries=proj.infra_retries)
         finally:
             await backend.close()
 
@@ -352,6 +360,8 @@ def add_commands(sub: Any) -> None:
     p.add_argument("--k", type=int, default=None)
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=None)
+    p.add_argument("--order", choices=["seed", "budget"], default="seed",
+                   help="budget: launch in the matched-cost selection order (families round-robin)")
     p.set_defaults(fn=cmd_repair)
 
     p = sub.add_parser("dataset", help="export verified experience as an immutable dataset with lineage")
@@ -563,14 +573,24 @@ def cmd_budget(args: argparse.Namespace) -> int:
     proj = load_project(args.config, require_env=False)
     store, world = proj.store(), proj.world()
     rates = Rates(args.world_usd_per_hour, args.student_usd_per_step, note=args.rates_note)
-    arms = {"A1": demo_units(store, args.demo_experiment),
-            "A2": repair_units(store, args.attempt_experiment, args.checkpoint_experiment, "checkpoint", "A2"),
-            "A3": repair_units(store, args.attempt_experiment, args.restart_experiment, "full_restart", "A3")}
+    cu = {"count_unscored": args.count_unscored_cost}
+    arms = {"A1": demo_units(store, args.demo_experiment, **cu),
+            "A2": repair_units(store, args.attempt_experiment, args.checkpoint_experiment, "checkpoint", "A2",
+                               infra_retries=proj.infra_retries, **cu),
+            "A3": repair_units(store, args.attempt_experiment, args.restart_experiment, "full_restart", "A3",
+                               infra_retries=proj.infra_retries, **cu)}
     totals = {k: summarize(v, rates) for k, v in arms.items()}
-    budget = min(t["cost_usd"] for t in totals.values())
+    settled = [t["cost_usd"] for t in totals.values() if not t["pending"]]
+    if not settled:
+        raise SystemExit(f"every arm has pending units: {json.dumps(totals)}")
+    budget = min(settled)
+    short = {k: t for k, t in totals.items() if t["pending"] and t["cost_usd"] < budget}
+    if short:
+        raise SystemExit(f"budget undetermined: arms with pending units below B=${budget:.2f}: {json.dumps(short)}")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    report: dict[str, Any] = {"rates": rates.to_dict(), "totals": totals, "budget_usd": budget, "arms": {}}
+    report: dict[str, Any] = {"rates": rates.to_dict(), "totals": totals, "budget_usd": budget, "arms": {},
+                              "accounting": "count_unscored" if args.count_unscored_cost else "counted_repairs"}
     for frac in [float(x) for x in args.fractions.split(",")]:
         for arm, units in arms.items():
             chosen, spent = select(units, budget * frac, rates)
@@ -583,7 +603,7 @@ def cmd_budget(args: argparse.Namespace) -> int:
                 m = export_dataset(store, world, out / tag, include_demos=False, repair_ids=reps, name=f"exp1 {tag}")
             report["arms"][tag] = {**summarize(chosen, rates), "spent_usd": round(spent, 4), "dataset_id": m["dataset_id"],
                                    "records": m["counts"]["records"], "by_origin": m["counts"]["by_origin"],
-                                   "units": [u.to_dict(rates) for u in chosen]}
+                                   "selected": [u.to_dict(rates) for u in chosen]}
             print(f"{tag}: units={len(chosen)} spent=${spent:.2f} verified_paths={len(srcs)} records={m['counts']['records']}")
     (out / "budget-report.json").write_text(json.dumps(report, indent=2, default=str))
     print(json.dumps({"budget_usd": budget, "totals": totals}, indent=2))
@@ -601,6 +621,8 @@ def add_cleanup_command(sub: Any) -> None:
     p.add_argument("--student-usd-per-step", type=float, default=0.001)
     p.add_argument("--rates-note", default="main box $22.32/h / 64 worlds; 7 A100 replicas ≈ $19.53/h at ≈ 6 steps/s")
     p.add_argument("--fractions", default="0.25,0.5,1.0")
+    p.add_argument("--count-unscored-cost", action="store_true",
+                   help="charge unscored attempts and the latest repair whatever its branches (earlier accounting)")
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_budget)
     p = sub.add_parser("evidence", help="shareable evidence bundle: one repaired failure end to end, datasets, lineage")

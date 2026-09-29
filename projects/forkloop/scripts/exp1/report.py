@@ -15,6 +15,7 @@ from pathlib import Path
 
 from forkloop.correction import Store
 from forkloop.correction.analysis import arm_success, checkpoint_tradeoffs, outcomes, paired, reason_rates
+from forkloop.correction.repair import counted_repair
 
 ARMS = {"A0": ("A0", 0), "sw": ("S_W", 0),
         **{f"{a}-s{s}": (a, s) for a in ("A1", "A2", "A3") for s in (1, 2, 3)}}
@@ -34,18 +35,25 @@ def collection(stores: list[Store]) -> dict:
                 "failed" if a["status"] == "finished" else "unscored")
             by[fam(a["task_id"])][key] += 1
         out[exp] = {f: dict(c) for f, c in sorted(by.items())}
+    st = stores[0]  # collection ran on main's store
+    failed = [a for a in st.attempts(experiment_id="exp1-round1")
+              if a["info"].get("role") == "student" and a["status"] == "finished" and (a["reward"] or 0) < 1]
     for exp, mode in (("exp1-round1", "checkpoint"), ("exp1-restart", "full_restart")):
-        reps = [r for st in stores for r in st.repairs(experiment_id=exp) if r["mode"] == mode]
-        by = defaultdict(Counter)
+        by, br, br_counted = defaultdict(Counter), Counter(), Counter()
+        reps = [r for r in st.repairs(experiment_id=exp) if r["mode"] == mode]
         for r in reps:
-            att = next(st.attempt(r["attempt_id"]) for st in stores if st.attempts(attempt_id=r["attempt_id"]))
-            by[fam(att["task_id"])][r["status"]] += 1
-        br = Counter()
-        for st in stores:
-            for r in reps:
-                for b in st.branches(repair_id=r["repair_id"]):
-                    br["verified" if b["status"] == "finished" and (b["reward"] or 0) >= 1 else b["status"]] += 1
-        out[f"repairs:{mode}"] = {"by_family": {f: dict(c) for f, c in sorted(by.items())}, "branches": dict(br)}
+            for b in st.branches(repair_id=r["repair_id"]):
+                br["verified" if b["status"] == "finished" and (b["reward"] or 0) >= 1 else b["status"]] += 1
+        for a in failed:
+            rep, tried = counted_repair(st, a["attempt_id"], experiment_id=exp, mode=mode)
+            key = rep["status"] if rep else ("exhausted" if tried >= 3 else "pending")
+            by[fam(a["task_id"])][key] += 1
+            by[fam(a["task_id"])]["void_repairs"] += tried - (1 if rep else 0)
+            for b in st.branches(repair_id=rep["repair_id"]) if rep else []:
+                br_counted["verified" if b["status"] == "finished" and (b["reward"] or 0) >= 1 else b["status"]] += 1
+        out[f"repairs:{mode}"] = {"counted_by_family": {f: dict(c) for f, c in sorted(by.items())},
+                                  "branches_counted_repairs": dict(br_counted), "branches_all": dict(br),
+                                  "repairs_all": len(reps)}
     return out
 
 

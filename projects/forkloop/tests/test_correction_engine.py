@@ -274,3 +274,95 @@ def test_budget_interleaves_families():
             us.append(Unit("A", f"{seed:09d}:{fam}", f"{fam}-train_v2-{seed:06d}", f"a{fam}{seed}", None, []))
     fams = [u.task_id.split("-")[0] for u in interleave(us)[:4]]
     assert fams == ["compose_claims", "resolve_denial", "compose_claims", "resolve_denial"]
+
+
+class _Unreachable(ToyAgent):
+    """A teacher whose provider refuses every request (e.g. sustained HTTP 429): infrastructure."""
+
+    async def act(self, obs):
+        raise RuntimeError("policy provider: request failed: HTTPStatusError: 429 Too Many Requests")
+
+
+def _recorded_failure(world, backend, store, task):
+    async def run():
+        env = Env(world, backend, pool=WorkerPool(backend, world, size=1, mode="revert"), history_k=100)
+        try:
+            return await record_attempt(env, ToyAgent(task.expected["a"], task.expected["a0"], mistake_at=1, name="student"),
+                                        task, store=store, ckpt=CheckpointPolicy(strategy="replay", every=1),
+                                        attempt_id="att-x", experiment_id="round", cell=f"{task.task_id}/student/r1")
+        finally:
+            await env.close()
+    return asyncio.run(run())
+
+
+def test_repair_with_an_unscored_branch_is_replaced_and_only_the_clean_one_counts(tmp_path, world, backend):
+    from forkloop.correction.budget import PendingUnit, Rates, repair_units, select, summarize
+    from forkloop.correction.repair import counted_repair
+    from forkloop.correction.runner import run_repairs
+
+    store = Store(tmp_path / "r" / "f.sqlite")
+    task = _task(world)
+    res = _recorded_failure(world, backend, store, task)
+    assert res.status == "finished" and res.reward == 0.0
+    state = {"down": True}
+
+    def teacher():
+        cls = _Unreachable if state["down"] else ToyAgent
+        return cls(task.expected["a"], task.expected["a0"], mistake_at=None, name="teacher")
+
+    cfg = RepairConfig(k=2, max_restart_points=1, concurrency=2, history_k=100)
+    go = lambda: asyncio.run(run_repairs(store=store, world=world, backend=backend, attempt_ids=[res.attempt_id],  # noqa: E731
+                                         teacher_factory=teacher, cfg=cfg, experiment_id="rep", concurrency=2,
+                                         infra_retries=2, log=lambda m: None))
+    rates = Rates(0.35, 0.001)
+
+    go()                                    # provider down: both branches unscored → the repair is void
+    first = store.repairs(experiment_id="rep")
+    assert len(first) == 1 and {b["status"] for b in store.branches(repair_id=first[0]["repair_id"])} == {"infra_error"}
+    assert counted_repair(store, res.attempt_id, experiment_id="rep", mode="checkpoint") == (None, 1)
+    units = repair_units(store, "round", "rep", "checkpoint", "A2")
+    assert units[0].pending and summarize(units, rates)["pending"] == 1
+    with pytest.raises(PendingUnit):
+        select(units, 100.0, rates)
+
+    state["down"] = False
+    go()                                    # replacement repair: scored, verified
+    reps = store.repairs(experiment_id="rep")
+    assert len(reps) == 2 and reps[1]["status"] == "verified"
+    counted, tried = counted_repair(store, res.attempt_id, experiment_id="rep", mode="checkpoint")
+    assert counted["repair_id"] == reps[1]["repair_id"] and tried == 2
+    go()                                    # settled: nothing more runs
+    assert len(store.repairs(experiment_id="rep")) == 2
+
+    u = repair_units(store, "round", "rep", "checkpoint", "A2")[0]
+    assert not u.pending and u.repair_id == reps[1]["repair_id"]
+    good = {b["branch_id"] for b in store.branches(repair_id=reps[1]["repair_id"])}
+    assert set(u.verified_sources) == good and len(good) == 2       # the void repair's work is not charged or used
+    charged = sum(c["amount"] for c in store.charges() if c["kind"] == "branch_wall_seconds" and c["ref"] in good)
+    assert u.world_hours == pytest.approx(
+        sum(c["amount"] for c in store.charges() if c["kind"] == "attempt_wall_seconds" and c["ref"] == res.attempt_id) / 3600
+        + charged / 3600)
+    chosen, spent = select([u], 100.0, rates)
+    assert chosen == [u] and spent == pytest.approx(u.cost(rates))
+    # the earlier accounting (every branch of the latest repair, unscored attempts too) stays available
+    old = repair_units(store, "round", "rep", "checkpoint", "A2", count_unscored=True)[0]
+    assert old.repair_id == reps[1]["repair_id"]
+
+
+def test_repairs_are_exhausted_after_the_registered_number_of_unscored_tries(tmp_path, world, backend):
+    from forkloop.correction.budget import Rates, repair_units, select
+    from forkloop.correction.runner import run_repairs
+
+    store = Store(tmp_path / "e" / "f.sqlite")
+    task = _task(world)
+    res = _recorded_failure(world, backend, store, task)
+    cfg = RepairConfig(k=1, max_restart_points=1, concurrency=1, history_k=100)
+    teacher = lambda: _Unreachable(task.expected["a"], task.expected["a0"], name="teacher")  # noqa: E731
+    for _ in range(3):
+        asyncio.run(run_repairs(store=store, world=world, backend=backend, attempt_ids=[res.attempt_id],
+                                teacher_factory=teacher, cfg=cfg, experiment_id="rep", concurrency=1,
+                                infra_retries=1, log=lambda m: None))
+    assert len(store.repairs(experiment_id="rep")) == 2           # 1 + infra_retries, then skipped
+    u = repair_units(store, "round", "rep", "checkpoint", "A2", infra_retries=1)[0]
+    assert u.excluded and not u.pending
+    assert select([u], 100.0, Rates(0.35, 0.001)) == ([], 0.0)     # excluded, reported, never selected

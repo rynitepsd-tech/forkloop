@@ -23,7 +23,7 @@ from ..env import Env
 from ..pool import WorkerPool
 from .checkpoint import CheckpointPolicy
 from .record import AttemptResult, record_attempt
-from .repair import RepairConfig, repair_attempt
+from .repair import RepairConfig, counted_repair, repair_attempt
 from .store import FINISHED, Store, stable_id
 
 RETRYABLE = ("infra_error", "interrupted", "restore_failed")
@@ -175,7 +175,10 @@ def reap_dead_runners(store: Store, *, log: Callable[[str], None] = print) -> li
 
 async def run_repairs(*, store: Store, world: Any, backend: Any, attempt_ids: Iterable[str],
                       teacher_factory: Callable[[], Any], cfg: RepairConfig, experiment_id: str,
-                      concurrency: int = 2, log: Callable[[str], None] = print) -> list[Any]:
+                      concurrency: int = 2, infra_retries: int = 2, log: Callable[[str], None] = print) -> list[Any]:
+    """Repairs are launched in the given order (a shared branch semaphore keeps that order). An attempt
+    whose earlier repair had an unscored branch (infrastructure) gets a new repair, up to
+    ``1 + infra_retries`` repairs in total; the first clean one counts (``counted_repair``)."""
     sem = asyncio.Semaphore(max(1, concurrency))
     out = []
 
@@ -186,10 +189,14 @@ async def run_repairs(*, store: Store, world: Any, backend: Any, attempt_ids: It
         return p
 
     async def one(aid: str) -> None:
-        prior = [r for r in store.repairs(attempt_id=aid, experiment_id=experiment_id) if r["mode"] == cfg.mode]
-        if any(r["status"] in ("verified", "unrepaired") for r in prior):
-            log(f"[runner] repair {aid} {cfg.mode}: done before, skipped")
+        counted, tried = counted_repair(store, aid, experiment_id=experiment_id, mode=cfg.mode)
+        if counted is not None:
+            log(f"[runner] repair {aid} {cfg.mode}: scored repair exists ({counted['status']}), skipped")
             return
+        if tried >= 1 + infra_retries:
+            log(f"[runner] repair {aid} {cfg.mode}: exhausted after {tried} unscored repairs, skipped")
+            return
+        prior = [r for r in store.repairs(attempt_id=aid, experiment_id=experiment_id) if r["mode"] == cfg.mode]
         try:
             r = await repair_attempt(store, world, backend, aid, teacher_factory=sync_factory, cfg=cfg,
                                      experiment_id=experiment_id, repair_no=len(prior) + 1, sem=sem)
