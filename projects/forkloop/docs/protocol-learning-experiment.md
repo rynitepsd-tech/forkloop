@@ -99,3 +99,8 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   TP2). For **every** model the final-test list is split the same way: list position mod 2 = 0 on
   main, = 1 on aux, so any server effect is balanced across arms. Cells of one model may run at
   different times; nobody reads final-test outcomes until all planned cells have run.
+- 2026-09-29 05:40 UTC — observation during phase 1 (not a change): the registered teacher solved
+  0/40 `reschedule_constrained` tasks from their initial states so far (mostly 120-step budget
+  exhaustion; wrong current date; OpenEMR date-picker trouble), against 18/20 insurance and 10/12
+  denial. No change to teacher, prompt or budget; rescheduling stays in training collection and
+  evaluation as registered and is reported per family.
