@@ -6,14 +6,24 @@ Guidance for Claude Code (and humans) working in this directory. Keep it short; 
 
 ## What this is
 
-A Python 3.11 library + two worlds + training scripts. Snapshot restore is one stage of reset, followed by deterministic seeding, world preparation, health checks, baseline capture and initial-screen setup. A deterministic SQL oracle computes rewards. No LLM is ever in the reward path.
+A Python 3.11 library + three worlds (claims-ops-v1, kanboard-v1, toy-counter) + training scripts. Since
+2026-09-29 the product is the **correction loop** (`forkloop/correction/`, contract in `docs/correction.md`):
+`record` attempts with bound checkpoints → `failures` (evidence-chosen restart points) → `repair` (k independent
+teacher branches, fidelity-checked restores) → `dataset` (immutable, lineage, audits) → train → `evaluate` (the
+student alone) → `evidence`. Backends: `docker` (dozens of worlds per box; image `forkloop/claims-ops-v1:3` with the
+world clock at the task anchor), `solari` (VM snapshots), `fake`. Operations: `docs/operations.md`
+(`forkloop ops`, registry `~/.forkloop/resources.jsonl`). Current program: `docs/execution-ledger.md` ("RESUME
+HERE"), protocol `docs/protocol-learning-experiment.md`.
+
+The earlier regression-comparison product (`compare`) remains. A Python 3.11 library + training scripts. Snapshot restore is one stage of reset, followed by deterministic seeding, world preparation, health checks, baseline capture and initial-screen setup. A deterministic SQL oracle computes rewards. No LLM is ever in the reward path.
 
 ## Commands
 
 ```bash
 # from projects/forkloop, with the venv active (python3.11)
 pip install -e ".[dev,world,teacher]"
-pytest                                   # ~2 min, all offline, no keys needed
+pytest                                   # ~3 min, all offline, no keys needed (650+ tests)
+forkloop demo-loop --out runs/demo-loop  # the whole correction loop offline on the toy world
 pytest tests/test_core_toy.py -x         # fastest signal for core changes
 pytest tests/test_claims_ops_world.py    # oracle + world on the fake backend
 forkloop worlds                          # sanity check the CLI installs
