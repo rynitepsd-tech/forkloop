@@ -17,7 +17,7 @@ def test_epoch_tail_is_a_separate_accumulation_group(tmp_path,monkeypatch,max_st
  monkeypatch.setattr(t,'apply_lora',lambda m,**kw:m)
  monkeypatch.setattr(t,'load_records',lambda *a,**kw:[{} for _ in range(10)])
  monkeypatch.setattr(t,'SFTExamples',lambda records,**kw:records)
- monkeypatch.setattr(t,'make_collate',lambda p:lambda batch:{'input_ids':torch.ones((len(batch),1),dtype=torch.long)})
+ monkeypatch.setattr(t,'make_collate',lambda p,**kw:lambda batch:{'input_ids':torch.ones((len(batch),1),dtype=torch.long)})
  monkeypatch.setattr(torch.cuda,'is_available',lambda:False)
  args=t.build_parser().parse_args(['--model','synthetic','--data','unused','--output-dir',str(tmp_path),'--epochs','2','--grad-accum','4','--dtype','fp32','--no-gradient-checkpointing','--save-steps','0'])
  args.max_steps=max_steps
