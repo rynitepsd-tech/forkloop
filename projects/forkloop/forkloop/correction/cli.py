@@ -229,7 +229,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     from .project import load_project
     from .runner import run_attempts
 
-    proj = load_project(args.config, overrides=_overrides(args.set))
+    proj = load_project(args.config, overrides=_overrides(args.set), require_env=False)  # the teacher is not used
     _guard_final(args.split or "", args.final)
     world = proj.world()
     backend = proj.backend(world)
