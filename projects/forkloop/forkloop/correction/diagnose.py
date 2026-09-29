@@ -60,14 +60,15 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]{3,}")
 
 
 def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, max_distance: int = 2,
-                     instruction: str = "") -> Optional[dict]:
+                     instruction: str = "", values: Optional[list[str]] = None) -> Optional[dict]:
     """First step whose typed text or memory write contains a near miss (1..max_distance edits)
     of a *hidden* expected value — one the agent must read from the application because the
     instruction does not state it (an authorization number) — or a planted decoy value.
     Identifiers the instruction states (claim numbers, a new member id) are excluded: mentioning a
     neighbouring claim number on screen is not an error (2026-09-29 false positives)."""
-    targets = [t for t in _hidden_strings({k: v for k, v in expected.items() if not str(k).startswith("decoy")})
-               if t not in instruction]
+    targets = list(values) if values is not None else [
+        t for t in _hidden_strings({k: v for k, v in expected.items() if not str(k).startswith("decoy")})
+        if t not in instruction]
     decoys = set(_hidden_strings({k: v for k, v in expected.items() if str(k).startswith("decoy")}))
     for s in steps:
         texts = []
@@ -85,6 +86,22 @@ def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, m
                             0 < _levenshtein(tok.upper(), t.upper()) <= max_distance:
                         return {"step": s["i"], "kind": kind, "why": f"near miss ({_levenshtein(tok.upper(), t.upper())} edits)"}
     return None
+
+
+VALUE_CHECK_REASONS = ("WRONG_VALUE", "WRONG_SLOT", "WRONG_ATTACHMENT")
+
+
+def produced_values(task: Any) -> list[str]:
+    """The strings the verifier requires the agent to *produce* (``equals`` of value-type effect checks:
+    an authorization number, a new member id). A near miss of one of these, typed or memorized, is
+    where a value error originated; a neighbouring identifier merely mentioned on screen is not."""
+    oracle = getattr(task, "oracle", None)
+    out = []
+    for c in (getattr(oracle, "effects", None) or []):
+        v = c.equals
+        if c.reason_code in VALUE_CHECK_REASONS and isinstance(v, str) and len(v) >= 5 and re.search(r"\d", v):
+            out.append(v)
+    return sorted(set(out))
 
 
 def stall_start(steps: list[dict[str, Any]], *, repeats: int = 3) -> Optional[int]:
@@ -121,7 +138,8 @@ def restart_points(attempt: dict[str, Any], ckpts: list[dict[str, Any]], task: A
         if c is not None and all(p.ckpt_id != c["ckpt_id"] for p in out):
             out.append(RestartPoint(c["ckpt_id"], c["step"], reason, evidence))
 
-    origin = near_miss_origin(steps, getattr(task, "expected", {}) or {}, instruction=getattr(task, "instruction", ""))
+    origin = near_miss_origin(steps, getattr(task, "expected", {}) or {}, instruction=getattr(task, "instruction", ""),
+                              values=produced_values(task))
     if origin is not None:
         add(_last_clean_at_or_before(ckpts, origin["step"]), "origin", origin)
     damaged = [c for c in ckpts if c["status"] == "damaged"]
