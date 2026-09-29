@@ -152,8 +152,42 @@ class ClaimsOpsWorld(World):
             await machine.write_file(f"{dst}/{rel}", f.read_bytes())
 
     # ---------------------------------------------------------------- health
+    #: The day tasks are generated relative to is tasks.common.ANCHOR (2026-09-07). Docker images fake the
+    #: whole container's clock to start at FORKLOOP_WORLD_CLOCK (default: the anchor, 09:00 UTC) at boot.
+    WORLD_CLOCK_TOLERANCE_S = 86_400
+
+    async def world_clock(self, machine: Any) -> tuple[bool, str]:
+        """The machine's clock against the configured world clock (±1 day). Enforced on Docker, where the
+        clock is ours (docs/docker-world.md); elsewhere (Solari restores its snapshot's clock) only reported."""
+        import datetime as _dt
+
+        from .tasks.common import ANCHOR
+
+        r = await machine.exec("date", ["-u", "+%s"], timeout_ms=15_000)
+        try:
+            now = int((r.stdout or "").strip())
+        except ValueError:
+            return machine.backend_name != "docker", f"unreadable machine date: {r.stdout!r} {r.stderr[-200:]!r}"
+        seen = _dt.datetime.fromtimestamp(now, tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if machine.backend_name != "docker":
+            return True, f"{seen} (not enforced on {machine.backend_name})"
+        want = os.environ.get("FORKLOOP_WORLD_CLOCK") or f"{ANCHOR.isoformat()}T09:00:00Z"
+        if want == "real":
+            return True, f"{seen} (FORKLOOP_WORLD_CLOCK=real)"
+        target = _dt.datetime.fromisoformat(want.replace("Z", "+00:00")).timestamp()
+        if abs(now - target) > self.WORLD_CLOCK_TOLERANCE_S:
+            return False, f"failed: machine clock {seen} is not within 1 day of {want}"
+        return True, seen
+
     async def health(self, machine: Any, dbs: dict[str, DbAccess]) -> HealthReport:
         rep = await super().health(machine, dbs)
+        if machine.backend_name != "fake":
+            try:
+                ok, note = await self.world_clock(machine)
+            except Exception as e:  # noqa: BLE001
+                ok, note = machine.backend_name != "docker", f"error: {type(e).__name__}: {e}"
+            rep.checks["world_clock"] = note
+            rep.ok = rep.ok and ok
         try:
             n_pat = await dbs["portal"].scalar("SELECT COUNT(*) AS n FROM patients")
             rep.checks["portal.patients"] = n_pat

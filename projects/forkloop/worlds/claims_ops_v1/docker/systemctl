@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# systemctl shim for the claims-ops-v1 Docker image ONLY (installed as /usr/local/bin/systemctl).
+# build.sh and openemr/install.sh are the unchanged Solari scripts; they call
+#   systemctl daemon-reload | enable --now <units> | stop <unit> | restart <unit>
+# and there is no systemd in a container, so those verbs are mapped onto svc.sh.
+set -uo pipefail
+SVC=/usr/local/forkloop/svc.sh
+args=()
+now=0
+for a in "$@"; do
+  case "$a" in
+    --now) now=1 ;;
+    -q|--quiet|--no-pager|--no-block|--system) ;;
+    *) args+=("$a") ;;
+  esac
+done
+verb="${args[0]:-}"
+units=("${args[@]:1}")
+case "$verb" in
+  daemon-reload|reset-failed|mask|unmask) exit 0 ;;
+  enable) [[ $now -eq 1 ]] && exec "$SVC" start "${units[@]}"; exit 0 ;;
+  disable) [[ $now -eq 1 ]] && exec "$SVC" stop "${units[@]}"; exit 0 ;;
+  start|stop|restart) exec "$SVC" "$verb" "${units[@]}" ;;
+  reload|try-restart|reload-or-restart) exec "$SVC" restart "${units[@]}" ;;
+  is-active|status) exec "$SVC" status "${units[@]}" ;;
+  is-enabled) echo enabled; exit 0 ;;
+  *) echo "systemctl shim (forkloop docker image): unsupported verb '$verb'" >&2; exit 1 ;;
+esac

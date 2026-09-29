@@ -1,0 +1,9 @@
+# BuildKit reads <Dockerfile>.dockerignore next to the Dockerfile; the context is projects/forkloop.
+# Only the world and library sources go into the image, as ClaimsOpsWorld.build uploads them on Solari.
+*
+!worlds
+!forkloop
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+forkloop/bench/local_baseline/state
