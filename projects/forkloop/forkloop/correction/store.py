@@ -186,6 +186,19 @@ class Store:
                        "WHERE attempt_id=?", (status, reward, reason_code, n_steps, time.time(), _j(merged), attempt_id))
             self._event(db, "attempt_finished", attempt_id, {"status": status, "reward": reward, "reason": reason_code})
 
+    def _portable(self, run_dir: str) -> str:
+        """A store copied to another machine keeps working: a missing absolute run directory is looked
+        up under this store's own ``attempts/`` or ``branches/``."""
+        if not run_dir or Path(run_dir).exists():
+            return run_dir
+        parts = Path(run_dir).parts
+        for anchor in ("attempts", "branches"):
+            if anchor in parts:
+                cand = self.root.joinpath(*parts[parts.index(anchor):])
+                if cand.exists():
+                    return str(cand)
+        return run_dir
+
     def attempts(self, **where: Any) -> list[dict[str, Any]]:
         sql, params = "SELECT * FROM attempts", []
         if where:
@@ -194,6 +207,7 @@ class Store:
         rows = self._rows(sql + " ORDER BY started_at", tuple(params))
         for r in rows:
             r["info"] = json.loads(r.pop("info_json"))
+            r["run_dir"] = self._portable(r["run_dir"])
         return rows
 
     def attempt(self, attempt_id: str) -> dict[str, Any]:
@@ -304,6 +318,7 @@ class Store:
         for r in rows:
             r["restore"] = json.loads(r.pop("restore_json"))
             r["info"] = json.loads(r.pop("info_json"))
+            r["run_dir"] = self._portable(r["run_dir"])
         return rows
 
     # ----------------------------------------------------------------- accounting
