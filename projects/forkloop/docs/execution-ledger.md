@@ -277,3 +277,10 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   **Phase-5 staging**: main's Docker cap (96) cannot hold phase 5 (88) plus the remaining replacement
   repairs (36), so aux starts phase 5 as soon as all v2 adapters are on aux, and main starts when
   "replacement repairs complete" is in resume.log.
+- 20:05 UTC — **OpenAI credit exhausted since ≈ 14:05 UTC** (diagnostic: 429 `insufficient_quota`,
+  `credit_balance_exhausted`). The "rate limit" diagnosis of 15:28 was wrong (see protocol 20:10).
+  Replacement repairs (tmux `exp1-repair2`) produced nothing and were stopped 20:05 (tmux killed;
+  containers reaped by `reap-repair2`). First round usable: 51 clean repairs from before ≈ 14:00.
+  **Blocked on the owner**: add OpenAI credit (billing is the owner's action) or wind down. If
+  continuing: exclude outage-era repairs from the replacement count (repairs with no successful
+  teacher call), then re-run `phase3d_replace_repairs.sh`.

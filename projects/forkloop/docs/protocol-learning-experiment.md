@@ -184,3 +184,15 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   The eight training runs on main and the dev run started 15:08–15:11 on the earlier datasets are
   void and never evaluated; retraining uses `datasets/budget-v2` and `adapters-v2`. The earlier
   datasets (`datasets/budget`) stay on disk and in the report.
+- 2026-09-29 20:10 UTC — **correction of the 15:28 note: the cause was not the rate limit.** A
+  diagnostic request returned HTTP 429 with `insufficient_quota` / `credit_balance_exhausted` ("You
+  have no credits remaining"): the OpenAI account's prepaid credit ran out at about 14:05 UTC.
+  Teacher calls succeeded throughout 10:24–14:00 at 64 concurrent branches (≈ 32,000 calls, 3
+  isolated 429s); from 14:30 none succeeded. Branches only recorded the status line, which read
+  "Too Many Requests", and the 15:28 note attributed it to concurrency without checking the error
+  body. Consequently the replacement repairs started 15:31 (18 + 18 concurrent) produced no scored
+  branch (604 infrastructure errors, 592 of them this refusal; 112 failed restores) and were stopped
+  at 20:05. Repairs run while the provider refused every request carry no information about the
+  teacher or the method; they will not count toward the replacement limit of the 15:28 rule. The
+  rest of the 15:28 extension stands (repair-level replacement; unscored work charged to no arm).
+  Collection cannot continue until credit is added. No final-test outcome has been read.
