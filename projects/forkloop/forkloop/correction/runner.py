@@ -60,7 +60,8 @@ def plan_cells(store: Store, tasks: Iterable[Any], *, role: str, experiment_id: 
 async def run_attempts(*, store: Store, world: Any, backend: Any, tasks: Iterable[Any], role: str,
                        policy_factory: Callable[[], Any], ckpt: CheckpointPolicy, experiment_id: str,
                        concurrency: int = 2, replicate: int = 1, infra_retries: int = 2, history_k: int = 8,
-                       budget: Optional[dict] = None, log: Callable[[str], None] = print) -> list[AttemptResult]:
+                       budget: Optional[dict] = None, log: Callable[[str], None] = print,
+                       settle: str = "stable") -> list[AttemptResult]:
     reap_dead_runners(store, log=log)
     plans = plan_cells(store, tasks, role=role, experiment_id=experiment_id, replicate=replicate,
                        infra_retries=infra_retries)
@@ -73,7 +74,8 @@ async def run_attempts(*, store: Store, world: Any, backend: Any, tasks: Iterabl
         async with sem:
             env = Env(world, backend, family=p.task.family, split=p.task.split, history_k=history_k,
                       pool=WorkerPool(backend, world, size=1, mode="fork", run_id=stable_id("run", p.cell, p.attempt_no),
-                                      reap_orphans_enabled=False), budget_override=budget)
+                                      reap_orphans_enabled=False), budget_override=budget,
+                      stable_after_action=(settle == "stable"))
             env._own_pool = True  # the cell's pool (and its machine) dies with the cell
             policy = await make_policy(policy_factory)
             t0 = time.monotonic()

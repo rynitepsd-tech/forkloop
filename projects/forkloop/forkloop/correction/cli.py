@@ -111,7 +111,8 @@ def cmd_record(args: argparse.Namespace) -> int:
             return await run_attempts(store=proj.store(), world=world, backend=backend, tasks=tasks, role=args.role,
                                       policy_factory=policy.factory, ckpt=ckpt, experiment_id=args.experiment,
                                       concurrency=args.concurrency or proj.concurrency, replicate=args.replicate,
-                                      infra_retries=proj.infra_retries, history_k=proj.history_k, budget=proj.budget)
+                                      infra_retries=proj.infra_retries, history_k=proj.history_k, budget=proj.budget,
+                                      settle=proj.settle)
         finally:
             await backend.close()
 
@@ -212,7 +213,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             return await run_attempts(store=proj.store(), world=world, backend=backend, tasks=tasks, role=role,
                                       policy_factory=policy.factory, ckpt=ckpt, experiment_id=args.experiment,
                                       concurrency=args.concurrency or proj.concurrency, replicate=args.replicate,
-                                      infra_retries=proj.infra_retries, history_k=proj.history_k, budget=proj.budget)
+                                      infra_retries=proj.infra_retries, history_k=proj.history_k, budget=proj.budget,
+                                      settle=proj.settle)
         finally:
             await backend.close()
 

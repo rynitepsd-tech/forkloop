@@ -36,7 +36,7 @@ from .repair import RepairConfig
 from .store import Store
 
 KEYS = {"version", "world", "backend", "store", "budget", "history_k", "checkpoints", "student", "teacher", "repair",
-        "concurrency", "infra_retries", "notes"}
+        "concurrency", "infra_retries", "notes", "settle"}
 
 
 @dataclass
@@ -53,6 +53,9 @@ class Project:
     teacher: Optional[ConfiguredPolicy]
     concurrency: int = 2
     infra_retries: int = 2
+    #: "stable": after each action wait until two consecutive screenshots match (≤ 8 s), so the
+    #: policy never sees a half-loaded page and replays reproduce the recorded screen; "fixed": 0.6 s.
+    settle: str = "stable"
     raw: dict[str, Any] = field(default_factory=dict)
 
     def store(self) -> Store:
@@ -97,7 +100,7 @@ def load_project(path: str | Path, *, require_env: bool = True, overrides: Optio
     return Project(path=path, world_name=raw.get("world", "claims-ops-v1"), backend_name=backend, store_path=store,
                    budget=dict(budget), history_k=history_k, checkpoints=ck, repair=repair, student=student,
                    teacher=teacher, concurrency=int(raw.get("concurrency", 2)),
-                   infra_retries=int(raw.get("infra_retries", 2)), raw=raw)
+                   infra_retries=int(raw.get("infra_retries", 2)), settle=str(raw.get("settle", "stable")), raw=raw)
 
 
 __all__ = ["Project", "load_project"]

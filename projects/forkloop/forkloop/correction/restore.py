@@ -84,7 +84,7 @@ async def open_branch(*, world: Any, backend: Any, task: Any, ckpt: dict[str, An
     pool = WorkerPool(backend, world, size=1, mode="fork", golden_snapshot=golden, run_id=run_id,
                       reap_orphans_enabled=False)
     env = Env(world, backend, family=task.family, split=task.split, pool=pool, recorder=None,
-              budget_override=budget_override, history_k=history_k)
+              budget_override=budget_override, history_k=history_k, stable_after_action=(settle == "stable"))
     env._own_pool = True
     report = RestoreReport(strategy=strategy, ok=False, seconds=0.0)
     attempt_dir = Path(attempt["run_dir"])
