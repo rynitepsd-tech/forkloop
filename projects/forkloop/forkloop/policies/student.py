@@ -414,22 +414,15 @@ def build_user_text(instruction: str, history: list[str] | None, style: str, ste
 # Image handling
 # --------------------------------------------------------------------------- #
 
-def prepare_image(png_bytes: bytes, image_max_side: int) -> tuple[str, tuple[int, int], tuple[int, int]]:
-    """Resize preserving aspect so max(w, h) <= image_max_side.
+def prepare_image(png_bytes: bytes, image_max_side: int, image_scale: float = 1.0) -> tuple[str, tuple[int, int], tuple[int, int]]:
+    """Upscale by ``image_scale`` then cap the longest side at ``image_max_side`` (the shared
+    :func:`forkloop.policies.observation.resize_for_model`). Returns ``(data_url, model_size, original_size)``."""
+    from .observation import resize_for_model
 
-    Returns ``(data_url, model_size, original_size)``.
-    """
     im = Image.open(io.BytesIO(png_bytes))
     im.load()
     orig = (im.width, im.height)
-    if im.mode != "RGB":
-        im = im.convert("RGB")
-    scale = 1.0
-    if image_max_side and max(orig) > image_max_side:
-        scale = image_max_side / float(max(orig))
-    if scale < 1.0:
-        new = (max(1, int(round(orig[0] * scale))), max(1, int(round(orig[1] * scale))))
-        im = im.resize(new, Image.LANCZOS)
+    im = resize_for_model(im, image_max_side=image_max_side, image_scale=image_scale)
     buf = io.BytesIO()
     im.save(buf, format="PNG", optimize=False)
     data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
@@ -568,6 +561,7 @@ class StudentPolicy(BranchablePolicy):
         nav_macro: bool = False,
         instruction_note: str | None = None,
         memory: bool = False,
+        image_scale: float = 1.0,
     ) -> None:
         self.validate_options(locals(), credentialed=bool(api_key))
         self.session_ledger = session_ledger or os.environ.get("FORKLOOP_SESSION_LEDGER")
@@ -613,6 +607,10 @@ class StudentPolicy(BranchablePolicy):
         #: Explicit memory: facts the policy wrote in ``Memory:`` lines of its own replies, shown
         #: back on every later step. Part of the branchable policy state (checkpoints restore it).
         self.memory_enabled = bool(memory)
+        #: Client-side upscale of every screenshot before it is sent (training renders the same way).
+        self.image_scale = float(image_scale)
+        if not (0.25 <= self.image_scale <= 4.0):
+            raise ValueError("image_scale must be between 0.25 and 4")
         self._memory: list[str] = []
         #: OpenAI-style image fidelity hint ("high"/"low"/"auto"); None omits the field (vLLM).
         #: Hosted models default to "auto", which may downscale a 1280x720 screenshot enough to
@@ -654,6 +652,7 @@ class StudentPolicy(BranchablePolicy):
             "image_max_side": self.image_max_side, "temperature": self.temperature,
             "max_tokens": self.max_tokens, "history_k": self.history_k, "seed": self.seed,
             "nav_macro": self.nav_macro, "history_notes": self.history_notes, "memory": self.memory_enabled,
+            "image_scale": self.image_scale,
             "prev_screenshot": self.prev_screenshot, "observation_schema": OBSERVATION_SCHEMA_MEMORY if self.memory_enabled else OBSERVATION_SCHEMA,
             "instruction_note": self.instruction_note, "system_prompt_override": bool(self.system_prompt_override),
         }
@@ -684,7 +683,7 @@ class StudentPolicy(BranchablePolicy):
         Returns ``(messages, ctx)`` where ctx has ``model_size``, ``screen_size``,
         ``coord_size`` and ``orig_size`` used for rescaling.
         """
-        data_url, model_size, orig = prepare_image(obs.screenshot, self.image_max_side)
+        data_url, model_size, orig = prepare_image(obs.screenshot, self.image_max_side, self.image_scale)
         screen = self._screen_size(obs, orig)
         coord_size = self._coord_from_size(model_size, screen)
         history = list(getattr(obs, "history", None) or [])
@@ -694,7 +693,7 @@ class StudentPolicy(BranchablePolicy):
         previous = getattr(obs, "previous_screenshot", b"") or self._previous_png
         urls = []
         if self.prev_screenshot and step > 0 and previous:
-            urls.append(prepare_image(previous, self.image_max_side)[0])
+            urls.append(prepare_image(previous, self.image_max_side, self.image_scale)[0])
         urls.append(data_url)
         canonical = observation_messages(
             instruction=str(getattr(obs, "instruction", "") or ""), history=history, step=step,

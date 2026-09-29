@@ -13,6 +13,24 @@ OBSERVATION_SCHEMA = "forkloop.observation.v3"
 OBSERVATION_SCHEMA_MEMORY = "forkloop.observation.v4-memory"
 
 
+def resize_for_model(im, *, image_max_side: int, image_scale: float = 1.0):
+    """The one image transform shared by serving (StudentPolicy) and training (train_lora): upscale by
+    ``image_scale`` (LANCZOS; small text such as authorization codes is resolution-limited: 4/14 exact
+    reads at 1x vs 12/14 at 1.5x for Qwen3.8-27B, 2026-09-29), then cap the longest side at
+    ``image_max_side``. Returns an RGB PIL image."""
+    from PIL import Image
+
+    if im.mode != "RGB":
+        im = im.convert("RGB")
+    if image_scale and abs(image_scale - 1.0) > 1e-9:
+        im = im.resize((max(1, int(round(im.width * image_scale))), max(1, int(round(im.height * image_scale)))),
+                       Image.LANCZOS)
+    if image_max_side and max(im.size) > image_max_side:
+        k = image_max_side / float(max(im.size))
+        im = im.resize((max(1, int(round(im.width * k))), max(1, int(round(im.height * k)))), Image.LANCZOS)
+    return im
+
+
 def coordinate_size(space: str, style: str, image: tuple[int, int], screen: tuple[int, int]) -> tuple[int, int]:
     if space == "auto":
         space = "norm1000" if style == "fara" else "image"

@@ -18,7 +18,8 @@ student:
     model: qwen3.8-27b
     prompt_style: compact
     coord_space: norm1000
-    image_max_side: 1280
+    image_max_side: 1920
+    image_scale: 1.5
     history_k: 12
     prev_screenshot: true
     memory: true

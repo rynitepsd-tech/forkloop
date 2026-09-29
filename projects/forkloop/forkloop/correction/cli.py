@@ -35,7 +35,33 @@ def parse_seeds(text: str) -> list[int]:
     return out
 
 
-def _tasks(world: Any, families: str, split: str, seeds: str, *, allow_final: bool = False) -> list[Any]:
+def _pool_tasks(pool: str, families: str, per_family: int, skip: int) -> list[Any]:
+    """Tasks from a named pool (forkloop/splits.py): train/dev in seed order without held-out structures,
+    val/final_test from their frozen, hash-checked lists. ``skip`` keeps disjoint slices (pilot vs collection)."""
+    import itertools
+
+    from .. import splits
+    fams = [f.strip() for f in families.split(",") if f.strip()]
+    if pool in ("val", "final_test"):
+        tasks = splits.pool_tasks(pool, fams)
+        out = []
+        for f in fams:
+            out += [t for t in tasks if t.family == f][skip: skip + per_family]
+        return out
+    out = []
+    for f in fams:
+        out += list(itertools.islice(splits.iter_pool(pool, f), skip, skip + per_family))
+    return out
+
+
+def _tasks(world: Any, families: str, split: Optional[str], seeds: Optional[str], *, allow_final: bool = False,
+           pool: Optional[str] = None, per_family: int = 0, skip: int = 0) -> list[Any]:
+    if pool:
+        if pool == "final_test" and not allow_final:
+            raise SystemExit("the final_test pool runs only through `forkloop evaluate --final`")
+        return _pool_tasks(pool, families, per_family, skip)
+    if not (split and seeds):
+        raise SystemExit("give --pool NAME --per-family N, or --split and --seeds")
     fams = [f.strip() for f in families.split(",") if f.strip()]
     tasks = [world.generate(f, s, split) for f in fams for s in parse_seeds(seeds)]
     if not allow_final and world.name == "claims-ops-v1":
@@ -100,13 +126,14 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .runner import run_attempts
 
     proj = load_project(args.config)
-    _guard_final(args.split, False)
+    _guard_final(args.split or "", False)
     world = proj.world()
     backend = proj.backend(world)
     policy = proj.teacher if args.role == "teacher" else proj.student
     if policy is None:
         raise SystemExit(f"the project has no {args.role} policy")
-    tasks = _tasks(world, args.families, args.split, args.seeds)
+    tasks = _tasks(world, args.families, args.split, args.seeds, pool=args.pool, per_family=args.per_family,
+                   skip=args.skip)
     ckpt = proj.checkpoints
 
     async def run():
@@ -200,13 +227,14 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     from .runner import run_attempts
 
     proj = load_project(args.config, overrides=_overrides(args.set))
-    _guard_final(args.split, args.final)
+    _guard_final(args.split or "", args.final)
     world = proj.world()
     backend = proj.backend(world)
     policy = proj.student
     if policy is None:
         raise SystemExit("the project has no student policy")
-    tasks = _tasks(world, args.families, args.split, args.seeds, allow_final=args.final)
+    tasks = _tasks(world, args.families, args.split, args.seeds, allow_final=args.final, pool=args.pool,
+                   per_family=args.per_family, skip=args.skip)
     # the student alone: no teacher, no search, one attempt per cell; step-0 bookkeeping only
     ckpt = CheckpointPolicy(strategy="replay", every=0, before_types=False, before_keys=(), oracle_status=False)
     role = f"eval:{args.label}"
@@ -268,8 +296,11 @@ def add_commands(sub: Any) -> None:
     cfg(p)
     p.add_argument("--role", choices=["student", "teacher"], default="student")
     p.add_argument("--families", required=True)
-    p.add_argument("--split", required=True)
-    p.add_argument("--seeds", required=True, help="e.g. 1-20,25")
+    p.add_argument("--split", default=None)
+    p.add_argument("--seeds", default=None, help="e.g. 1-20,25")
+    p.add_argument("--pool", default=None, help="train|val|dev (forkloop/splits.py) instead of --split/--seeds")
+    p.add_argument("--per-family", type=int, default=10)
+    p.add_argument("--skip", type=int, default=0, help="skip the first K pool tasks per family (disjoint slices)")
     p.add_argument("--experiment", required=True)
     p.add_argument("--replicate", type=int, default=1)
     p.add_argument("--concurrency", type=int, default=None)
@@ -306,8 +337,11 @@ def add_commands(sub: Any) -> None:
     p = sub.add_parser("evaluate", help="run the student alone (no teacher, no search) and score it")
     cfg(p)
     p.add_argument("--families", required=True)
-    p.add_argument("--split", required=True)
-    p.add_argument("--seeds", required=True)
+    p.add_argument("--split", default=None)
+    p.add_argument("--seeds", default=None)
+    p.add_argument("--pool", default=None, help="train|val|dev|final_test (final_test needs --final)")
+    p.add_argument("--per-family", type=int, default=10)
+    p.add_argument("--skip", type=int, default=0)
     p.add_argument("--experiment", required=True)
     p.add_argument("--label", default="student")
     p.add_argument("--replicate", type=int, default=1)

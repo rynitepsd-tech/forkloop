@@ -76,3 +76,15 @@ def test_memory_line_does_not_swallow_the_next_line_and_bullets_are_facts():
     assert memory_from_reply("ok\nMemory:\n- auth A-1\n- member W2\nclick(1, 2)") == ["auth A-1", "member W2"]
     assert memory_from_reply("Memory: x\nclick(1, 2)") == ["x"]
     assert memory_from_reply("Memory:\nclick(1, 2)") == []
+
+
+def test_image_scale_is_shared_by_serving_and_training():
+    from PIL import Image
+    from forkloop.policies.observation import resize_for_model
+    from forkloop.policies.student import prepare_image
+    png = _png()
+    url, model_size, orig = prepare_image(png, 1920, 1.5)
+    assert orig == (1280, 720) and model_size == (1920, 1080)
+    im = resize_for_model(Image.open(io.BytesIO(png)), image_max_side=1920, image_scale=1.5)
+    assert im.size == (1920, 1080)
+    assert prepare_image(png, 1280)[1] == (1280, 720)
