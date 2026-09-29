@@ -243,3 +243,12 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   **Renew main/aux leases (`forkloop ops renew RID --hours H`) at ≈ 20:00 if phase 5 will run past
   01:00** (main lease ends ≈ 02:40, aux ≈ 03:45, dev ≈ 00:40 — terminate dev after its adapter is
   fetched). Spend now expected ≈ $1,000–1,100 (Lambda ≈ $850–900, OpenAI ≈ $150).
+- 11:12 UTC — **known backend bug (fix after exp1, not mid-experiment)**: the teacher sometimes sends
+  `key("ctrl+-")` (zoom out); the Docker backend passes `-` to xdotool, which needs `minus`
+  (`Invalid key sequence 'ctrl+-'`). It raises `BackendError` → "backend failed" → the episode is
+  unscored (infrastructure). 7 of the first 64 finished repair branches (6 full restart, 1 checkpoint)
+  were lost this way. Not fixed now: running processes would not pick it up, and the evaluation must
+  keep one key mapping for every arm (aux's A0/S_W cells already ran with this one). Such episodes
+  are never exported (unscored), so training data is unaffected. After exp1: map `-`→`minus`,
+  `+`→`plus`, `=`→`equal` etc. in `backends/docker.py` (and Solari), with a test. **Until then sync only
+  `scripts/exp1/` to the boxes**, never the whole repo.
