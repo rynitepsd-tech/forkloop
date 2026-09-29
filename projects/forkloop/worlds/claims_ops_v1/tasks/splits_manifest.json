@@ -1,0 +1,2678 @@
+{
+ "generator_splits": {
+  "final_only": [
+   "final_test"
+  ],
+  "legacy": [
+   "train",
+   "heldout_seeds",
+   "heldout_compositions"
+  ],
+  "surname_pools": {
+   "final_test": "Aldridge..Yeoman",
+   "train_v2": "Alvarado..Zimmerman",
+   "val_v2": "Alvarado..Zimmerman"
+  },
+  "v2": [
+   "train_v2",
+   "val_v2",
+   "final_test"
+  ]
+ },
+ "heldout_structures": {
+  "H1": {
+   "description": "attachment required AND two distractor patients with denied claims",
+   "families": [
+    "resolve_denial",
+    "resolve_denial_easy"
+   ]
+  },
+  "H2": {
+   "description": "OpenEMR already updated (portal-only) AND a same-surname distractor with a near-miss member ID",
+   "families": [
+    "update_insurance_reconcile"
+   ]
+  },
+  "H3": {
+   "description": "pairing: insurance update + reschedule (INS+RSC)",
+   "families": [
+    "compose_claims"
+   ]
+  },
+  "H4": {
+   "description": "ordering: the reschedule stated before the appeal (APL+RSC, RSC first)",
+   "families": [
+    "compose_claims"
+   ]
+  },
+  "H5": {
+   "description": "occupied natural slot AND the patient's other-provider appointment AND a same-surname distractor (v2 only)",
+   "families": [
+    "reschedule_constrained"
+   ]
+  },
+  "H6": {
+   "description": "a previously rejected appeal citing a decoy AND attachment required (v2 only)",
+   "families": [
+    "resolve_denial",
+    "resolve_denial_easy"
+   ]
+  }
+ },
+ "historical_tasks": {
+  "reschedule_constrained|train": [
+   [
+    0,
+    34
+   ]
+  ],
+  "resolve_denial_easy|train": [
+   [
+    200,
+    229
+   ]
+  ],
+  "resolve_denial|heldout_seeds": [
+   [
+    100000,
+    100000
+   ],
+   [
+    100300,
+    100351
+   ],
+   [
+    100400,
+    100400
+   ]
+  ],
+  "resolve_denial|train": [
+   [
+    0,
+    141
+   ],
+   [
+    200,
+    229
+   ],
+   [
+    1234,
+    1234
+   ]
+  ],
+  "update_insurance_reconcile|train": [
+   [
+    0,
+    34
+   ]
+  ]
+ },
+ "historical_tasks_with_heldout_structures": {
+  "H1": [
+   "resolve_denial-heldout_seeds-100306",
+   "resolve_denial-heldout_seeds-100307",
+   "resolve_denial-heldout_seeds-100308",
+   "resolve_denial-heldout_seeds-100311",
+   "resolve_denial-heldout_seeds-100318",
+   "resolve_denial-train-000005",
+   "resolve_denial-train-000010",
+   "resolve_denial-train-000023",
+   "resolve_denial-train-000074",
+   "resolve_denial-train-000078",
+   "resolve_denial-train-000112",
+   "resolve_denial-train-000203",
+   "resolve_denial-train-000210",
+   "resolve_denial-train-000217"
+  ],
+  "H2": [
+   "update_insurance_reconcile-train-000009",
+   "update_insurance_reconcile-train-000015",
+   "update_insurance_reconcile-train-000017",
+   "update_insurance_reconcile-train-000023",
+   "update_insurance_reconcile-train-000029"
+  ]
+ },
+ "learning_families": [
+  "reschedule_constrained",
+  "update_insurance_reconcile",
+  "resolve_denial",
+  "compose_claims"
+ ],
+ "policy": "claims-ops-v1 split policy",
+ "policy_date": "2026-09-29",
+ "policy_version": 1,
+ "pools": {
+  "dev": {
+   "blocks": [
+    {
+     "families": "*",
+     "note": "legacy train seeds: resolve_denial 0-141, 200-229 and 1234; reschedule_constrained and update_insurance_reconcile 0-34; resolve_denial_easy 200-229 (runs/, data/, configs/); test fixtures and doc examples below 10000",
+     "seeds": [
+      0,
+      9999
+     ],
+     "split": "train"
+    },
+    {
+     "families": "*",
+     "note": "reset benchmark seeds (forkloop/bench, 900000+) and the flagship/dev demonstrations of 2026-09-29 (resolve_denial 900001-900099)",
+     "seeds": [
+      900000,
+      null
+     ],
+     "split": "train"
+    },
+    {
+     "families": "*",
+     "note": "live comparisons resolve_denial 100300-100351 and the 100400 smoke check; test fixtures 100000-100003, 100314",
+     "seeds": [
+      100000,
+      100499
+     ],
+     "split": "heldout_seeds"
+    },
+    {
+     "families": "*",
+     "note": "test fixtures 200000-200003 (no recorded episodes)",
+     "seeds": [
+      200000,
+      200999
+     ],
+     "split": "heldout_compositions"
+    }
+   ]
+  },
+  "final_test": {
+   "blocks": [
+    {
+     "families": [
+      "reschedule_constrained",
+      "update_insurance_reconcile",
+      "resolve_denial",
+      "compose_claims"
+     ],
+     "note": "fresh stream and surname pool; frozen list with structure quotas",
+     "seeds": [
+      350000,
+      359999
+     ],
+     "split": "final_test"
+    },
+    {
+     "families": [
+      "resolve_denial"
+     ],
+     "note": "reserved for one final evaluation since 2026-09-06 (docs/contracts.md section 13)",
+     "seeds": [
+      100500,
+      100529
+     ],
+     "split": "heldout_seeds"
+    }
+   ],
+   "frozen": [
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350000,
+     "sha256": "36affcf8fceee2b12ed52cc7ebe83d17e651872b80fc13ae9c6f376bed12fbc9",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350000"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350001,
+     "sha256": "f832324384a60da54d32331837f234f00b2490f562f46386f3c6fe5b23a03921",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350001"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350002,
+     "sha256": "7e173d8b63c320d59bd67a471f15c5a48662c243b3ac218081d00ed0a5529466",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350002"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350003,
+     "sha256": "46faf98a72687a0ae71c1c63916e51519436eb8080f1dd20f44d30319c127d75",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350003"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350004,
+     "sha256": "ce6e17e53ecab953e5b8470aff250d155aaa00e74d9875eea29adb583a43be19",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350004"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350005,
+     "sha256": "bd1b03c7917a8deb73d3153e8076651a63f6622b39f8bbc300aa84499baa60e4",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350005"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350006,
+     "sha256": "8a2e1ed520f1fe34afd8105a9fbe3fee41c8262be3659f6f05a078fa5fe913a8",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350006"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350007,
+     "sha256": "948cc9827167c9012555e8ad3e4440686ecccce1753f18df1368e8cb52151d69",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350007"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350008,
+     "sha256": "16dcae6b70362dff268db6e647e127f8575828cc71842757efe5583f51f8e06d",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350008"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350009,
+     "sha256": "903a3a075bcd00568fad263ea589005ddfe4805a71dd7cf1d13095f734b7a14c",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350009"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350010,
+     "sha256": "f2b8c5c287b07d0b9eb198806a3e02c1d668d84758e9e86cd2690c126e54a04a",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350010"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350011,
+     "sha256": "c3eff79561b5c82da4dd1ba9736f817bdfcb0b41399cb110d0235d343eed3d66",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350011"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350012,
+     "sha256": "d9b7c01989849f8857788f1ece5532ab19c953e14cd12b915995e3b4686bdc79",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350012"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350013,
+     "sha256": "2d8c6ff9e9b5e304c5e97c22123ca79bb360a2d8747a62e489fe67ed9c920be2",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350013"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350014,
+     "sha256": "097c5a55864d556e38dbfee1a7cab03a46ada6ac6408768d109e1f00dab5de7f",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350014"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350015,
+     "sha256": "b60f21cf79d0e5937a14bd6dabc414b7009f59574a13e603c51c03d4a10f91e3",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350015"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350016,
+     "sha256": "3b35c6f8911bbd64a157a179b8c005b245f74ec97b44ad55f6277d1a705eb169",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350016"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350017,
+     "sha256": "acc345f7da2fe8c8b7552dd01a7b1c186f2b3b2092bd60afb311f834737a96b0",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350017"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350018,
+     "sha256": "6a1419f8e60e449cdc8288f3900c41d08d536779060d812c8f92e75066e2d3ef",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350018"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350019,
+     "sha256": "89b7ee0be0b8fa1ca8c10f68700baad696a71a0c980cb98ff2ef423e56cde832",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350019"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350020,
+     "sha256": "48037f90ce05a193a91ec8b8eb48054d10e92bf935d8db4fd32438a9306f9774",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350020"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350021,
+     "sha256": "10640506e84a581c056fbdf05918af839929d7b56dc018ecb114a1a852e2cfe9",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350021"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 350022,
+     "sha256": "2a510ebb9f8935e4289ce3e71b6e7acbe7fb0eb1777e7550229fa1c3d0b82e8d",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350022"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350024,
+     "sha256": "a537f1471568c310b9e64f91790fe4fa31bb7e1150188ba063b96d1896accf5e",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350024"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350032,
+     "sha256": "08779f2dbe07dbeb01878afccd32633ded6e6385998e3561e17837e88d0afb8c",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350032"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350049,
+     "sha256": "543758508d42b7b9214c1f07a708359764b400b7a83f514f2a2f60424a4b6d85",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350049"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350054,
+     "sha256": "26acdd565f2ea92d82570c53913a324933fa121bc434a7167c13cdf066e52ef3",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350054"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350055,
+     "sha256": "aaea1fb6645158594d83815229c7d8b567d13f71f610952d7c868e0067fc52b3",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350055"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350071,
+     "sha256": "7779c5f86a03442c7fed5160fe609a2d62cbd91f60a33c0d636a74fe26ef7c0a",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350071"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [
+      "H5"
+     ],
+     "seed": 350083,
+     "sha256": "51ab2f3b310620b60f00987ff3135e4ac4461abe4f9c63dbaeb84a514cd2e02d",
+     "split": "final_test",
+     "task_id": "reschedule_constrained-final_test-350083"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350000,
+     "sha256": "2d1e9eedc56053ba06ce7a4a77560c0ed1c2f7521510148e1c55f7de1e00d5b1",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350000"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350001,
+     "sha256": "f226075accdfece88377dd653c2d91b14037b50946eef28159fbfbfd4b4d1b72",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350001"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350002,
+     "sha256": "aa0cbb31ea0698cd84b5c36d7c3d25144f470b387013b8a71968c3eff8685966",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350002"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350003,
+     "sha256": "660bc2287a81dfe59370ede2ea9932fa84187d23fb0f93ee480fe0e0867aba56",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350003"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350004,
+     "sha256": "f9fa8534cc10ec077f6128b42e36ab387e768a809511657aed2283b951308b22",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350004"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350005,
+     "sha256": "a393ed2a33188dc3379f3d0a8387dc1b48335a0074a005ac259a61ac2bb417ee",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350005"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350006,
+     "sha256": "9339b6c44bc2c2053012cbb55e2c20aaf461af55d1b0247d138a3d1e02c7c486",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350006"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350007,
+     "sha256": "b031797b800ce21ee9b6ab2ac258bf6c21f6872da6c3c31cae521dbe838e0e2d",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350007"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350008,
+     "sha256": "1b8d089a99d6aec4eaa8b606f7e9f46403412d3bbb30e09a71a6f1a4128f36ad",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350008"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350009,
+     "sha256": "4eb116f05f0100eaa451e7c49b6f69de1d70f2dcbe6455a7b885fc40d254947a",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350009"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350010,
+     "sha256": "08fc27f948701b9228a824c56a910a6eeecc695b8d19682d90b392ccc36f4986",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350010"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350011,
+     "sha256": "159e64bcf5758d60c268db7f04cc252a6360f14ccc7581134741978be20eb402",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350011"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350012,
+     "sha256": "f9f5ecb364888f9eb010b43e309e975b95c35c13fbb325c7b64de8dde44d2220",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350012"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350013,
+     "sha256": "9298888b8905f3e823d922bad3627a48a51a0e4a0dfa6f60708e62f2a18aa380",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350013"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350014,
+     "sha256": "1e1566bbc2fd7558239a3420cc2014aeabe519801b5fdbf2dd7a86a732f634bf",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350014"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350015,
+     "sha256": "8b885dcdfd7b0f731cd1e767428c49669abde3b8694b9532d7d279597b71d447",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350015"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350016,
+     "sha256": "9e80fc8092d47ec97b854f61690217712ca29ccaf9170e0f57b870296b3fbb54",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350016"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350017,
+     "sha256": "4c5dd2469706292b379579f773fd00d1732c50e411422d9f052e0f3ff3ec2d22",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350017"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350018,
+     "sha256": "8ee535a7e0309ac79cef1e43680a3ec713757b8c5d0ee64afa09717403a057f5",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350018"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350019,
+     "sha256": "c81890595c3b16d3c8d015efc1e7dd1b7acba0379944d482c3d2b083cf920006",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350019"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350020,
+     "sha256": "46c8bb0b9d9615e19b192af784f456b7e7a6782fd55aed23f41d7fb403e063b3",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350020"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350021,
+     "sha256": "6053d32e806e4723b847b1cde45d35619e55be8bc34aa8aa663b3f7509feb15b",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350021"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350022,
+     "sha256": "d887dd200b6e6a9d659486a953a641b4746363129928879964052e28bcb4d774",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350022"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350023,
+     "sha256": "697ce641e0646fdf23a9b0d95fb871e6e8e1c26d647b7a59bf5aa6816c1743d8",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350023"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350024,
+     "sha256": "af88c07692770d43779dc7f05e086f005930b7637ef84258e631732df4f4eb5f",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350024"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350025,
+     "sha256": "5471152fb719e3709035a5bd482a32834f0e0b8a33b36502deda62d2d1505b45",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350025"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 350026,
+     "sha256": "5ee0689795b4ec3e0c33ab4ea3feca6458f453447549b07563cf9c97e1ff8148",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350026"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350031,
+     "sha256": "31578a7ac2a7d193593f3684ad7d4dc9f46ffb9f9b289111bc096a3d68bdd208",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350031"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350049,
+     "sha256": "bac3d58fe05f1b57096bc082c66f60ecd3ea8db7b46214a0c3013baaeb2a6c6f",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350049"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [
+      "H2"
+     ],
+     "seed": 350056,
+     "sha256": "10b0b8bce49b62d974f9a27fd44d702c8543bb2756457c175184d772548fbcf4",
+     "split": "final_test",
+     "task_id": "update_insurance_reconcile-final_test-350056"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350000,
+     "sha256": "1e1af7722f1eb0e707a96d0a0bf3ba6f67d76a4627ecb94d57500752eefc1a0a",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350000"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350001,
+     "sha256": "9a6112faafbd51c467e0a4e8c863c0d6e74477fcf82ebff33dda87dbf5074426",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350001"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350002,
+     "sha256": "98668103e2774d085edebb717fdc82f227a2685a69e33f5316261c8ce909df50",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350002"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350003,
+     "sha256": "7e08c696a9703e3f9f4c546fd98fd6a29a9493caaebbf50561955a653aff04d7",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350003"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350004,
+     "sha256": "f1cc1e239bd7a599ad2673699fa7850dfb69af68c034a0e869946b7511b8b412",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350004"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350005,
+     "sha256": "3ef741581c2ba708305bcbd28f57bbf990eb85bdc6a4905190f5241acc81cd63",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350005"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350006,
+     "sha256": "b92e3b09c6623c2b8eefcb378d6c25090633b1fabe000b74a5601c91e07c6162",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350006"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350007,
+     "sha256": "3b24507e6fd5e31f3afe1cf16abcafdb028b5099393a738eb653264d05f3a3a3",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350007"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350008,
+     "sha256": "a2793bde43db562c9e50620a13faa43c39b4fb5845ffedb743c48efd5e6b2041",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350008"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350009,
+     "sha256": "5f3b0ad5b0c1c97e27d0f324b23d86579305124293e8df99c6dc629bc0313267",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350009"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350010,
+     "sha256": "866b747eb8005e7d18164ac610ee31d54ed45f3d48dedf5edf3ecb0764868aca",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350010"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350011,
+     "sha256": "c258b20c33cb15f4c700b8e5441a77c46d864c24858a526f4560eaab6113a92e",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350011"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350012,
+     "sha256": "de5e13c0cba65bc35829135636ab29a3cb7d4c2377850b321bafd57ba0e9d112",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350012"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 350013,
+     "sha256": "6b98b7db3b3e3beeb6596340e002267562600c0d5a780d4c4634da3d410e0cb8",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350013"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1"
+     ],
+     "seed": 350014,
+     "sha256": "2a282c3288129065f32d4e0a634d4fecdbfd552d48454a29b21ce51a0d3bb657",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350014"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350023,
+     "sha256": "2cdd836dcf7d24b44e18afce0d027574a25748389a1386c902c8831f8d342694",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350023"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1",
+      "H6"
+     ],
+     "seed": 350028,
+     "sha256": "99788f360d402a677a6efca8da2cdb3fa3bc40319aa4a91b6d0fa3acba741ad9",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350028"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350029,
+     "sha256": "51c8abe26c955bf1a0a70cc0906872e305346c9713856147b45961ece177f08b",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350029"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1"
+     ],
+     "seed": 350040,
+     "sha256": "83c5b05ef720193736c1d25e673d6a9959238bec0e1ee31b3b766f8d21d4bef5",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350040"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1"
+     ],
+     "seed": 350053,
+     "sha256": "350dfe2f790090cbbd41f4d97eaa80ec33be6299647bb61afafc1df8badd6af5",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350053"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1",
+      "H6"
+     ],
+     "seed": 350061,
+     "sha256": "0ed8eb07505be14438505922071bdd9a096f53aede31bf5483967921e7e0172f",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350061"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1"
+     ],
+     "seed": 350074,
+     "sha256": "426deba026dba78b2f64478f84e808b74ff83d537e425ef71fd238d3c4cadefb",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350074"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350075,
+     "sha256": "6eea618d8c8cceae16b359cd52344f2af5088df2a133837e777d3d7f968918ca",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350075"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1",
+      "H6"
+     ],
+     "seed": 350088,
+     "sha256": "21a5bcda0563cdcb8d0d6c4a1005c2753a73f53101f40c03862388b57f25f096",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350088"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350095,
+     "sha256": "d420aafeac7652343d7bbcedac6ac83c3927082bf8f5c5773d2d9643b66cf623",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350095"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H1"
+     ],
+     "seed": 350108,
+     "sha256": "f83b7f27a7817ec5ff3891363c931c033df9eb977cd88e8f53787d515a7ccd1b",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350108"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350125,
+     "sha256": "1e1443b7dea064ac5851ea1f5042b24cd7471bb80c1ee90c2a7543af3848b212",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350125"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350136,
+     "sha256": "aac540c2ef11aabc117d0734ee18c35f400f385a888a7d815c59b6396478b3a6",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350136"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350146,
+     "sha256": "30a9f2b0b29d1609c0c22ed4b44df35a9810a234710442267f81501b8f6c2f70",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350146"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [
+      "H6"
+     ],
+     "seed": 350222,
+     "sha256": "e53b15a9e8742e881b9afaeb643988b2ddebeca4bfdf512474b6d4be4f9b0f2d",
+     "split": "final_test",
+     "task_id": "resolve_denial-final_test-350222"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350000,
+     "sha256": "0b41c6fc96f59cbbbaba492216f06a7d5164119df1438634e17e85a11a5b9142",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350000"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350001,
+     "sha256": "ae097c7212e1dc1e0a34472568c11cd8e794d0c0197c99e6fbc6696818c4b8e9",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350001"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350002,
+     "sha256": "10005aed0c409b77498bf0d9b0dc04186ef63a45ccfaba5660a0cae12785e0bc",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350002"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350003,
+     "sha256": "477e771d8564215ce8e999ea4ab2ea54b97e129610766cbba5907c370d0bec92",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350003"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350004,
+     "sha256": "2cf62b1cdbb516795c646dd10e9541e57897d30988bf7ebd3b6db6a9ed5f1de3",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350004"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350005,
+     "sha256": "5ede7e8d61b2676187e0d5bda7dedd20c818685fff3190016668fa6253a7b5ef",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350005"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350007,
+     "sha256": "6b087d8902a21315630253415c9deef330e58c0bdc5b49b113f111e518ca293b",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350007"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3",
+      "H5@RSC"
+     ],
+     "seed": 350008,
+     "sha256": "506b9fd592006ddaca747a9e92ef6a648f00f28495704eedb98cb87e2d3c8a1c",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350008"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3",
+      "H2@INS"
+     ],
+     "seed": 350009,
+     "sha256": "1ad71c03e318efdb90e88c8bd5ef63e9ccac53c80df3a2b88a5d9c7a29ae5d62",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350009"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350010,
+     "sha256": "20c2820dc4af866855fbdc2ef717ef4f13ea2f2e7c04c83bfa08b5255773cae7",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350010"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350011,
+     "sha256": "9d5f649d59433e042c13664e26c2336ab656453b743e67b281e630f0977e433f",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350011"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350013,
+     "sha256": "dc7033851f3d97cbf317ef839bee436324daa98098b84bb052e248b0496b69d1",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350013"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350014,
+     "sha256": "7caa4454e72c3c4f1096972df171443b9dd1ea3430002ceccc7e5537dd36c676",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350014"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350015,
+     "sha256": "c70346af6a3c4fab394c66ef6f09bb05b2c8193d729afb3c9375ed9ce47a519d",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350015"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3",
+      "H2@INS"
+     ],
+     "seed": 350016,
+     "sha256": "1d9d2528f9d66a3cae024a923481c74eaea4a09880ed2b38c8793e5fbb854279",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350016"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350017,
+     "sha256": "fc2ddddf21f89009b414a75e54d031ab4c143c12fcfca6108a68fc695568973c",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350017"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350018,
+     "sha256": "f050d5d82d0c0bd75673e26f6fb1b81c03fd0e0c0a573a8b0d402167ac43d3e9",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350018"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350019,
+     "sha256": "d2ca5b9f25871cb4959956a94acb4bef0f50b29cb773816b836403c0c463329f",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350019"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350020,
+     "sha256": "bf2f2cf82298b365aac3d98be7a5bd6d044dc62234358768fd030ae2952febb3",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350020"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350021,
+     "sha256": "f09f0872b35236c0c63787b1e0ffb19388db03b6531278fbf1d435488bbd58dc",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350021"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350022,
+     "sha256": "220a52d409c1b62fc2889a922b4a59d5d3e578015b148d9e3a4d103b222b14d4",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350022"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350023,
+     "sha256": "df9437836be32ef514c96afa2dedd3e5a115b70f96d2d7a540d85671c933f474",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350023"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350024,
+     "sha256": "fbabb978e30eb6f5c93316b9161cab3e15bf6e5096a7d24ec239e960f6b3fcfc",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350024"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4",
+      "H5@RSC"
+     ],
+     "seed": 350025,
+     "sha256": "c0ea569a5dc861513223ea3f3096aeda5d61b5b97b42176bd487d21f123621d1",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350025"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350026,
+     "sha256": "f6280b92f76d4efda8eed97ffd8a02b62c1d435c670e16b849f944e25d6dd9ba",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350026"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350027,
+     "sha256": "070689a13c1c4c8359b421a077c049a37064a8b570fa2f0875307e1cb6c08198",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350027"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3",
+      "H5@RSC"
+     ],
+     "seed": 350028,
+     "sha256": "ab4087cc1510e182cd9449b7a7c51b23c3403dcdfecd496ea55c100c5cd51329",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350028"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350029,
+     "sha256": "588e4f21b9b0e5e6a1a5fd25a41a136e1bd795571e891db6e6f3fa8ea4f49307",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350029"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350030,
+     "sha256": "8fa5bf312845aa7c0871b05d5796e1ca9fc99a5770278e5428182c1e0a22cbbd",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350030"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350031,
+     "sha256": "559bd61b8a3bf6c2653286c2d093650ef36d3802f606545a62e284f6b70131cf",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350031"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350032,
+     "sha256": "9593bd6fc69733d725941a0024dd51608c173e45f1aad1d7cead3e7c431ce600",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350032"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350033,
+     "sha256": "fe519a8f1f933e2ac314eeb24c433e0ee083590a4906f9c9e2c118b3e3946bad",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350033"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350035,
+     "sha256": "c233b875b5643ac33995976ba9bbeb432d3a8beec7943e799666b43c1eaa01d7",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350035"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3",
+      "H5@RSC"
+     ],
+     "seed": 350036,
+     "sha256": "00dffd75f3164d810535398a53181c901ec2d601552c729c281ea31b6e618f4f",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350036"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350037,
+     "sha256": "1f0814f579627e73c6b58227535e906ea3abb4e163ed56d2ade60b0d2ff67b5e",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350037"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350038,
+     "sha256": "9af89cb925d6708181b648d4e364983054633ddce0800fe333c34ba13555d17c",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350038"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350040,
+     "sha256": "dcc487787166453f9bdac468b193a53d913dfe9ce5ec4a260ca4ed35217476b5",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350040"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350041,
+     "sha256": "9a47fe13aee7c5bb5f2d743060b64f3a922b0104cc3c25461084d7d5393bd413",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350041"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350042,
+     "sha256": "cbd5a6d751413baf5afd523942fe1df48184734854341dc996bd71889f0e2fab",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350042"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350043,
+     "sha256": "1317bb47ede6375f477d9d3407928a75c0a6a5b44f5ec595b6556ace5fb12876",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350043"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H4"
+     ],
+     "seed": 350044,
+     "sha256": "e38b43b79cb6b6be5a5775023cea38bfe599f24b4c4d8aaa9398f689672a05fc",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350044"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350046,
+     "sha256": "e10c93b0dbf9809915415bd05af92718d5cccc68baee7623b9767c6fe007113f",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350046"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350047,
+     "sha256": "51fcef638a66c042a0aa1ca6ec422615fd6d790dd5dff79b14f709f2168de168",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350047"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350048,
+     "sha256": "f227e5e8eaedcdb7b991fdfa6dbcde2e02eabf089b7db7a5a9e8d5918c062306",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350048"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350049,
+     "sha256": "e779716909fb1fc2279052a8e49b75d998d9714799fb97d2a8eabeddb6c11364",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350049"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350051,
+     "sha256": "2b7bce6cd0f08e1c062a9a9bc267df37edcad57abfba70637f1e74d618f9268a",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350051"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350053,
+     "sha256": "72d28cb658c3cfb7e86ff130a2de064763d593feebfa0f5a6e0cafac54ad181e",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350053"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350056,
+     "sha256": "8c9a40fb42487f762cbd5460af2c14d588aa640362fc5419c995a2e372c7b5d1",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350056"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350060,
+     "sha256": "311ea4c0078453dec079ddcb19073f3192f4edb5edf4dfe1dddc9f5093c391ba",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350060"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350061,
+     "sha256": "0c86a7b911f33be5d3441c74515ce2e6166df9d38baca6106bbbd840a13b4cea",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350061"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350062,
+     "sha256": "2a0ef645d1f4bed651eb83cee96638de7b70f9d3909135afa1a99f022a5ab48e",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350062"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350063,
+     "sha256": "665e2a68c42819172411918b666501233ba3658ac7cad439f852edf94d3b5057",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350063"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350064,
+     "sha256": "a8c0945220e53bea43a776e5a2b2b7f579d9f4cec48c91767dee423c55bb3b6d",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350064"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350065,
+     "sha256": "0757dc02d746f6fbb34673043d037d697973dc0ba82c7a170ddf80369d0ab8f4",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350065"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350066,
+     "sha256": "139327642db455553d093f7ade17f37f45493269822c339f2b62a5ed6510e737",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350066"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [
+      "H3"
+     ],
+     "seed": 350068,
+     "sha256": "ab986546a4a2a213f1728581480d87600c7c77dd89f1acc02df8cbc2f76fe02c",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350068"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350069,
+     "sha256": "560e54be73e4031dabed8931185f9daa58af7a85a4f16c6666dd6a68d4e1332e",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350069"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350070,
+     "sha256": "b7888853cd36ee9c1263374e7e173df9ab849f60363d539acfe290e4ac24f1de",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350070"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350075,
+     "sha256": "3d758db2f9d307b162a3f12af980035fae199f37dfea5f19689eb18355d0eba7",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350075"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 350080,
+     "sha256": "91a117a09fb64e45cfb44f3b281086c9aa9a0ae45936fc9af57a861e91bd1986",
+     "split": "final_test",
+     "task_id": "compose_claims-final_test-350080"
+    }
+   ],
+   "legacy_sealed": [
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100500,
+     "sha256": "7e0139c671d77e0885aba7b07b8dfdd07b4694ef7efe36584c256d895e11071f",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100500"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100501,
+     "sha256": "3880dec269c90ecdbe10202756ca4f40d107f368b3a6cc16ef4770a71bb63ca6",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100501"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100502,
+     "sha256": "171bb83f0bad4e88e161cd5a0c6ce9de3d4b0dce63d3865a5f8d8469e8939f01",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100502"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100503,
+     "sha256": "d708dc59c6284ce8528f743ac43676725024a4702780ba3cc59f5429c24fd5ab",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100503"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100504,
+     "sha256": "5680769f58d96ea75df8fd14acd55ae6fc202c2965d5042f676881458163ebca",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100504"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100505,
+     "sha256": "cb7c02684ecd11f097dd22b1c2f8eaa44bd8dd3678a79b6edf22f028f8be9fe2",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100505"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100506,
+     "sha256": "f8a21154cec17294981e2d91484f7ef81f93dc51cf6f11b95210999502f27f12",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100506"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100507,
+     "sha256": "b774e2fd89bb94e9f21c5756f195985bdd7b637d0c0b85de23a52e2ae7ab013f",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100507"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100508,
+     "sha256": "17f2d09f4de74a7aaf6aaeeaedab11a4fe72789a64dbbee3cb2d57ae8c17a91a",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100508"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100509,
+     "sha256": "424e10d5cdc77d42177484651a4d44b13600c34d5fb280842bada7717c2d5d69",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100509"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100510,
+     "sha256": "95b0d6f4d53a3f453b6a4ce3d20f3c38aec10b340b20d839a92395451e67a932",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100510"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100511,
+     "sha256": "a3e91b1dc4b161323efa75e549900a1046e5be054b46e657dbf7a0936bedf32f",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100511"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100512,
+     "sha256": "ac06959b0ee793abdfab388d57c9c17a31d9bb3eaedf1d2434f34efdd6cc107e",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100512"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100513,
+     "sha256": "e14721e85caccc9c66f568a8ff3635a2658c0ef685de3804cb2b4487399478f4",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100513"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100514,
+     "sha256": "a400c72ea5af97606eedc1a59f95919a904e0ca95bdcf89738cb9d2dea8f6d96",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100514"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100515,
+     "sha256": "642f791c2fabd341b2027c79e61f122165fa6fbf9df4a55e2378262e81b7f5c8",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100515"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100516,
+     "sha256": "84aa3455e91d7e54226638dffeade28315c5d458d555465828d75686f64fb9d4",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100516"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100517,
+     "sha256": "37b7998c3c26b1a7dce275d777a91ea3f65ddf1c37d25b4de113e938bf80df8f",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100517"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100518,
+     "sha256": "86e275eec597481fd19f129bd708ee5bccabd98c79acc7256e1e6977d5bcc166",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100518"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100519,
+     "sha256": "64e17023972f6cd7764603d37d26601b89aa3132ad5b5328a0adbb20d7b01715",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100519"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100520,
+     "sha256": "b74bf04f1216caca0315fdd35a979add719dcc0e476dea4c72dd8a6c02a49a49",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100520"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100521,
+     "sha256": "0a06ca8acd28ce0e7defd2b1c4e16613484681e6decbe05ab9607fafe8520d3d",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100521"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100522,
+     "sha256": "6fb6c5eaccf99b36c62c0cd94c9c9abf99b20a0187078dbbc3caa4ff2aa11670",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100522"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100523,
+     "sha256": "a4ad85615eda48f9390b7d6f84f9290d5435d010d8b6561177530359ed8ddfad",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100523"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100524,
+     "sha256": "7061b105d892b68b9a7cd25f935aa013f6d99a49b0e2f7c9edb7e74a426d339e",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100524"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100525,
+     "sha256": "179a76b1cb729c714119a6900f3ab8444296ed9e6f7c13c68295f97474f88b33",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100525"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100526,
+     "sha256": "4f9ef9ca8f136a941b1573e19100481c815d242398273d9734ad0dbc288c82a3",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100526"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100527,
+     "sha256": "9150b63202150ed6d903044ebd744fc4bf0446181e73e565bfd0773e3e724bf9",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100527"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100528,
+     "sha256": "b56b921f671dbf4b2aa423359a4e3b158411dcfab808950d2c0fbfb3a2015d2c",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100528"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 100529,
+     "sha256": "66ef5c91d509652748124473d8604a487921fa9728b43cadad3c7ac0d0f2bb34",
+     "split": "heldout_seeds",
+     "task_id": "resolve_denial-heldout_seeds-100529"
+    }
+   ],
+   "quotas": {
+    "compose_claims": {
+     "min": {
+      "H3": 20,
+      "H4": 12
+     },
+     "n": 60
+    },
+    "reschedule_constrained": {
+     "min": {
+      "H5": 10
+     },
+     "n": 30
+    },
+    "resolve_denial": {
+     "min": {
+      "H1": 8,
+      "H6": 8
+     },
+     "n": 30
+    },
+    "update_insurance_reconcile": {
+     "min": {
+      "H2": 10
+     },
+     "n": 30
+    }
+   }
+  },
+  "train": {
+   "blocks": [
+    {
+     "families": [
+      "reschedule_constrained",
+      "update_insurance_reconcile",
+      "resolve_denial",
+      "compose_claims"
+     ],
+     "note": "fresh stream; held-out structures skipped",
+     "seeds": [
+      10000,
+      99999
+     ],
+     "split": "train_v2"
+    }
+   ]
+  },
+  "val": {
+   "blocks": [
+    {
+     "families": [
+      "reschedule_constrained",
+      "update_insurance_reconcile",
+      "resolve_denial",
+      "compose_claims"
+     ],
+     "note": "fresh stream, training surnames; held-out structures skipped",
+     "seeds": [
+      300000,
+      304999
+     ],
+     "split": "val_v2"
+    }
+   ],
+   "frozen": [
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300000,
+     "sha256": "c3852f89586d20959379f702503dc23d7e3bcc98e46470323ebe40a10a665bd6",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300000"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300001,
+     "sha256": "9f0ca81d611740aed769fbff5fd2504a89a3b6cb477a9bd0444d5b75b7c558ee",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300001"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300003,
+     "sha256": "a392a835daab103edc8b5bbb8fb79def83924023d36e70a0fe6f7b98138bdca4",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300003"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300004,
+     "sha256": "92b191c8428665ae6b0fd202c022b491ee95d1dde2919bca47fb441a55cd42f7",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300004"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300005,
+     "sha256": "4facd3943662afb8034aa69f84edb19590cd71df701fa59d910284873e1a66d5",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300005"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300006,
+     "sha256": "8d18f46ba92ef35122175e6c69e74b2d3b3bf688ebecc93b8260f68742aa7ae9",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300006"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300007,
+     "sha256": "79f814ea1c60c10bb5625b717c7b4877d01598cd67b8824b17409ecaea593bf7",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300007"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300008,
+     "sha256": "702280db61f96d1739b6497e1206a59d04b5ec92a2124c62c16890ad72502386",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300008"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300009,
+     "sha256": "decca25e9404649b4bfdf955c51d9eb72a4d3bee5b20b90887fa24077e803195",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300009"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300010,
+     "sha256": "f65735cd38dfed45270a3f8b739cc43b863989529f15ffcedf1f22be1c1f0c62",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300010"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300011,
+     "sha256": "09c30757d561fec8a15c6f04e088fdbb2791cca7f7a218583886e81b1888cea1",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300011"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300012,
+     "sha256": "386d5da55ffa8857d546b77853126144eaa2b2cbbd18edf5108c32aef37b2d34",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300012"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300013,
+     "sha256": "4be3c0ac28282540ac783cfc7b79ae3f76372d6dec931c21f33a194287f24f28",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300013"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300014,
+     "sha256": "77d9f138bce617915a9a9545f4105cd4ff10817d2b80210684ceef6001e81a83",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300014"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300016,
+     "sha256": "3840229a7200ad7c2375662e901b4ea5e753eaa0b81768e29d9c763b5bc68865",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300016"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300017,
+     "sha256": "00f6a12dbb989c85fb5d0ce68428aee00810297014116818c8ef46cf8fd5cac8",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300017"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300018,
+     "sha256": "f0ec6450f3237aab8ce5a30c696a1f263a550c1e8f7f63c0b0862d477c341fe1",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300018"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300019,
+     "sha256": "830e1caa44605bfb6c0ff2765cf2f8ceaa87e9f49bc628a308468b583e5d838b",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300019"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300021,
+     "sha256": "01f18035a3448de4c2cbf5b5a31889e5a91abb18ee8369543b7786e6869c02e7",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300021"
+    },
+    {
+     "family": "reschedule_constrained",
+     "heldout": [],
+     "seed": 300023,
+     "sha256": "b7f108b2e6903082ca52be7fbb2cc8d202b973305cd1b5ecc6b9e460a5d7eb60",
+     "split": "val_v2",
+     "task_id": "reschedule_constrained-val_v2-300023"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300000,
+     "sha256": "35fed95d7862ae3ccf7cb2eea772c738ee7e15f916cb5a8674ec42d65d17705f",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300000"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300001,
+     "sha256": "511d16d122a20e1e9c9c7049348e7938ff363ab74bf9670c710771adf64d4c5c",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300001"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300002,
+     "sha256": "c536808618b11d168a55552dc20c68dbcaae83367468c06cab6f3f16cd0425de",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300002"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300004,
+     "sha256": "14340e20db32ebef42e0ea29fc43cedc10ce98e32c4926bc2875c5196dbd2697",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300004"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300006,
+     "sha256": "69b7e9e8eaec03f1857c51413784c39f958df352fd7a22da884a5fda601a226a",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300006"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300007,
+     "sha256": "873138380959d7ed51fbbe4287040b362016c5a19f06678584078b1898ad60d4",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300007"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300008,
+     "sha256": "072cf27c00c4aa7e9e09bda44e0fe71ef7b6643cb965fcd67eaee736bf095768",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300008"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300009,
+     "sha256": "7a91f890bc526ad21643ae0223a243fa8db4869d74340dca9f34d93c1da67913",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300009"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300011,
+     "sha256": "ab79a48df5e8bef64d037dc67f1733fc26589e5b91b1ce3e4d1c021823f0df00",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300011"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300013,
+     "sha256": "9402b306217b69fed56f4777661424ce8750b97f458d21fd222ba55802ed9bb1",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300013"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300014,
+     "sha256": "63058670328235adcc4b30af32d2a786520f306803d3cd9595ef83c7c698ee81",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300014"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300015,
+     "sha256": "bd7b2bc06a6a4fa351b0cbaeb87398c4ede2eeb46f4ad32a4221e984b828a69e",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300015"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300016,
+     "sha256": "88aa49d2f88f79d69706e73a7abada486ed4121a1883a74a5d98f5883b33297d",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300016"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300017,
+     "sha256": "ca5a818fb038a6dc24ae010b01ef02a1bbfd0d6ed094e3f131f6df6fc0fa323a",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300017"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300018,
+     "sha256": "7c712e024418d02689b6585a0aa5a37fbb30283cf00d908c05f7b0837254aacb",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300018"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300019,
+     "sha256": "402389eb039ff7e9badccd411280a1591186c9581b79db66927eb1b9833d5b0e",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300019"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300020,
+     "sha256": "57114ea42a2b51b4a424c8bb690da685e79d5f66a6620ae893bba102d5f27e90",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300020"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300021,
+     "sha256": "a08d9c687e6b5b8491b35e2220713ae10ac7439268742950fea32f6370227b23",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300021"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300022,
+     "sha256": "4e696ec8028d1270372db09157215f941978ab868109b2016cdc7d606e12596a",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300022"
+    },
+    {
+     "family": "update_insurance_reconcile",
+     "heldout": [],
+     "seed": 300023,
+     "sha256": "6ad228543c7ad44777cdfcbfd35b9a6c314da526eab272592a5878c40ab9f120",
+     "split": "val_v2",
+     "task_id": "update_insurance_reconcile-val_v2-300023"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300000,
+     "sha256": "0656cd3a1db2d8c327d5c372442cb7eddda8cb0f6b05c354f7fa70c5c43b478f",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300000"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300001,
+     "sha256": "3af831f48f1cb4b09968c03c65efb2f802b15e5843532ebae2bea7ef5f0e1d21",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300001"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300002,
+     "sha256": "34d106ba6915ad88bc1642e5a97e2f77a41d32de708006654c8ce1c0135a69e6",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300002"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300003,
+     "sha256": "6782fcdaa9501dfc6e5b7e411a0cf020b995dfa73d065b438e4c9b24f37bd289",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300003"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300004,
+     "sha256": "c0e99195d0ceec433cfd4d59efbb91e6bd4696e888df2b6fc8f9b80788f1d4fd",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300004"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300006,
+     "sha256": "3d09a0ff4d8b12ad31caee921028d67146902d00560dacbcd3d9a03d99aba1f1",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300006"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300007,
+     "sha256": "f41d87513444dfa2dc67f795215b7a38d3fbd11dc68b3cd2ea9a3fcb6980b4bc",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300007"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300008,
+     "sha256": "c6ecc6906587f25145ca3f561f1c923e67361b947bbbf19755d370d5ac4262af",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300008"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300010,
+     "sha256": "2b21263b59947161e20dca5443eacf387641f71dd84051b6663316a8654405c4",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300010"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300011,
+     "sha256": "52352df842ed655a37ff9b8753a42e9057f004400b89d90efdaad84902d918fd",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300011"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300012,
+     "sha256": "20321186b0b83bb6fec74e85a5b44edc417c53661abed09976ff2905111af94d",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300012"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300013,
+     "sha256": "4b9740b7b305c5eb7c7b38872f8431e5cf10cc6ecc4f322566732aaaf0f25362",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300013"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300014,
+     "sha256": "f1b253aecd2753c84d5de45e691b3793eca2ada62c89dc325d0c7b211c9b77e0",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300014"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300015,
+     "sha256": "89c8cd56c05aad7ae1d8233b82dfda57b3e027ff81e115c4f5951ddbb9bfff37",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300015"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300016,
+     "sha256": "46e573b9dbf594e854e1020fa1e6dc460c8ad094f323c3add05389e3ce2ab343",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300016"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300017,
+     "sha256": "05326a9469b14ad052e1d4d3f9306830871fa7c2b782fdc2e04dfbee48b45ebf",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300017"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300018,
+     "sha256": "eb8c79bfa8e8b8864765cad1ee2044682cdd56025193624d270e70dad24f8de6",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300018"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300019,
+     "sha256": "6812f5cfb18ced5667fecb56d77bf5096fd0829a7d0ff2215d730a18954299d5",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300019"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300020,
+     "sha256": "c5502bd9eeec7c18bea049f78408c423ed4ff7458830bef9514d49d16cdeda95",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300020"
+    },
+    {
+     "family": "resolve_denial",
+     "heldout": [],
+     "seed": 300021,
+     "sha256": "464e39620efee1bd500d7cb9c7a2627cb35725e4aaf2a59704237a7c713b6309",
+     "split": "val_v2",
+     "task_id": "resolve_denial-val_v2-300021"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300001,
+     "sha256": "c607ebbe2e34a0b2c5c7d57fb69af65bcd8b6af3bb0695b3b8ff9fe694d7b11d",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300001"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300004,
+     "sha256": "9c1b6d67ab7affd1a7c664a58126dacc1243ca0e1a771f6ab32c6009a594a66d",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300004"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300011,
+     "sha256": "72ef0cbceada255e9d5d20c3e8799a6c7425be32a8af52bb2e50e67070c43694",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300011"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300014,
+     "sha256": "7e73d215119bceee5f2f8a0551831b9855fa2d21b653ab135fa0d5549dc7d0da",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300014"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300017,
+     "sha256": "4bfae4b4da2618574697bc5032db24dbcafff8d940df70741fe294b937930423",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300017"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300018,
+     "sha256": "f16bbc0f4071df321167e264a42c2dd62cba490bd671224795b7f23f5e16b259",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300018"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300025,
+     "sha256": "303ac25c29a4e7ff3088c45a92f504c7b3a4c8518738d2fccfb52c86828b8444",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300025"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300029,
+     "sha256": "003c218a70b3dc511d641c646859bdb30792efb10995e558a2f35776bfc99a72",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300029"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300030,
+     "sha256": "c32d3393102834fe52cf55efa45c22afbcf57a356c11bb3d1a3dda69d5d6c2c0",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300030"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300031,
+     "sha256": "b3b6412739e2d5f0ab52c97cc6194ee76f42f395c493d1f69c8075fdf78d4d96",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300031"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300036,
+     "sha256": "c78a86d5982197478bc528f5e3329be450cb107ad27ca3c1e1b6bad4242165f6",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300036"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300037,
+     "sha256": "a4f6b6a2242a306a44faed9fcf20367f34c4afa66e4d993f0da6df5f76db2c01",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300037"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300041,
+     "sha256": "d637fe32ebef1df914586ecc6a06ad411afb52b53e5d92ff67fa789a3597f00d",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300041"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300042,
+     "sha256": "5f0f850818cecbd99e60450710a7c06de1b0c459c03d4a588d804cd6a7e3af22",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300042"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300043,
+     "sha256": "7d097d97b627edac2a5ab188bc7bb2e139e33e4c4b96af00de0c6a07be304c04",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300043"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300044,
+     "sha256": "edfb49764300a0dbccad5fc09a1e22f5a0277ee40a09c88dc29ca30b7b3dc0e4",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300044"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300045,
+     "sha256": "5f5e8e87d232edb627ec57894750b48f4f63ba028c37fa60548d7fecfc716bc2",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300045"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300047,
+     "sha256": "7fa22a67fdd7c66f741b8c015fdb3973c93c3480efd53224b92459e145126eb9",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300047"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300055,
+     "sha256": "b8da3a12f036f462ea1d9849ef8d5b32deae8cb90c6af813af709157aceccd04",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300055"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300060,
+     "sha256": "b7afb1d3591a601e6e303d40166c784c300d7597bb6e546de24dd8b389feb0dd",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300060"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300063,
+     "sha256": "b6c2ca3757ac4c36697a9a4d8a81b95a0e1179018bd97a7e66f45b36444dfc5c",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300063"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300065,
+     "sha256": "d5a6e37242e2f26d71c3630be7ccc0a1736534f8e6a676ec2be834a43be3727d",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300065"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300066,
+     "sha256": "238163f1d5092f08c86b641b7cf9c6f7a16b1961a67708f942b0efbc68ee0d56",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300066"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300069,
+     "sha256": "ad31188741a9ea57d46b1bda1a12138a2215e3ed54e9d821c26d676c6f250883",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300069"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300070,
+     "sha256": "de1a2d77708d4c1f703ba6fb68e68295323533ee54d87ea22ab7a879df19f75b",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300070"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300071,
+     "sha256": "3d2c21b543cd8988c5023ce475f9c78d3bbf93e39784255cd0efda16a5079e63",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300071"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300074,
+     "sha256": "a00154bc2a9c714c856edd8aac734b7ccfed50a739881a7c2a1444b6176d207b",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300074"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300076,
+     "sha256": "3cab3b6d4f258fcae79d709b87d8723b011a819d4dbe307ee41f1dedcbe3bf33",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300076"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300077,
+     "sha256": "1a7f9523ab7dcd565ee5a9cd6136c5c91046b3248ede2af424d9c1faf0be4f67",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300077"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300081,
+     "sha256": "66667efc5d0a65bfd5bee1174ed1f07f95fd73786f528c942eb47d01b06368c6",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300081"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300082,
+     "sha256": "26b97fd10d130cdc012a5ffee771fe455a50c35f85301a3cba94f23a774c66e5",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300082"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300083,
+     "sha256": "1d0239bc9d1709d37fabbc7cc1d5ef7b8af9bb8051e5c2858bf7e39e7503e6db",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300083"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300084,
+     "sha256": "0c3826b11a67012e6c0df3c20db2015c5924102e5e6d0cfa683887c87078be43",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300084"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300087,
+     "sha256": "cd0b951d4e608761fccc9c5ce542fd4af5edf75fb3768a2ea35412fe17f02975",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300087"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300088,
+     "sha256": "acaba18551778816c54d9915a0ae1bce148589e698b7c4fda19d73adb694e7f1",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300088"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300091,
+     "sha256": "a0c7a347b69d0a67620d0c04aca42eb34aae9a537859216ad4ab082cce697779",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300091"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300092,
+     "sha256": "dbfded96e704c1875f969800dc0c32d688664f1e504c35855435c9f2aca71d8a",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300092"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300093,
+     "sha256": "e3afd8c079abeb39a5220a6553fef7d3691912fd56bbb80eac725bcf04bff07a",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300093"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300094,
+     "sha256": "bcaee0875f3dfb2e7a021a4c4d4767e6d3407976dcfa8a701ddc36fdc13c4ded",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300094"
+    },
+    {
+     "family": "compose_claims",
+     "heldout": [],
+     "seed": 300097,
+     "sha256": "c6e90f5c8cb6ac5ea9ce8b555da38a663469d31293af5f1c6872dd5210714b21",
+     "split": "val_v2",
+     "task_id": "compose_claims-val_v2-300097"
+    }
+   ]
+  }
+ },
+ "sha256": "9d65a566ac44f9a5660475abeb09c25b0b40608e6718c7571d5c525dd4fe7029",
+ "train_pool_exclusion_rate_first_500": {
+  "compose_claims": 0.59,
+  "reschedule_constrained": 0.114,
+  "resolve_denial": 0.074,
+  "update_insurance_reconcile": 0.13
+ },
+ "world": "claims-ops-v1"
+}

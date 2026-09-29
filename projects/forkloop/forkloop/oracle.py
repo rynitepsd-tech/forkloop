@@ -23,6 +23,10 @@ REASON_CODES = (
 )
 
 CHECK_KINDS = ("query", "count", "baseline_checksum", "ui_path_only", "forbidden_screens", "preserve_fields")
+#: ``op`` values ``ui_path_only`` accepts. ``writes_only`` (2026-09-29, additive): on a ``loose`` audit
+#: table (OpenEMR's patient-keyed ``log``) only write rows (not ``*-select`` / ``http-request*``) can vouch
+#: for a change by patient id, so merely viewing a chart no longer covers an unaudited edit of that patient.
+UI_PATH_OPS = ("eq", "writes_only")
 
 
 @dataclass
@@ -36,7 +40,8 @@ class Check:
     reason_code: str = "CHECK_FAILED"
     allow: Optional[dict[str, list[Any]]] = None
     exempt_tables: Optional[list[str]] = None
-    #: query only: compare with one of "eq" (default), "in", "ne", "ge", "le", "contains"
+    #: query/count: compare with one of "eq" (default), "in", "ne", "ge", "le", "contains";
+    #: ui_path_only: "eq" (default) or "writes_only" (see UI_PATH_OPS)
     op: str = "eq"
     mutable_fields: list[str] = field(default_factory=list)
 
@@ -114,6 +119,8 @@ class OracleSpec:
                 raise ValueError(f"check {c.id}: query needs db and sql")
             if c.reason_code not in REASON_CODES:
                 raise ValueError(f"check {c.id}: unknown reason code {c.reason_code!r}")
+            if c.kind == "ui_path_only" and c.op not in UI_PATH_OPS:
+                raise ValueError(f"check {c.id}: ui_path_only op must be one of {UI_PATH_OPS}, not {c.op!r}")
 
 
 @dataclass
@@ -456,6 +463,9 @@ class Oracle:
                     ccol = audit.get("comments_col", "comments")
                     sql2 = (f"SELECT COUNT(*) AS n FROM {audit['table']} WHERE {pk_col} > ? "
                             f"AND {audit['id_col']} = ?")
+                    if c.op == "writes_only":
+                        sql2 += (f" AND {audit['entity_col']} NOT LIKE '%-select' "
+                                 f"AND {audit['entity_col']} NOT LIKE 'http-request%'")
                     rows2 = await self.ctx.dbs[db_name].query(sql2, [wm, audit_id])
                     n = int(next(iter(rows2[0].values()))) if rows2 else 0
                     if n == 0:
@@ -490,6 +500,8 @@ class Oracle:
                     except Exception as e:  # noqa: BLE001 - diagnostics only
                         audit_rows[db_name] = [{"error": f"{type(e).__name__}: {str(e)[:200]}"}]
         details[c.id] = {"passed": not missing, "checked": checked, "unaudited_changes": missing[:50]}
+        if c.op != "eq":
+            details[c.id]["op"] = c.op
         if audit_rows:
             details[c.id]["audit_rows_after_watermark"] = audit_rows
         return not missing
@@ -508,4 +520,4 @@ class Oracle:
 
 
 __all__ = ["Check", "OracleSpec", "Verdict", "Oracle", "OracleContext", "Baseline", "TableSnapshot",
-           "RowChange", "diff_baseline", "row_hash", "REASON_CODES", "CHECK_KINDS"]
+           "RowChange", "diff_baseline", "row_hash", "REASON_CODES", "CHECK_KINDS", "UI_PATH_OPS"]

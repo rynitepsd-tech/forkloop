@@ -30,7 +30,25 @@ OPENEMR_URL = "http://localhost/openemr"
 # two episodes never collide even when their seeds are adjacent.
 EP_ID_BASE = 500000
 
-SPLITS = ("train", "heldout_seeds", "heldout_compositions")
+#: The generator splits used before 2026-09-29. Their output is frozen: every (family, split, seed)
+#: task is byte-identical to what recorded experiments ran (tests/test_task_families.py pins hashes).
+LEGACY_SPLITS = ("train", "heldout_seeds", "heldout_compositions")
+#: Legacy held-out splits: reschedule tasks there always get 1-3 distractor patients.
+LEGACY_HELDOUT_SPLITS = ("heldout_seeds", "heldout_compositions")
+#: Generator splits of the learning program (forkloop/splits.py, docs/tasks-and-splits.md). The split
+#: string seeds the rng, so each is a fresh random stream. They switch on the v2 decision-structure
+#: variations and verifier hardening in the base families; `final_test` also has its own surname pool.
+V2_SPLITS = ("train_v2", "val_v2", "final_test")
+SPLITS = LEGACY_SPLITS + V2_SPLITS
+#: ui_path_only op for v2 tasks: OpenEMR's patient-keyed audit match counts write rows only, so a
+#: chart view (a `*-select` row keyed by the patient) no longer vouches for an unaudited edit.
+V2_UI_PATH_OP = "writes_only"
+
+
+def is_v2(split: str) -> bool:
+    """True for the learning-program splits (v2 variations + hardening); legacy splits never change."""
+    return split in V2_SPLITS
+
 
 # Disjoint name pools per split so held-out episodes never reuse a training surname.
 SURNAMES = {
@@ -45,7 +63,15 @@ SURNAMES = {
                              "Hemsworth", "Ingalls", "Jessop", "Kirkland", "Lancaster", "Montague", "Norrington",
                              "Osgood", "Pattinson", "Quennell", "Rutherford", "Stirling", "Thornbury", "Upton",
                              "Villanueva", "Whitlock", "Yorke"],
+    # 2026-09-29: disjoint from every pool above and from the base-data patients' surnames.
+    "final_test": ["Aldridge", "Beaumont", "Cartwright", "Dalgleish", "Esterhuizen", "Fitzhugh", "Garroway",
+                   "Holloway", "Iverson", "Jardine", "Kirkpatrick", "Larkin", "Mendelsohn", "Nakashima", "Ollerton",
+                   "Pellegrini", "Quayle", "Rosenthal", "Szymanski", "Trevelyan", "Uttley", "Valdivia",
+                   "Winterbourne", "Yeoman"],
 }
+# train_v2 and val_v2 draw from the training surnames: validation is in-distribution by design.
+SURNAMES["train_v2"] = SURNAMES["train"]
+SURNAMES["val_v2"] = SURNAMES["train"]
 FIRST_NAMES = ["Amelia", "Benjamin", "Charlotte", "Daniel", "Eleanor", "Felix", "Grace", "Henry", "Isla", "Jonah",
                "Kaia", "Liam", "Maeve", "Noah", "Olive", "Patrick", "Quinn", "Rosa", "Silas", "Talia", "Uma",
                "Victor", "Willa", "Xavier", "Yara", "Zane"]
@@ -332,8 +358,43 @@ def document_seed_file(person: Person, name: str, data: bytes):
     return SeedFile.from_bytes(document_fs_path(person.pid, name), data, mode=0o644)
 
 
+#: v2 invariant order: the first failed check names the verdict, so the most specific failure goes first.
+_V2_ORDER = {"DUPLICATE_SIDE_EFFECT": 0, "WRONG_VALUE": 1, "WRONG_SLOT": 1, "PROVIDER_CHANGED": 1, "WRONG_RECORD": 2}
+_V2_KIND_ORDER = {"baseline_checksum": 5, "ui_path_only": 6, "forbidden_screens": 7}
+
+
+def order_v2_invariants(checks: list) -> list:
+    """Stable order for v2 invariants: duplicates, wrong values/slots, wrong records, field/row guards,
+    then the checksum, the audit tripwire and forbidden screens (every check still runs)."""
+    def key(c) -> int:
+        return _V2_KIND_ORDER.get(c.kind, _V2_ORDER.get(c.reason_code, 3))
+    return sorted(checks, key=key)
+
+
+def insert_appeal(*, id: int, claim_id: int, reason_code: str, authorization_number: Optional[str], narrative: str,
+                  created_at: str) -> str:
+    """A portal ``appeals`` row seeded before the episode (a previous, rejected appeal)."""
+    return ("INSERT INTO appeals (id, claim_id, reason_code, authorization_number, narrative, attachment_name, "
+            f"attachment_sha256, created_at) VALUES ({id}, {claim_id}, {quote(reason_code)}, {quote(authorization_number)}, "
+            f"{quote(narrative)}, NULL, NULL, {quote(created_at)});")
+
+
+def insert_resubmission(*, id: int, claim_id: int, member_id: str, note: Optional[str], created_at: str) -> str:
+    """A portal ``resubmissions`` row seeded before the episode (a previous, failed resubmission)."""
+    return ("INSERT INTO resubmissions (id, claim_id, member_id, note, created_at) VALUES "
+            f"({id}, {claim_id}, {quote(member_id)}, {quote(note)}, {quote(created_at)});")
+
+
+def update_claim(claim_id: int, **fields: Any) -> str:
+    """``UPDATE claims SET ... WHERE id = <claim_id>;`` with portable literals."""
+    sets = ", ".join(f"{k} = {quote(v)}" for k, v in fields.items())
+    return f"UPDATE claims SET {sets} WHERE id = {int(claim_id)};"
+
+
 __all__ = [
     "BaseData", "Person", "Claim", "load_base", "rng_for", "episode_id_base", "make_person", "make_claim",
     "noise_messages", "authorization_letter", "auth_number", "sha256", "portal_url", "openemr_url",
     "document_seed_file", "DENIALS", "PAYERS", "WEEKDAYS", "ANCHOR", "SURNAMES", "similar_member_id", "sql_ts", "iso_ts",
+    "LEGACY_SPLITS", "LEGACY_HELDOUT_SPLITS", "V2_SPLITS", "SPLITS", "V2_UI_PATH_OP", "is_v2", "insert_appeal",
+    "insert_resubmission", "update_claim", "order_v2_invariants", "FIRST_NAMES",
 ]

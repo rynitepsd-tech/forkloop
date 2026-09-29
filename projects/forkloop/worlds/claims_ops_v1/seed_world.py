@@ -13,7 +13,7 @@ from forkloop.oracle import Check, OracleSpec
 from forkloop.tasks import Seeding, TaskInstance, make_task_id
 
 from .openemr import openemr_sql as osql
-from .tasks import reschedule_constrained, resolve_denial, update_insurance_reconcile
+from .tasks import compose_claims, reschedule_constrained, resolve_denial, update_insurance_reconcile
 from .tasks.common import (ANCHOR, PAYERS, auth_number, authorization_letter, document_seed_file, episode_id_base,
                            load_base, make_claim, make_person, member_id, rng_for, sha256)
 
@@ -23,6 +23,8 @@ FAMILIES = {
     "resolve_denial": resolve_denial.generate,
     # diagnostic variant: auth number on page 1 of a one-page letter, no distractor claims
     "resolve_denial_easy": resolve_denial.generate,
+    # 2026-09-29: two subtasks from different families in one episode (tasks/compose_claims.py)
+    "compose_claims": compose_claims.generate,
 }
 SEED_RANGES = {"train": (0, 99999), "heldout_seeds": (100000, 199999), "heldout_compositions": (200000, 299999)}
 
