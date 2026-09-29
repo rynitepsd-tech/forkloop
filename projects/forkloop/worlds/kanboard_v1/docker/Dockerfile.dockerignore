@@ -1,0 +1,10 @@
+# BuildKit reads <Dockerfile>.dockerignore next to the Dockerfile; the context is projects/forkloop.
+# Only the Kanboard world, the shared in-container agent and the shared desktop defaults go in.
+*
+!worlds/__init__.py
+!worlds/kanboard_v1
+!worlds/claims_ops_v1/docker/agent.py
+!worlds/claims_ops_v1/docker/xfce
+**/__pycache__
+**/*.pyc
+**/.DS_Store

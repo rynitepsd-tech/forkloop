@@ -121,6 +121,14 @@ are in the resource registry with leases (`forkloop ops`).
 
 ## Limitations
 
+- The damage classifier counts a wrong value as damage only for a record that did not exist at
+  reset; a wrong write to a field that already held a value (a resubmission over the old member id)
+  is classed as progress, so a restart point after it can waste branches (the repair still falls
+  back to earlier points and step 0). Found by the independent review, 2026-09-29.
+- Charges are written when an episode or branch ends (also on errors); a process killed hard
+  (SIGKILL, power loss) loses the charges of its in-flight episodes, though their rows stay
+  `running` → `interrupted`.
+
 - Replay restores assume the applications are deterministic for the same action sequence;
   the fidelity check detects divergence in persisted tables and on screen, not in hidden
   process state.

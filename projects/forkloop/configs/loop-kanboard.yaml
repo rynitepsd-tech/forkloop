@@ -1,7 +1,11 @@
 # Correction loop on the second world (kanboard-v1: Kanboard v1.2.54 in Docker, docs/second-world.md).
-# The student is a deliberately weak hosted agent (gpt-6-luna, low image detail, low reasoning effort); the
-# teacher is gpt-5.6-luna with the same prompt and explicit-memory contract. Both call OpenAI through the
-# guarded route: export OPENAI_API_KEY and FORKLOOP_SESSION_LEDGER (forkloop ledger ... --create).
+# The student is a deliberately weak hosted agent: gpt-6-luna, low reasoning effort, screenshots downscaled
+# to 640x360 before they are sent; the teacher is gpt-5.6-luna at full resolution with the same prompt and
+# explicit-memory contract. Earlier student settings (docs/second-world.md): `image_detail: low` never got off
+# the start screen (clicks in the downscaled frame; 0/6, experiment kb-loop-20260929); full 1280x720 high
+# detail was too strong (11/12, experiment kb-loop2-20260929).
+# Both call OpenAI through the guarded route: export OPENAI_API_KEY and FORKLOOP_SESSION_LEDGER
+# (forkloop ledger ... --create).
 # Backend environment until the world-aware Docker hook lands (docs/second-world.md, "Backend hook"):
 #   FORKLOOP_DOCKER_IMAGE=forkloop/kanboard-v1:1 FORKLOOP_DOCKER_SNAPSHOT_DB=none
 version: 1
@@ -23,8 +27,8 @@ student:
     base_url: https://api.openai.com/v1
     model: gpt-6-luna
     prompt_style: compact
-    image_max_side: 1280
-    image_detail: low
+    image_max_side: 640
+    image_detail: high
     history_k: 12
     prev_screenshot: true
     memory: true
@@ -48,5 +52,10 @@ teacher:
     hosted_reasoning: true
     max_tokens: 4096
     timeout_s: 120
-    extra_body: {reasoning_effort: medium}
-repair: {k: 3, max_restart_points: 2, concurrency: 3, settle: stable, max_screen_distance: 0.10, restore_retries: 2}
+    # medium effort fell for the other-project trap in 6/6 branches of kb-loop2-20260929 (docs/second-world.md)
+    extra_body: {reasoning_effort: high}
+# branch_max_steps: a branch may take up to 30 actions after its checkpoint (a "latest" restart point of an
+# attempt that used its whole 40-step budget would otherwise leave the teacher one action); the wall budget
+# counts the attempt's elapsed time up to the checkpoint, so branches get 1500 s instead of 900 s
+repair: {k: 2, max_restart_points: 2, concurrency: 3, branch_max_steps: 30, settle: stable, max_screen_distance: 0.10,
+         restore_retries: 2, budget_override: {max_steps: 40, max_seconds: 1500}}

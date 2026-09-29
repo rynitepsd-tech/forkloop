@@ -538,7 +538,14 @@ class DockerBackend:
     def for_world(cls, world: Any, **kw: Any) -> "DockerBackend":
         """Backend for ``world`` whose golden snapshot is the Docker image. The pool reads the golden id
         from the world's env var (``FORKLOOP_GOLDEN_SNAPSHOT_CLAIMS_OPS_V1``); when that is unset it is set
-        to the image here. A Solari id left there is refused by :meth:`resolve_image` with a clear message."""
+        to the image here. A Solari id left there is refused by :meth:`resolve_image` with a clear message.
+        A world may declare its image in ``world.yaml`` (``docker: {image: …, snapshot_db: …}``); an explicit
+        argument or the environment still wins."""
+        cfg = dict((getattr(getattr(world, "config", None), "extra", None) or {}).get("docker") or {})
+        if cfg.get("image") and not kw.get("image") and not os.environ.get("FORKLOOP_DOCKER_IMAGE"):
+            kw["image"] = cfg["image"]
+        if cfg.get("snapshot_db") and not kw.get("snapshot_db") and not os.environ.get("FORKLOOP_DOCKER_SNAPSHOT_DB"):
+            kw["snapshot_db"] = cfg["snapshot_db"]
         b = cls(**kw)
         env_name = getattr(getattr(world, "config", None), "golden_snapshot_env", "")
         if env_name and not os.environ.get(env_name):
