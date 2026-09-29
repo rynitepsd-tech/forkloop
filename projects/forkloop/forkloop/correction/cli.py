@@ -135,6 +135,9 @@ def cmd_record(args: argparse.Namespace) -> int:
     tasks = _tasks(world, args.families, args.split, args.seeds, pool=args.pool, per_family=args.per_family,
                    skip=args.skip)
     ckpt = proj.checkpoints
+    if args.no_checkpoints:  # demonstrations from the initial state need no restart points (no overhead)
+        from .checkpoint import CheckpointPolicy
+        ckpt = CheckpointPolicy(strategy="replay", every=0, before_types=False, before_keys=(), oracle_status=False)
 
     async def run():
         try:
@@ -301,6 +304,7 @@ def add_commands(sub: Any) -> None:
     p.add_argument("--pool", default=None, help="train|val|dev (forkloop/splits.py) instead of --split/--seeds")
     p.add_argument("--per-family", type=int, default=10)
     p.add_argument("--skip", type=int, default=0, help="skip the first K pool tasks per family (disjoint slices)")
+    p.add_argument("--no-checkpoints", action="store_true", help="only the step-0 checkpoint (e.g. teacher demonstrations)")
     p.add_argument("--experiment", required=True)
     p.add_argument("--replicate", type=int, default=1)
     p.add_argument("--concurrency", type=int, default=None)
