@@ -180,7 +180,8 @@ def _example_section(store: Any, rep: dict, thumbs: _Thumbs, records: list[dict]
     for cid in failed[:6]:
         d = (verdict.get("details") or {}).get(cid) or {}
         if "actual" in d:
-            ev.append(f"<li><code>{_e(cid)}</code>: database has <code>{_e(d.get('actual'))}</code>, "
+            has = "no matching row" if d.get("actual") in (None, "") else f"<code>{_e(d.get('actual'))}</code>"
+            ev.append(f"<li><code>{_e(cid)}</code>: database has {has}, "
                       f"task needs <code>{_e(d.get('expected'))}</code></li>")
         else:
             ev.append(f"<li><code>{_e(cid)}</code> failed ({_e(d.get('reason_code'))})</li>")

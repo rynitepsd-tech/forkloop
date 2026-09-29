@@ -491,7 +491,29 @@ def cmd_demo_loop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evidence(args: argparse.Namespace) -> int:
+    from .evidence import write_evidence
+    from .project import load_project
+
+    stores = {}
+    for c in args.config:
+        proj = load_project(c, require_env=False)
+        stores[Path(c).stem] = proj.store()
+    path = write_evidence(stores, Path(args.out), title=args.title, example_store=args.example_store,
+                          example_repair=args.repair, datasets=[Path(d) for d in (args.dataset or [])])
+    print(path)
+    return 0
+
+
 def add_cleanup_command(sub: Any) -> None:
+    p = sub.add_parser("evidence", help="shareable evidence bundle: one repaired failure end to end, datasets, lineage")
+    p.add_argument("--config", action="append", required=True, help="project YAML (repeatable)")
+    p.add_argument("--out", required=True)
+    p.add_argument("--title", default="Forkloop evidence")
+    p.add_argument("--dataset", action="append", default=None)
+    p.add_argument("--repair", default=None, help="repair id to feature (default: the most informative verified one)")
+    p.add_argument("--example-store", default=None, help="config stem whose store holds the featured repair")
+    p.set_defaults(fn=cmd_evidence)
     p = sub.add_parser("demo-loop", help="the whole correction loop offline on the toy world (no account, no model)")
     p.add_argument("--out", default="runs/demo-loop")
     p.set_defaults(fn=cmd_demo_loop)
