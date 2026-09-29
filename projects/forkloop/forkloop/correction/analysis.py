@@ -138,3 +138,56 @@ def reason_rates(res: dict[str, Any], arm: str) -> dict[str, Any]:
 
 
 __all__ = ["outcomes", "arm_success", "paired", "sign_test", "reason_rates"]
+
+
+def checkpoint_tradeoffs(stores: "Store | list[Store]", experiment_id: Optional[str] = None) -> dict[str, Any]:
+    """Checkpoint overhead, restore cost vs replay distance, restore fidelity, and recovery success by
+    the evidence that chose the restart point (docs/correction.md)."""
+    stores = stores if isinstance(stores, list) else [stores]
+    cap: dict[str, list[float]] = defaultdict(list)
+    restores: list[dict] = []
+    by_reason: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])   # verified, scored, branches
+    by_step_bucket: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for st in stores:
+        where = {"experiment_id": experiment_id} if experiment_id else {}
+        for c in st.charges(**where):
+            if c["kind"] == "checkpoint_seconds":
+                cap[c["evidence"].get("strategy", "?")].append(c["amount"])
+        for rep in st.repairs(**where):
+            reasons = {p["ckpt_id"]: p["reason"] for p in rep["config"].get("restart_points", [])}
+            for b in st.branches(repair_id=rep["repair_id"]):
+                ck = st.checkpoint(b["ckpt_id"])
+                for r in b["restore"].get("attempts", []):
+                    restores.append({"strategy": r.get("strategy"), "seconds": r.get("seconds"), "ok": r.get("ok"),
+                                     "replayed": r.get("replayed_steps", 0),
+                                     "tables_equal": (r.get("fidelity") or {}).get("tables_equal"),
+                                     "screen_distance": (r.get("fidelity") or {}).get("screen_distance")})
+                key = f"{rep['mode']}:{reasons.get(b['ckpt_id'], '?')}"
+                row = by_reason[key]
+                row[2] += 1
+                if b["status"] == FINISHED:
+                    row[1] += 1
+                    row[0] += int((b["reward"] or 0) >= 1)
+                bucket = "0" if ck["step"] == 0 else "1-9" if ck["step"] < 10 else "10-29" if ck["step"] < 30 else "30+"
+                bb = by_step_bucket[f"{rep['mode']}:{bucket}"]
+                bb[1] += int(b["status"] == FINISHED)
+                bb[0] += int(b["status"] == FINISHED and (b["reward"] or 0) >= 1)
+    def stats(v: list[float]) -> dict[str, Any]:
+        v = sorted(x for x in v if x is not None)
+        if not v:
+            return {"n": 0}
+        return {"n": len(v), "p50": v[len(v) // 2], "p90": v[min(len(v) - 1, int(0.9 * len(v)))], "mean": sum(v) / len(v)}
+    per_strategy = defaultdict(list)
+    for r in restores:
+        per_strategy[r["strategy"]].append(r)
+    replay = [r for r in restores if r["strategy"] == "replay" and r["replayed"] and r["seconds"]]
+    slope = (sum(r["seconds"] for r in replay) / sum(r["replayed"] for r in replay)) if replay else None
+    return {
+        "capture_seconds": {k: stats(v) for k, v in cap.items()},
+        "restore": {k: {"seconds": stats([r["seconds"] for r in v]), "ok_rate": sum(1 for r in v if r["ok"]) / len(v),
+                        "tables_equal_rate": sum(1 for r in v if r["tables_equal"]) / len(v), "n": len(v)}
+                    for k, v in per_strategy.items()},
+        "replay_seconds_per_step": slope,
+        "recovery_by_reason": {k: {"verified": a, "scored": b, "branches": c} for k, (a, b, c) in sorted(by_reason.items())},
+        "recovery_by_restart_step": {k: {"verified": a, "scored": b} for k, (a, b) in sorted(by_step_bucket.items())},
+    }
