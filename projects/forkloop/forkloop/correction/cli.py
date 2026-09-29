@@ -333,12 +333,19 @@ async def cleanup_snapshots(store: Any, backend: Any, *, experiment_id: Optional
                 continue
             action = "would delete" if dry_run else "deleted"
             if not dry_run:
-                try:
-                    await backend.delete_snapshot(c["world_ref"])
-                    store.mark_checkpoint_deleted(c["ckpt_id"])
-                    store.event("snapshot_deleted", c["ckpt_id"], snapshot=c["world_ref"])
-                except Exception as e:  # noqa: BLE001
-                    action = f"delete failed: {type(e).__name__}: {str(e)[:200]}"
+                # Solari answered "Not found" for existing snapshots nondeterministically (2026-09-29,
+                # docs/solari-platform-notes.md); a retry usually reaches it. Only a successful delete
+                # marks the checkpoint deleted; otherwise the registry lease/reaper keeps trying.
+                for tries in range(6):
+                    try:
+                        await backend.delete_snapshot(c["world_ref"])
+                        store.mark_checkpoint_deleted(c["ckpt_id"])
+                        store.event("snapshot_deleted", c["ckpt_id"], snapshot=c["world_ref"], tries=tries + 1)
+                        action = "deleted"
+                        break
+                    except Exception as e:  # noqa: BLE001
+                        action = f"delete failed: {type(e).__name__}: {str(e)[:200]}"
+                        await asyncio.sleep(2 + 2 * tries)
             out.append({"ckpt_id": c["ckpt_id"], "snapshot": c["world_ref"], "action": action})
             log(f"[cleanup] {c['ckpt_id']} {c['world_ref']}: {action}")
     return out

@@ -35,4 +35,4 @@ teacher:
   options:
     <<: *hosted
     model: gpt-5.6-luna
-repair: {k: 2, max_restart_points: 2, concurrency: 2, settle: stable, max_screen_distance: 0.10}
+repair: {k: 2, max_restart_points: 2, concurrency: 2, settle: stable, max_screen_distance: 0.10, restore_retries: 3}
