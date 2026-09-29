@@ -366,3 +366,29 @@ def test_repairs_are_exhausted_after_the_registered_number_of_unscored_tries(tmp
     u = repair_units(store, "round", "rep", "checkpoint", "A2", infra_retries=1)[0]
     assert u.excluded and not u.pending
     assert select([u], 100.0, Rates(0.35, 0.001)) == ([], 0.0)     # excluded, reported, never selected
+
+
+def test_repairs_voided_by_a_provider_outage_are_not_replacement_tries(tmp_path, world, backend):
+    from forkloop.correction.repair import PROVIDER_OUTAGE, counted_repair
+    from forkloop.correction.runner import run_repairs
+
+    store = Store(tmp_path / "o" / "f.sqlite")
+    task = _task(world)
+    res = _recorded_failure(world, backend, store, task)
+    cfg = RepairConfig(k=1, max_restart_points=1, concurrency=1, history_k=100)
+    state = {"down": True}
+    teacher = lambda: (_Unreachable if state["down"] else ToyAgent)(task.expected["a"], task.expected["a0"], name="teacher")  # noqa: E731
+    go = lambda: asyncio.run(run_repairs(store=store, world=world, backend=backend, attempt_ids=[res.attempt_id],  # noqa: E731
+                                         teacher_factory=teacher, cfg=cfg, experiment_id="rep", concurrency=1,
+                                         infra_retries=1, log=lambda m: None))
+    go(); go()                                   # two void repairs: the limit (1 + 1) is reached
+    assert counted_repair(store, res.attempt_id, experiment_id="rep", mode="checkpoint") == (None, 2)
+    for r in store.repairs(experiment_id="rep"):
+        store.annotate_repair(r["repair_id"], void_reason=PROVIDER_OUTAGE)
+    assert counted_repair(store, res.attempt_id, experiment_id="rep", mode="checkpoint") == (None, 0)
+    assert any(e["kind"] == "repair_annotated" for e in store.events()) if hasattr(store, "events") else True
+    state["down"] = False
+    go()
+    counted, tried = counted_repair(store, res.attempt_id, experiment_id="rep", mode="checkpoint")
+    assert counted is not None and counted["status"] == "verified" and tried == 1
+    assert len(store.repairs(experiment_id="rep")) == 3 and len({r["repair_id"] for r in store.repairs(experiment_id="rep")}) == 3

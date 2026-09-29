@@ -247,9 +247,18 @@ def counted_repair(store: Store, attempt_id: str, *, experiment_id: Optional[str
     prior = [r for r in store.repairs(**where) if r["mode"] == mode]
     for r in prior:
         if repair_is_clean(store, r):
-            return r, len(prior)
-    return None, len(prior)
+            return r, _tries(prior)
+    return None, _tries(prior)
+
+
+#: A void repair annotated with this reason was run while the provider refused every request (e.g. the
+#: account's credit was exhausted): it says nothing about the teacher and is not a replacement try.
+PROVIDER_OUTAGE = "provider_outage"
+
+
+def _tries(repairs: list[dict]) -> int:
+    return sum(1 for r in repairs if (r.get("result") or {}).get("void_reason") != PROVIDER_OUTAGE)
 
 
 __all__ = ["repair_attempt", "RepairConfig", "RepairResult", "task_for", "repair_is_clean", "counted_repair",
-           "UNSCORED_BRANCH"]
+           "UNSCORED_BRANCH", "PROVIDER_OUTAGE"]

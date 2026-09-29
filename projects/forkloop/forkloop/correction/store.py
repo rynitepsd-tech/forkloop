@@ -282,6 +282,15 @@ class Store:
                        (status, _j(result), time.time(), repair_id))
             self._event(db, "repair_finished", repair_id, {"status": status})
 
+    def annotate_repair(self, repair_id: str, **fields: Any) -> None:
+        """Merge ``fields`` into a repair's result (status unchanged) and log it as an event."""
+        with self._db() as db:
+            row = db.execute("SELECT result_json FROM repairs WHERE repair_id=?", (repair_id,)).fetchone()
+            if row is None:
+                raise KeyError(repair_id)
+            db.execute("UPDATE repairs SET result_json=? WHERE repair_id=?", (_j({**json.loads(row[0]), **fields}), repair_id))
+            self._event(db, "repair_annotated", repair_id, fields)
+
     def repairs(self, **where: Any) -> list[dict[str, Any]]:
         sql, params = "SELECT * FROM repairs", []
         if where:
