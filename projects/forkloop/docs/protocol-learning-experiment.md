@@ -148,3 +148,12 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   (twice the collection concurrency, where no 429 occurred); without this, one rate-limited step
   would make a whole branch unscored. It applies identically to both repair modes, which start
   together, and to any later run; no outcome was inspected to motivate it.
+- 2026-09-29 10:31 UTC — main's A0/`S_W` shard, restarted at 10:24 alongside the teacher repairs,
+  was stopped again (outcomes unread): together they asked for ~124 concurrent Docker worlds
+  against the host cap of 96, so 6 evaluation cells failed at reset (`ConcurrencyError`,
+  unscored) and 2 checkpoint-repair branches failed to restore (`restore_failed`, unscored; kept).
+  Main's A0/`S_W` cells now run in phase 5 **interleaved with the nine trained models on the
+  phase-5 server, as registered** (aux's shard ran earlier; see 09:00). Under the registered
+  infrastructure rule the operator interruptions count as unscored attempts: about 56 of main's
+  A0/`S_W` cells have used 2 of their 3 attempts. Any cell still unscored after its third attempt is
+  excluded pairwise and reported, as registered.

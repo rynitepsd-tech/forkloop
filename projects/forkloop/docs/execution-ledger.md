@@ -229,3 +229,9 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
 - Revised spend estimate (10:35): OpenAI ≈ $130–160 total (≈ 970 teacher branches); Lambda ≈ $750–800
   (main+aux until phase 5 ends ≈ 21:00–22:00 UTC, dev until its training run ends ≈ 16:30);
   Solari < $15 → **≈ $900–1,000 all-in**.
+- 10:31 UTC — main's A0/sw shard stopped again (with 64 repair worlds it exceeded the host's Docker cap
+  of 96: 6 eval resets and 2 repair restores failed). `exp1-next` replaced by tmux **`exp1-next2`**
+  (`scripts/exp1/phase4_after_repairs.sh`, log `next2.log`): waits for "repairs complete", runs
+  phase 4. Main's A0/sw cells run in phase 5 (in the model list already; skips finished cells):
+  main PER_MODEL=8 × 11 models = 88 worlds (< 96). Containers of the stopped runners reaped by tmux
+  `reap-eval2` (log `reap-eval2.log`).
