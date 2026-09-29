@@ -50,8 +50,8 @@ async def doctor(*, world: str = "claims-ops-v1", family: str = "resolve_denial"
         "Install Python 3.11+ and reinstall Forkloop." if sys.version_info < (3, 11) else "")
     for module, package in (("yaml", "PyYAML"), ("PIL", "Pillow"), ("numpy", "numpy"), ("httpx", "httpx")):
         dependency(module, package, "Install the complete Forkloop package: python -m pip install -e .")
-    if backend not in {"fake", "solari"}:
-        add("backend", "fail", "Unknown backend.", "Choose fake or solari.")
+    if backend not in {"fake", "solari", "docker"}:
+        add("backend", "fail", "Unknown backend.", "Choose fake, docker or solari.")
     if policy not in {"scripted", "random", "teacher", "student"}:
         add("policy", "fail", "Unknown policy.", "Choose scripted, random, teacher or student.")
 
@@ -87,10 +87,40 @@ async def doctor(*, world: str = "claims-ops-v1", family: str = "resolve_denial"
         add("world.load", "fail", "World configuration, generator or assets could not load.",
             "Run forkloop worlds and forkloop task --family with a listed family in the complete source checkout.")
 
-    if backend == "fake":
+    if backend == "docker":
+        import platform
+        import shutil
+        import subprocess
+        docker = shutil.which("docker")
+        add("docker.cli", "pass" if docker else "fail", "Docker CLI found." if docker else "The docker CLI is not on PATH.",
+            "Install Docker Engine (>= 23, BuildKit) on an x86-64 host." if not docker else "")
+        arch = platform.machine().lower()
+        add("docker.arch", "pass" if arch in {"x86_64", "amd64"} else "warn",
+            f"Host architecture {arch}.", "The world images are x86-64 only; use an x86-64 Docker host (emulation is very slow)."
+            if arch not in {"x86_64", "amd64"} else "")
+        image = os.environ.get("FORKLOOP_DOCKER_IMAGE") or (configured_world.config.extra.get("docker", {}).get("image")
+                                                              if configured_world is not None else None)
+        if docker:
+            try:
+                ok = subprocess.run([docker, "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True,
+                                    timeout=15).returncode == 0
+            except Exception:  # noqa: BLE001
+                ok = False
+            add("docker.daemon", "pass" if ok else "fail", "Docker daemon reachable." if ok else "Docker daemon not reachable.",
+                "Start Docker and make sure your user may run it (docker group or sudo)." if not ok else "")
+            if image and ok:
+                present = subprocess.run([docker, "image", "inspect", image], capture_output=True, timeout=15).returncode == 0
+                add("docker.image", "pass" if present else "fail", f"World image {image} is present." if present else f"World image {image} is not loaded.",
+                    "Build it: worlds/claims_ops_v1/docker/build_image.sh --version 3 (docs/docker-world.md), or docker load it." if not present else "")
+            elif not image:
+                add("docker.image", "fail", "No world image configured.", "export FORKLOOP_DOCKER_IMAGE=forkloop/claims-ops-v1:3")
+        add("docker.concurrency", "pass", f"Worlds per host: {os.environ.get('FORKLOOP_DOCKER_CONCURRENCY', '8')} "
+            "(each world ≈ 1–2 vCPU and 2–3 GB RAM).")
+    if backend in {"fake", "docker"}:
         for module, package in (("fastapi", "fastapi"), ("jinja2", "Jinja2"), ("multipart", "python-multipart"), ("itsdangerous", "itsdangerous")):
             dependency(module, package, "Install world dependencies: python -m pip install -e '.[world]'")
-        add("evidence", "warn", "Fake execution is a constructed verifier control, not live GUI or policy-performance evidence.")
+        if backend == "fake":
+            add("evidence", "warn", "Fake execution is a constructed verifier control, not live GUI or policy-performance evidence.")
     if policy == "teacher" and not build:
         dependency("anthropic", "anthropic", "Install python -m pip install -e '.[teacher]'")
         present = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
