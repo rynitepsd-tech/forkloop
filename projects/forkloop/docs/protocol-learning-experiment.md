@@ -135,3 +135,10 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   models but not for A0 and `S_W`; this is reported as a limitation. Reason: the student
   server was ~75% idle during collection (episode time is dominated by the world), and moving
   these 300 episodes off the last phase shortens it by hours of 3-box time.
+- 2026-09-29 09:08 UTC — main's early A0/`S_W` run (09:00) was stopped after 8 minutes, outcomes
+  unread: with it, main's server latency rose from ~6 s to ~21 s per request, and round-1
+  120-step episodes were already using ~2,900–3,050 s of the 3,600 s episode limit, so the load
+  would have changed round-1 outcomes and could make evaluation outcomes depend on server load.
+  Its in-flight cells are `interrupted` (kept) and get replacements under the registered rule;
+  main's A0/`S_W` shard runs again when main's GPUs are otherwise idle (teacher repairs). The aux
+  shard (server serving only this evaluation, ~11 s per request) continues.
