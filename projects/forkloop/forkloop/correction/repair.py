@@ -96,15 +96,24 @@ async def _run_branch(*, store: Store, world: Any, backend: Any, task: TaskInsta
     info: dict[str, Any] = {"teacher": policy_identity(teacher)}
     t_start = time.monotonic()
     try:
-        for attempt_no in range(cfg.restore_retries + 1):
+        # Snapshot restores are retried with backoff, then fall back to a replay restore of the same
+        # checkpoint (Solari answered "Snapshot not found" persistently for some listed snapshots on
+        # 2026-09-29). Every try is recorded; a fallback is visible in the branch's restore log.
+        plan = [ckpt] * (cfg.restore_retries + 1)
+        if ckpt["strategy"] == "snapshot" and int(ckpt["step"]) > 0:
+            plan.append({**ckpt, "strategy": "replay", "world_ref": f"replay:{ckpt['step']}"})
+        for attempt_no, ck_try in enumerate(plan):
             if env is not None:
                 await env.close()
+            if attempt_no:
+                await asyncio.sleep(min(30.0, 5.0 * attempt_no))
             import shutil
             shutil.rmtree(run_dir, ignore_errors=True)
             rec = EpisodeRecorder(run_dir, task, episode_id=branch_id,
                                   extra={"branch_of": attempt["attempt_id"], "ckpt_id": ckpt["ckpt_id"],
-                                         "ckpt_step": ckpt["step"], "repair_id": repair_id, "branch_idx": idx})
-            env, report = await open_branch(world=world, backend=backend, task=task, ckpt=ckpt, attempt=attempt,
+                                         "ckpt_step": ckpt["step"], "repair_id": repair_id, "branch_idx": idx,
+                                         "restore_strategy": ck_try["strategy"]})
+            env, report = await open_branch(world=world, backend=backend, task=task, ckpt=ck_try, attempt=attempt,
                                             recorder=rec, run_id=f"{branch_id}-r{attempt_no}", settle=cfg.settle,
                                             max_screen_distance=cfg.max_screen_distance, budget_override=budget,
                                             history_k=cfg.history_k)
