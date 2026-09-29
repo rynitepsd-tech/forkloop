@@ -218,3 +218,14 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   `PER_MODEL=8` on main (72 episodes, DP8) and `PER_MODEL=7` on aux (63), close to the per-GPU load
   under which A0/S_W were evaluated (aux 60 on 8 GPUs; main 60 on 7), so server load is comparable
   across all arms; expected ≈ 4.5–5 h.
+- 10:24 UTC — **round 1 complete**: 160/160 cells scored after replacements (training pool):
+  denial 29/40 OK, insurance 6/40, compose 4/40, reschedule 0/40 → 121 failures. Both repair modes
+  started 10:24 on all 121 (`exp1-round1` checkpoint, `exp1-restart` full restart; 32 concurrent
+  branches each); main's A0/sw shard started 10:24 (`exp1-next`). Estimated branches: checkpoint
+  ≈ 610 (k=3 at the first restart point, the second only if unrepaired), full restart 363 →
+  checkpoint repairs set the pace, **≈ 14:30 UTC**. A restart of the checkpoint-repair process at
+  higher concurrency was considered (≈ 1.75 h saved) but not done: the command was blocked by the
+  session's permission classifier before running; the repairs run as launched.
+- Revised spend estimate (10:35): OpenAI ≈ $130–160 total (≈ 970 teacher branches); Lambda ≈ $750–800
+  (main+aux until phase 5 ends ≈ 21:00–22:00 UTC, dev until its training run ends ≈ 16:30);
+  Solari < $15 → **≈ $900–1,000 all-in**.
