@@ -142,3 +142,9 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   Its in-flight cells are `interrupted` (kept) and get replacements under the registered rule;
   main's A0/`S_W` shard runs again when main's GPUs are otherwise idle (teacher repairs). The aux
   shard (server serving only this evaluation, ~11 s per request) continues.
+- 2026-09-29 09:25 UTC — before any repair started: the policy adapter now re-sends a request
+  refused with HTTP 429 (rate limited; a refusal is not billed) after the server's Retry-After or
+  an exponential backoff, at most 5 times (`9d1b8a8`). Repairs run 64 concurrent teacher branches
+  (twice the collection concurrency, where no 429 occurred); without this, one rate-limited step
+  would make a whole branch unscored. It applies identically to both repair modes, which start
+  together, and to any later run; no outcome was inspected to motivate it.
