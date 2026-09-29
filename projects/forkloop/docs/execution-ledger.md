@@ -194,3 +194,10 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   `scripts/exp1/phase4_train_arms.sh` (8 runs on main) + the 9th (A3 seed 3) on dev; copy adapters to aux
   (`~/programs/exp1aux/adapters`); `scripts/exp1/phase5_eval.sh` on main (shard 0/2) and
   `scripts/exp1/phase5_eval_aux.sh` on aux (shard 1/2); `scripts/exp1/report.py --final`.
+- 09:00 UTC — **A0 and S_W final-test cells started early** (protocol deviation note 09:00): aux tmux
+  `eval-a0-sw` (shard 1/2, vLLM tmux `vllm-eval` serving base + `sw`, TP2×DP4) from 08:52; main tmux
+  `eval-a0-sw` (`/tmp/eval-a0-sw-main.sh`, shard 0/2, on the round-1 server :8010) from 09:00; 3 passes
+  each, concurrency 30 per model; logs `eval-A0.log`, `eval-sw.log`; main writes
+  `~/programs/exp1/logs/eval-a0-sw.done` when finished. Phase 5 skips their finished cells. Main's
+  student server was ~75% idle (≈14 requests in flight for 56 episodes), so it does not slow round 1.
+  Before `phase4_train_arms.sh` kills `vllm-qwen-dp`, check that main's A0/sw evaluation is done.
