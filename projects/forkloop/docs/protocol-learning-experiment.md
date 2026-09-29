@@ -1,8 +1,7 @@
 # Protocol: does checkpoint-based correction train a better computer-use student?
 
-*Registered before any final-test task is run. Fields marked* **[freeze]** *are filled in the
-registration commit and never changed afterwards; later deviations are appended as dated notes,
-never edited in place.*
+*Registered 2026-09-29 ~05:20 UTC, before any final-test task was run, in the commit that adds this
+line. Later deviations are appended as dated notes at the end, never edited in place.*
 
 ## Question
 
@@ -15,8 +14,8 @@ succeed more often on new full workflows?
 
 | Component | Value |
 | --- | --- |
-| World | claims-ops-v1 on Docker, image `forkloop/claims-ops-v1:3` **[freeze: digest]**, world clock 2026-09-07 09:00 UTC at boot |
-| Task code / splits | commit **[freeze]**; split manifest `worlds/claims_ops_v1/tasks/splits_manifest.json` sha256 `9d65a566ac44…` (policy v1) |
+| World | claims-ops-v1 on Docker, image `forkloop/claims-ops-v1:3` = `sha256:7324af036519fd11dcedff3af257aca04f67ef9e3a6ed9026076d4675c51b0d7`, world clock 2026-09-07 09:00 UTC at boot |
+| Task code / splits | code at commit `1882f81` (branch `correction-engine-20260929`); split manifest `worlds/claims_ops_v1/tasks/splits_manifest.json` sha256 `9d65a566ac44…` (policy v1) |
 | Families | `reschedule_constrained`, `update_insurance_reconcile`, `resolve_denial`, `compose_claims` |
 | Student (S) | Qwen/Qwen3.8-27B @ `1d4bf0f2`, vLLM 0.30.0, thinking off, greedy, max 384 output tokens |
 | Observation (all policies) | `agent_memory_v3` system prompt; instruction, explicit memory (own `Memory:` lines), last 12 actions, previous + current screenshot; student images upscaled 1.5× (1920×1080), coordinates 0–1000 |
@@ -91,3 +90,8 @@ unscored after 3 attempts are excluded pairwise and reported.
 Any result on pilot/dev tasks, search-assisted or teacher-assisted success, success on training
 tasks, or a subset chosen after seeing outcomes. If an arm's training fails for infrastructure
 reasons, it is re-run with the same seed and data before any evaluation of that arm.
+
+## Deviations and notes (dated, append-only)
+
+- 2026-09-29 05:20 UTC — registration. Pilots (train positions 0–9, images `:1`, prompts v2/v3)
+  are development evidence only.
