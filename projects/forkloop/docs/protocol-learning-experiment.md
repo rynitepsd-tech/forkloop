@@ -157,3 +157,8 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   infrastructure rule the operator interruptions count as unscored attempts: about 56 of main's
   A0/`S_W` cells have used 2 of their 3 attempts. Any cell still unscored after its third attempt is
   excluded pairwise and reported, as registered.
+- 2026-09-29 11:12 UTC — observation (no change): the Docker backend cannot send `ctrl+-` (xdotool
+  needs the key name `minus`), so any episode in which a policy presses it has a backend failure and
+  is unscored under the infrastructure rule. Early in the repairs 7 of 64 finished branches (both
+  modes) were lost this way. The mapping is left unchanged until exp1 ends, so every collection and
+  evaluation cell runs with the same backend; affected cells are reported with the unscored counts.
