@@ -129,3 +129,17 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   `docs/protocol-learning-experiment.md`; `configs/exp1.yaml`; `scripts/exp1/`.
 - **Waiting on**: image `:3` (world clock at the task anchor via rebuilt libfaketime; stock libfaketime
   segfaults headed Chrome). Registration commit follows its digest.
+- 05:20 UTC — **Image `:3`** `sha256:7324af03…` qualified (world clock 2026-09-07 09:00 at boot via
+  libfaketime rebuilt without FAKE_PTHREAD; 16/16 four-family resets, replay fidelity exact, GUI
+  calendar edit saves). **Protocol registered** locally in `fe41105` (a `git push` of the branch was
+  blocked by the permission classifier; left for the owner). **exp1 phase 1 started** on main
+  (`scripts/exp1/phase1_collect_teacher.sh`): warm start W (train positions 10–29) and demonstration
+  arm A1 (positions 30–69), store `~/programs/exp1/forkloop.sqlite`, synced every 5 min to
+  `/lambda/nfs/forkloop-useast1/programs/exp1`.
+- **Solari flagship result** (`solari-student-1`): the student's failed denial attempt restored from
+  its step-8 VM snapshot into two desktops (79 s each, tables identical, screen distance 0.0); both
+  teacher branches verified (29 and 31 steps). Other repairs hit Solari "Snapshot not found" on fork
+  (4 retries each) and fell back to step-0 restarts (3 of 5 verified so far); the engine now backs off
+  and falls back to a replay restore of the same checkpoint (`bfd086f`).
+- 05:15 UTC — the owner reported their computer died; the Mac controller (29 days uptime) and its
+  processes survived. New long-running work runs only on the Lambda boxes.
