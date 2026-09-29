@@ -35,17 +35,20 @@ def parse_seeds(text: str) -> list[int]:
     return out
 
 
-def _tasks(world: Any, families: str, split: str, seeds: str) -> list[Any]:
+def _tasks(world: Any, families: str, split: str, seeds: str, *, allow_final: bool = False) -> list[Any]:
     fams = [f.strip() for f in families.split(",") if f.strip()]
-    return [world.generate(f, s, split) for f in fams for s in parse_seeds(seeds)]
+    tasks = [world.generate(f, s, split) for f in fams for s in parse_seeds(seeds)]
+    if not allow_final and world.name == "claims-ops-v1":
+        from ..splits import final_reasons
+        leaks = [(t.task_id, final_reasons(t)) for t in tasks if final_reasons(t)]
+        if leaks:
+            raise SystemExit(f"{len(leaks)} task(s) belong to the final test (split, sealed block or held-out "
+                             f"structure), e.g. {leaks[0]}; only `forkloop evaluate --final` may run them")
+    return tasks
 
 
 def _guard_final(split: str, allow: bool) -> None:
-    try:
-        from ..splits import is_final_split
-    except Exception:  # noqa: BLE001 - split policy module optional in early versions
-        def is_final_split(s: str) -> bool:
-            return s in ("final_test",)
+    from ..splits import is_final_split
     if is_final_split(split) and not allow:
         raise SystemExit(f"split {split!r} is the final test pool: only `forkloop evaluate --final` may run it")
 
@@ -203,7 +206,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     policy = proj.student
     if policy is None:
         raise SystemExit("the project has no student policy")
-    tasks = _tasks(world, args.families, args.split, args.seeds)
+    tasks = _tasks(world, args.families, args.split, args.seeds, allow_final=args.final)
     # the student alone: no teacher, no search, one attempt per cell; step-0 bookkeeping only
     ckpt = CheckpointPolicy(strategy="replay", every=0, before_types=False, before_keys=(), oracle_status=False)
     role = f"eval:{args.label}"

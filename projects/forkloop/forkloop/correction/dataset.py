@@ -38,6 +38,17 @@ SCHEMA = "forkloop.dataset.v1"
 FORBIDDEN_SPLITS_DEFAULT = ("final_test", "heldout_final", "test")
 
 
+def _refuse_final(task: Any, forbidden: set) -> None:
+    """Final-test tasks never enter a dataset: by split name, sealed seed block or held-out structure."""
+    if task.split in forbidden:
+        raise ValueError(f"refusing to export {task.task_id}: split {task.split!r} is reserved for evaluation")
+    if task.world == "claims-ops-v1":
+        from ..splits import final_reasons
+        why = final_reasons(task)
+        if why:
+            raise ValueError(f"refusing to export {task.task_id}: final-test task ({why})")
+
+
 def reasoning_text(raw: str) -> str:
     """The visible reasoning of a reply: everything before the action, without Memory lines."""
     thoughts = ap.extract_thoughts(raw or "") or ""
@@ -176,8 +187,7 @@ def export_dataset(store: Store, world: Any, out_dir: str | Path, *, experiment_
         for rep in repairs:
             attempt = store.attempt(rep["attempt_id"])
             task = task_for(store, attempt["task_id"], world)
-            if task.split in forbidden:
-                raise ValueError(f"refusing to export {task.task_id}: split {task.split!r} is reserved for evaluation")
+            _refuse_final(task, forbidden)
             hidden = _hidden_values(task)
             att_dir = Path(attempt["run_dir"])
             att_ep = load_episode(att_dir)
@@ -250,8 +260,7 @@ def export_dataset(store: Store, world: Any, out_dir: str | Path, *, experiment_
             atts = [a for a in atts if a["attempt_id"] in keep]
         for att in atts:
             task = task_for(store, att["task_id"], world)
-            if task.split in forbidden:
-                raise ValueError(f"refusing to export {task.task_id}: split {task.split!r} is reserved for evaluation")
+            _refuse_final(task, forbidden)
             adir = Path(att["run_dir"])
             aep = load_episode(adir)
             src = {"path_id": att["attempt_id"], "attempt_id": att["attempt_id"], "task_id": task.task_id,
