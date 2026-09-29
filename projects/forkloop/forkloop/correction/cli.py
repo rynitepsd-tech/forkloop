@@ -587,6 +587,14 @@ def cmd_budget(args: argparse.Namespace) -> int:
     short = {k: t for k, t in totals.items() if t["pending"] and t["cost_usd"] < budget}
     if short:
         raise SystemExit(f"budget undetermined: arms with pending units below B=${budget:.2f}: {json.dumps(short)}")
+    if args.dry_run:  # selection only (raises PendingUnit if a selected failure is unsettled); exports nothing
+        for frac in [float(x) for x in args.fractions.split(",")]:
+            for arm, units in arms.items():
+                chosen, spent = select(units, budget * frac, rates)
+                print(f"{arm}-b{int(round(frac * 100)):03d}: units={len(chosen)} spent=${spent:.2f} "
+                      f"verified_paths={sum(len(u.verified_sources) for u in chosen)}")
+        print(json.dumps({"budget_usd": budget, "totals": totals}, indent=2))
+        return 0
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {"rates": rates.to_dict(), "totals": totals, "budget_usd": budget, "arms": {},
@@ -621,6 +629,7 @@ def add_cleanup_command(sub: Any) -> None:
     p.add_argument("--student-usd-per-step", type=float, default=0.001)
     p.add_argument("--rates-note", default="main box $22.32/h / 64 worlds; 7 A100 replicas ≈ $19.53/h at ≈ 6 steps/s")
     p.add_argument("--fractions", default="0.25,0.5,1.0")
+    p.add_argument("--dry-run", action="store_true", help="selection only; fails while a selected failure is unsettled")
     p.add_argument("--count-unscored-cost", action="store_true",
                    help="charge unscored attempts and the latest repair whatever its branches (earlier accounting)")
     p.add_argument("--out", required=True)

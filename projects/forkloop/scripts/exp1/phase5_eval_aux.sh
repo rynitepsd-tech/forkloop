@@ -4,8 +4,8 @@
 # Each model's evaluate is re-run until it has no retryable (unscored) cells left (3 passes).
 set -u
 source "$(dirname "$0")/env-aux.sh"
-AD=/home/ubuntu/programs/exp1aux/adapters
-MODS="sw=$AD/sw-seed0/final"
+AD=/home/ubuntu/programs/exp1aux/${ADAPTERS_NAME:-adapters}   # trained arms; S_W stays in adapters/
+MODS="sw=/home/ubuntu/programs/exp1aux/adapters/sw-seed0/final"
 for arm in A1 A2 A3; do for s in 1 2 3; do MODS="$MODS $arm-s$s=$AD/$arm-s$s/final"; done; done
 if ! curl -s -m 3 127.0.0.1:8010/v1/models | grep -q '"A3-s3"'; then
   tmux kill-session -t vllm-dp 2>/dev/null; tmux kill-session -t vllm-eval 2>/dev/null; sleep 20

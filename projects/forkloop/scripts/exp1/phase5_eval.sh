@@ -3,8 +3,8 @@
 # models on the final test, all models concurrently so no arm gets a different server state.
 set -u
 source "$(dirname "$0")/env.sh"
-AD=/home/ubuntu/programs/exp1/adapters
-MODS="sw=$AD/sw-seed0/final"
+AD=/home/ubuntu/programs/exp1/${ADAPTERS_NAME:-adapters}   # trained arms; S_W stays in adapters/
+MODS="sw=/home/ubuntu/programs/exp1/adapters/sw-seed0/final"
 for arm in A1 A2 A3; do for s in 1 2 3; do MODS="$MODS $arm-s$s=$AD/$arm-s$s/final"; done; done
 if ! curl -s -m 3 127.0.0.1:8010/v1/models | grep -q '"A3-s3"'; then
   tmux kill-session -t vllm-eval 2>/dev/null
