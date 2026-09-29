@@ -858,7 +858,7 @@ class StudentPolicy(BranchablePolicy):
                                                  "cache_write_multiplier": 1.25})
         self.n_requests += 1
         try:
-            resp = await self._client.post("/chat/completions", json=body)
+            resp = await self._post_with_transport_retry(body, retry=ledger is None)
             resp.raise_for_status()
             data = resp.json()
             self._tokens(data)  # count even a response with no usable choices
@@ -885,6 +885,23 @@ class StudentPolicy(BranchablePolicy):
                 # the full reservation; automatic retries are intentionally off.
                 ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
             raise
+
+    #: Self-hosted endpoints only: a request that failed in transport (no response received: connection
+    #: reset, ReadError, RemoteProtocolError) is sent again, so a flaky serving connection never becomes a
+    #: policy step. Hosted (billed) endpoints never retry: a failed request may still have been charged.
+    TRANSPORT_RETRIES = 3
+
+    async def _post_with_transport_retry(self, body: dict, *, retry: bool) -> httpx.Response:
+        attempts = self.TRANSPORT_RETRIES + 1 if retry else 1
+        for i in range(attempts):
+            try:
+                return await self._client.post("/chat/completions", json=body)
+            except httpx.TransportError:
+                if i + 1 >= attempts:
+                    raise
+                self.transport_retries = getattr(self, "transport_retries", 0) + 1
+                await asyncio.sleep(0.5 * (i + 1))
+        raise RuntimeError("unreachable")
 
     def _tokens(self, data: dict, n: int = 1) -> dict:
         if not isinstance(data, dict):

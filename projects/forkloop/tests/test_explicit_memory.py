@@ -88,3 +88,18 @@ def test_image_scale_is_shared_by_serving_and_training():
     im = resize_for_model(Image.open(io.BytesIO(png)), image_max_side=1920, image_scale=1.5)
     assert im.size == (1920, 1080)
     assert prepare_image(png, 1280)[1] == (1280, 720)
+
+
+def test_self_hosted_transport_errors_are_retried_hosted_are_not():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise httpx.ReadError("connection reset", request=request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "click(10, 10)"}}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    pol = StudentPolicy("http://127.0.0.1:9/v1", "m", transport=httpx.MockTransport(handler))
+    a, m = asyncio.run(pol.act(Observation(_png(), "t", 0, [], 1280, 720)))
+    assert a is not None and calls["n"] == 3 and not m.get("error")
