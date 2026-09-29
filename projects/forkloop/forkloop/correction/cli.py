@@ -125,7 +125,7 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .project import load_project
     from .runner import run_attempts
 
-    proj = load_project(args.config)
+    proj = load_project(args.config, overrides=_overrides(args.set) if args.role == "student" else None)
     _guard_final(args.split or "", False)
     world = proj.world()
     backend = proj.backend(world)
@@ -305,6 +305,8 @@ def add_commands(sub: Any) -> None:
     p.add_argument("--per-family", type=int, default=10)
     p.add_argument("--skip", type=int, default=0, help="skip the first K pool tasks per family (disjoint slices)")
     p.add_argument("--no-checkpoints", action="store_true", help="only the step-0 checkpoint (e.g. teacher demonstrations)")
+    p.add_argument("--set", action="append", default=None, metavar="KEY=VALUE",
+                   help="override a student option (e.g. model=<served LoRA name>); recorded in the policy identity")
     p.add_argument("--experiment", required=True)
     p.add_argument("--replicate", type=int, default=1)
     p.add_argument("--concurrency", type=int, default=None)
