@@ -207,3 +207,8 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   complete and repairs (teacher only) are running; it must finish before phase 4 kills `vllm-qwen-dp`.
   Aux's A0/sw shard continues (~11 s/request). Phase 5 keeps PER_MODEL 6 (main) / 5 (aux) for the
   same reason (load vs the episode time limit).
+- 09:18 UTC — **main tmux `exp1-next`** (`scripts/exp1/phase3c_then_4.sh`, log `next.log`): waits for
+  "round 1 complete", runs main's A0/sw shard (3 passes, 30 each) during the repairs, then after
+  "repairs complete" runs `phase4_train_arms.sh` (budget + 8 runs). Controller then: `scripts/exp1/
+  train_on_dev.sh start` (A3-s3 on dev; weights copied to dev `~/models/qwen3.8-27b`), later `fetch`;
+  copy main's 8 adapters to aux; phase 5 on both boxes. Policy adapter re-sends HTTP 429 (`9d1b8a8`).
