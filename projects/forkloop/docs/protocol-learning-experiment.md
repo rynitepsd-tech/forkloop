@@ -1,0 +1,93 @@
+# Protocol: does checkpoint-based correction train a better computer-use student?
+
+*Registered before any final-test task is run. Fields marked* **[freeze]** *are filled in the
+registration commit and never changed afterwards; later deviations are appended as dated notes,
+never edited in place.*
+
+## Question
+
+Does Forkloop's checkpoint-based correction produce more useful training experience per unit of
+collection cost than (a) teacher demonstrations collected from the initial state and (b) teacher
+corrections that restart from the beginning, and does the resulting student, **running alone**,
+succeed more often on new full workflows?
+
+## Fixed components
+
+| Component | Value |
+| --- | --- |
+| World | claims-ops-v1 on Docker, image `forkloop/claims-ops-v1:3` **[freeze: digest]**, world clock 2026-09-07 09:00 UTC at boot |
+| Task code / splits | commit **[freeze]**; split manifest `worlds/claims_ops_v1/tasks/splits_manifest.json` sha256 `9d65a566ac44…` (policy v1) |
+| Families | `reschedule_constrained`, `update_insurance_reconcile`, `resolve_denial`, `compose_claims` |
+| Student (S) | Qwen/Qwen3.8-27B @ `1d4bf0f2`, vLLM 0.30.0, thinking off, greedy, max 384 output tokens |
+| Observation (all policies) | `agent_memory_v3` system prompt; instruction, explicit memory (own `Memory:` lines), last 12 actions, previous + current screenshot; student images upscaled 1.5× (1920×1080), coordinates 0–1000 |
+| Teacher (T) | gpt-5.6-luna, reasoning effort high, image detail high, same prompt/memory/history |
+| Episode budget | 120 actions; 3,600 s wall (never the binding limit by design; latency is reported) |
+| Checkpoints (collection) | replay strategy, every 4 steps + before each `type` + before `Return` |
+| Repair | `k = 3` branches per restart point, ≤ 2 restart points (evidence-ordered, step 0 last), stop after a verified branch, teacher feedback: none |
+
+## Pools
+
+From `forkloop/splits.py`: `train` (generator split `train_v2`, held-out structures removed),
+`final_test` (frozen list of 150 tasks: reschedule 30, insurance 30, denial 30, compose 60, with
+quotas of held-out structures H1–H6; generator split `final_test`, fresh random stream and surname
+pool). Train-pool slices by position per family: pilots 0–9 (development only, never trained on),
+warm start 10–29, round-1 collection 30–69. The legacy sealed denial block is not evaluated here.
+`val` is unused (no model selection: fixed recipe and step count).
+
+## Data collection
+
+1. **Warm start W.** T attempts the 80 warm-start tasks from their initial states; every verified
+   path becomes demonstrations. `S_W` = S + LoRA(W), seed 0, 50 optimizer steps. W is shared by
+   every trained arm.
+2. **Round 1** on the 160 collection tasks:
+   - `S_W` attempts each task once with checkpoints (the agent under repair);
+   - **A2 Forkloop:** each scored failure is repaired from checkpoints (mode `checkpoint`);
+   - **A3 full restart:** each scored failure is repaired from step 0 (mode `full_restart`), same `k`;
+   - **A1 demonstrations:** T attempts each of the 160 tasks from its initial state.
+3. **Matched cost.** Unit costs (`forkloop/correction/budget.py`): teacher USD from provider usage +
+   world time × **$0.35 per world-hour** (main box $22.32/h ÷ 64 worlds) + student steps ×
+   **$0.001 per step** (7 A100 replicas ≈ $19.53/h at ≈ 6 steps/s). A1 units: teacher attempts. A2/A3
+   units: every `S_W` attempt (finding failures costs) plus its repair. Units are taken in task-seed
+   order until the budget `B` = the smallest of the three arms' total round-1 cost is reached; the
+   arm's training set is W ∪ the verified paths of its selected units. Nested subsets at B/4, B/2
+   support the data-scaling curve (reported descriptively).
+
+## Training
+
+`scripts/train_run.sh`: LoRA r=16, α=32, dropout 0.05, language-model projections only; lr 1e-4,
+warmup 5%, batch 1 × grad-accum 8, **100 optimizer steps** (800 examples sampled from the arm's
+data, weighted uniformly by record), seq ≤ 16,384, image scale 1.5. Three independent runs (seeds
+1, 2, 3) for each of A1, A2, A3. Identical optimizer budget across arms; total GPU-hours reported.
+
+## Final evaluation (student alone)
+
+Models: A0 = S, `S_W`, A1×3, A2×3, A3×3. Each attempts each of the 150 final-test tasks once:
+no teacher, no search, no retries except the infrastructure rule. Same verifier. Serving: vLLM
+multi-LoRA, all models on the same servers, interleaved.
+
+**Infrastructure rule.** A cell whose attempt is unscored (reset/feasibility failure,
+backend/transport failure, oracle error, interruption) gets up to 2 replacement attempts; the
+first *scored* attempt counts; original attempts stay in the store and reports. Cells still
+unscored after 3 attempts are excluded pairwise and reported.
+
+## Analysis (`forkloop/correction/analysis.py`)
+
+- Arm success = mean over the four families of the family mean of task outcomes averaged over the
+  arm's runs.
+- **Primary comparisons:** A2 − A0, A2 − A1, A2 − A3, each a paired difference on the same tasks
+  with a 95% bootstrap interval resampling tasks within family and training runs within arm
+  (10,000 replicates, seed 20260929); secondary exact sign test on tasks whose run-averaged
+  outcomes differ.
+- **Practically meaningful effect:** A2 − A0 ≥ 0.20; and A2 − A1 > 0 with the interval excluding 0,
+  or A2 reaching A1's success at ≤ half its collection cost (scaling curves, descriptive).
+- Reported per family and per run; wrong-record and duplicate-side-effect rates; unscored cells;
+  steps; latency; collection yield; cost per verified example and per successful task.
+- **Power.** 150 paired tasks: a 20-point improvement from a low base (e.g. 5% → 25%) is detected
+  with power > 0.99; a 10-point difference between trained arms has power of roughly 0.6–0.8 with
+  three runs per arm. Smaller arm differences may remain inconclusive and will be reported as such.
+
+## What does not count
+
+Any result on pilot/dev tasks, search-assisted or teacher-assisted success, success on training
+tasks, or a subset chosen after seeing outcomes. If an arm's training fails for infrastructure
+reasons, it is re-run with the same seed and data before any evaluation of that arm.
