@@ -143,3 +143,30 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   and falls back to a replay restore of the same checkpoint (`bfd086f`).
 - 05:15 UTC — the owner reported their computer died; the Mac controller (29 days uptime) and its
   processes survived. New long-running work runs only on the Lambda boxes.
+
+### RESUME HERE (kept current; last update 2026-09-29 05:35 UTC)
+
+- **Boxes** (`ssh forkloop-main|forkloop-aux|forkloop-dev`, aliases in `~/.ssh/config`; registry `~/.forkloop/resources.jsonl`):
+  main 8×A100-80 (exp1 store `~/programs/exp1/forkloop.sqlite`, logs `~/programs/exp1/logs/`, env
+  `scripts/exp1/env.sh`, tmux `exp1-phase1`, `sync-exp1`, `vllm-qwen` on GPU0 :8000);
+  aux 8×A100-40 (vLLM Qwen DP4×TP2 :8010, tmux `vllm-dp`; image `:3` being loaded);
+  dev 1×H100 (student agent's vLLM :8000). Leases 24 h (renew: `forkloop ops renew RID --hours H`).
+- **Protocol**: `docs/protocol-learning-experiment.md` (registered `fe41105`). Config `configs/exp1.yaml`.
+- **Phase 1 (running)**: teacher W (`exp1-warmstart`) + A1 demos (`exp1-demos`). Check:
+  `ssh forkloop-main 'source ~/repo/projects/forkloop/scripts/exp1/env.sh; forkloop status --config configs/exp1.yaml'`.
+- **Phase 2**: `GPU=1 scripts/exp1/phase2_warmstart_train.sh` on main (dataset W → adapter
+  `~/programs/exp1/adapters/sw-seed0/final`).
+- **Phase 3**: serve S_W as LoRA (`train/serve/serve-path.sh ~/models/qwen3.8-27b qwen3.8-27b
+  --data-parallel-size 7 --enable-lora --max-lora-rank 16 --lora-modules sw=<adapter>` on GPUs 1-7,
+  port 8010); `forkloop record --config configs/exp1.yaml --role student --set model=sw --pool train
+  --skip 30 --per-family 40 --experiment exp1-round1`; then `forkloop repair ... --experiment
+  exp1-round1` (checkpoint) and `--mode full_restart --experiment exp1-restart --source-experiment exp1-round1`.
+- **Phase 4**: matched-cost datasets (`forkloop/correction/budget.py`), 9 runs via
+  `scripts/train_run.sh` (A1/A2/A3 × seeds 1–3, 100 steps). **Phase 5**: `forkloop evaluate --pool
+  final_test --final --set model=<adapter> --label <arm-seed> --experiment exp1-final` for A0, S_W,
+  9 adapters; `forkloop/correction/analysis.py`. **Phase 6**: evidence, video (`scripts/make_video.py`),
+  README (`README.draft.md`), site, release, independent review, submission copy, cleanup.
+- **Solari flagship**: store `runs/loop-solari-student/` (Mac); snapshots leased 24 h; run
+  `forkloop cleanup --config configs/loop-solari-student.yaml` after the evidence is exported.
+- **Owner actions pending**: push branch `correction-engine-20260929` (push blocked by the
+  classifier); posting/submission.
