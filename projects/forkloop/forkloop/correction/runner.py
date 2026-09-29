@@ -74,7 +74,7 @@ async def run_attempts(*, store: Store, world: Any, backend: Any, tasks: Iterabl
         async with sem:
             env = Env(world, backend, family=p.task.family, split=p.task.split, history_k=history_k,
                       pool=WorkerPool(backend, world, size=1, mode="fork", run_id=stable_id("run", p.cell, p.attempt_no),
-                                      reap_orphans_enabled=False), budget_override=budget,
+                                      reap_orphans_enabled=False, metadata={"runner": RUNNER_ID}), budget_override=budget,
                       stable_after_action=(settle == "stable"))
             env._own_pool = True  # the cell's pool (and its machine) dies with the cell
             policy = await make_policy(policy_factory)
@@ -121,6 +121,36 @@ async def heartbeat_loop(store: Store) -> None:
     while True:
         heartbeat(store)
         await asyncio.sleep(HEARTBEAT_S)
+
+
+def live_runner_ids(root) -> set[str]:
+    from pathlib import Path
+    alive = set()
+    for hb in (Path(root) / "runners").glob("*.hb"):
+        try:
+            if time.time() - float(hb.read_text()) < STALE_S:
+                alive.add(hb.stem)
+        except (OSError, ValueError):
+            pass
+    return alive
+
+
+async def reap_orphan_machines(store: Store, backend: Any, *, log: Callable[[str], None] = print,
+                               dry_run: bool = False) -> list[str]:
+    """Kill machines tagged with a runner of this store whose heartbeat stopped (a killed runner's
+    worlds). Machines without a runner tag, or whose runner is alive, are never touched."""
+    alive = live_runner_ids(store.root)
+    known = {hb.stem for hb in (store.root / "runners").glob("*.hb")}
+    killed = []
+    for m in await backend.list_machines(metadata={"forkloop": "1"}):
+        owner = (m.metadata or {}).get("runner")
+        if owner and owner in known and owner not in alive and m.state in ("running", "starting", "paused", "created"):
+            if not dry_run:
+                await backend.kill_machine(m.id)
+            killed.append(m.id)
+    if killed:
+        log(f"[reaper] {'would kill' if dry_run else 'killed'} {len(killed)} machines of dead runners")
+    return killed
 
 
 def reap_dead_runners(store: Store, *, log: Callable[[str], None] = print) -> list[str]:

@@ -81,8 +81,9 @@ async def open_branch(*, world: Any, backend: Any, task: Any, ckpt: dict[str, An
     t0 = time.monotonic()
     strategy = ckpt["strategy"]
     golden = ckpt["world_ref"] if strategy == "snapshot" else None
+    from .runner import RUNNER_ID
     pool = WorkerPool(backend, world, size=1, mode="fork", golden_snapshot=golden, run_id=run_id,
-                      reap_orphans_enabled=False)
+                      reap_orphans_enabled=False, metadata={"runner": RUNNER_ID})
     env = Env(world, backend, family=task.family, split=task.split, pool=pool, recorder=None,
               budget_override=budget_override, history_k=history_k, stable_after_action=(settle == "stable"))
     env._own_pool = True

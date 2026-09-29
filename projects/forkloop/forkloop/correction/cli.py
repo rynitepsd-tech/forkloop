@@ -422,7 +422,29 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reap_machines(args: argparse.Namespace) -> int:
+    from .project import load_project
+    from .runner import reap_orphan_machines
+
+    proj = load_project(args.config, require_env=False)
+    world = proj.world()
+    backend = proj.backend(world)
+
+    async def run():
+        try:
+            return await reap_orphan_machines(proj.store(), backend, dry_run=args.dry_run)
+        finally:
+            await backend.close()
+
+    print(json.dumps({"killed": asyncio.run(run())}, indent=2))
+    return 0
+
+
 def add_cleanup_command(sub: Any) -> None:
+    p = sub.add_parser("reap-machines", help="kill machines whose runner (on this store) stopped heartbeating")
+    p.add_argument("--config", required=True)
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_reap_machines)
     p = sub.add_parser("cleanup", help="delete provider snapshots behind checkpoints no repair still needs")
     p.add_argument("--config", required=True)
     p.add_argument("--experiment", default=None)
