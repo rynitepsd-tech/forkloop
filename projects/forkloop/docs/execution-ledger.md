@@ -212,3 +212,9 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   "repairs complete" runs `phase4_train_arms.sh` (budget + 8 runs). Controller then: `scripts/exp1/
   train_on_dev.sh start` (A3-s3 on dev; weights copied to dev `~/models/qwen3.8-27b`), later `fetch`;
   copy main's 8 adapters to aux; phase 5 on both boxes. Policy adapter re-sends HTTP 429 (`9d1b8a8`).
+- 10:05 UTC — aux A0/sw shard 1/2 complete (75 + 75 cells scored in pass 1; outcomes unread); aux
+  idle until phase 5 (kept rather than relaunched: ~1.5 h setup and capacity risk). Aux measured
+  ~72 min for 150 evaluation episodes at 60 concurrent (~29 min/episode). **Phase 5 concurrency**:
+  `PER_MODEL=8` on main (72 episodes, DP8) and `PER_MODEL=7` on aux (63), close to the per-GPU load
+  under which A0/S_W were evaluated (aux 60 on 8 GPUs; main 60 on 7), so server load is comparable
+  across all arms; expected ≈ 4.5–5 h.
