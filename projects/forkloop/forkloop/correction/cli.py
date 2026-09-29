@@ -407,6 +407,29 @@ async def cleanup_snapshots(store: Any, backend: Any, *, experiment_id: Optional
                         await asyncio.sleep(2 + 2 * tries)
             out.append({"ckpt_id": c["ckpt_id"], "snapshot": c["world_ref"], "action": action})
             log(f"[cleanup] {c['ckpt_id']} {c['world_ref']}: {action}")
+    if not dry_run and any(r["action"] == "deleted" for r in out):
+        # A delete that answered success can leave the snapshot listed (Solari, 2026-09-29): verify
+        # against the provider listing and delete again until it is gone.
+        for rnd in range(4):
+            try:
+                listed = {s.id for s in await backend.list_snapshots()}
+            except Exception as e:  # noqa: BLE001
+                log(f"[cleanup] cannot list snapshots to verify: {type(e).__name__}: {e}")
+                break
+            left = [r for r in out if r["action"] == "deleted" and r.get("snapshot") in listed]
+            if not left:
+                break
+            for r in left:
+                try:
+                    await backend.delete_snapshot(r["snapshot"])
+                except Exception as e:  # noqa: BLE001
+                    log(f"[cleanup] re-delete {r['snapshot']}: {type(e).__name__}")
+                r["verify_rounds"] = rnd + 1
+            await asyncio.sleep(3)
+        else:
+            for r in out:
+                if r["action"] == "deleted" and r.get("snapshot") in listed:
+                    r["action"] = "still listed after verification"
     return out
 
 
