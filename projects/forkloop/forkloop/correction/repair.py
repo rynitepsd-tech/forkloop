@@ -165,7 +165,7 @@ async def _run_branch(*, store: Store, world: Any, backend: Any, task: TaskInsta
 async def repair_attempt(store: Store, world: Any, backend: Any, attempt_id: str, *,
                          teacher_factory: Callable[[], Any], cfg: Optional[RepairConfig] = None,
                          experiment_id: Optional[str] = None, repair_no: int = 1,
-                         points: Optional[list[dict]] = None) -> RepairResult:
+                         points: Optional[list[dict]] = None, sem: Optional[asyncio.Semaphore] = None) -> RepairResult:
     cfg = cfg or RepairConfig()
     attempt = store.attempt(attempt_id)
     if attempt["status"] != FINISHED or (attempt["reward"] or 0) >= 1.0:
@@ -189,7 +189,7 @@ async def repair_attempt(store: Store, world: Any, backend: Any, attempt_id: str
     store.start_repair(repair_id=repair_id, attempt_id=attempt_id, mode=cfg.mode, teacher_policy_id=teacher_id,
                        config={**cfg.to_dict(), "restart_points": chosen}, experiment_id=experiment_id)
     by_id = {c["ckpt_id"]: c for c in ckpts}
-    sem = asyncio.Semaphore(max(1, cfg.concurrency))
+    sem = sem or asyncio.Semaphore(max(1, cfg.concurrency))  # a shared semaphore bounds machines across repairs
     results: list[dict] = []
     verified: list[str] = []
     try:

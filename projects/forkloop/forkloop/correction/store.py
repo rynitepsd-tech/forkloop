@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS attempts (
     attempt_id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(task_id),
     policy_id TEXT NOT NULL REFERENCES policies(policy_id), experiment_id TEXT, cell TEXT,
     status TEXT NOT NULL, reward REAL, reason_code TEXT, n_steps INTEGER, run_dir TEXT NOT NULL,
-    checkpoint_strategy TEXT, started_at REAL NOT NULL, finished_at REAL, info_json TEXT NOT NULL DEFAULT '{}');
+    checkpoint_strategy TEXT, started_at REAL NOT NULL, finished_at REAL, info_json TEXT NOT NULL DEFAULT '{}',
+    runner TEXT);
 CREATE INDEX IF NOT EXISTS attempts_task ON attempts(task_id);
 CREATE INDEX IF NOT EXISTS attempts_cell ON attempts(experiment_id, cell);
 CREATE TABLE IF NOT EXISTS checkpoints (
@@ -45,12 +46,12 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 CREATE TABLE IF NOT EXISTS repairs (
     repair_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id), mode TEXT NOT NULL,
     teacher_policy_id TEXT NOT NULL, config_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT NOT NULL DEFAULT '{}',
-    experiment_id TEXT, started_at REAL NOT NULL, finished_at REAL);
+    experiment_id TEXT, started_at REAL NOT NULL, finished_at REAL, runner TEXT);
 CREATE TABLE IF NOT EXISTS branches (
     branch_id TEXT PRIMARY KEY, repair_id TEXT NOT NULL REFERENCES repairs(repair_id),
     ckpt_id TEXT NOT NULL REFERENCES checkpoints(ckpt_id), idx INTEGER NOT NULL, status TEXT NOT NULL,
     reward REAL, reason_code TEXT, n_steps INTEGER, run_dir TEXT NOT NULL, restore_json TEXT NOT NULL DEFAULT '{}',
-    started_at REAL NOT NULL, finished_at REAL, info_json TEXT NOT NULL DEFAULT '{}');
+    started_at REAL NOT NULL, finished_at REAL, info_json TEXT NOT NULL DEFAULT '{}', runner TEXT);
 CREATE INDEX IF NOT EXISTS branches_repair ON branches(repair_id);
 CREATE TABLE IF NOT EXISTS charges (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, kind TEXT NOT NULL, amount REAL NOT NULL,
@@ -72,6 +73,14 @@ RESTORE_FAILED = "restore_failed"
 
 def _j(x: Any) -> str:
     return json.dumps(x, sort_keys=True, default=str, ensure_ascii=False)
+
+
+def _runner() -> Optional[str]:
+    try:
+        from .runner import RUNNER_ID
+        return RUNNER_ID
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def stable_id(prefix: str, *parts: Any, n: int = 12) -> str:
@@ -159,9 +168,9 @@ class Store:
             if db.execute("SELECT 1 FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone():
                 raise ValueError(f"attempt {attempt_id} already exists; never reuse an attempt id")
             db.execute("INSERT INTO attempts (attempt_id, task_id, policy_id, experiment_id, cell, status, run_dir, "
-                       "checkpoint_strategy, started_at, info_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                       "checkpoint_strategy, started_at, info_json, runner) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                        (attempt_id, task_id, policy_id, experiment_id, cell, RUNNING, run_dir, strategy, time.time(),
-                        _j(info or {})))
+                        _j(info or {}), _runner()))
             self._event(db, "attempt_started", attempt_id, {"task_id": task_id, "cell": cell})
 
     def finish_attempt(self, attempt_id: str, *, status: str, reward: Optional[float], reason_code: Optional[str],
@@ -193,22 +202,22 @@ class Store:
             raise KeyError(attempt_id)
         return rows[0]
 
-    def mark_interrupted(self, *, older_than_s: float = 0.0) -> list[str]:
-        """Rows left ``running`` by a dead process become ``interrupted`` (kept, never scored)."""
+    def mark_interrupted(self, *, older_than_s: float = 0.0, alive_runners: Optional[set[str]] = None) -> list[str]:
+        """Rows left ``running`` by a dead process become ``interrupted`` (kept, never scored).
+        With ``alive_runners``, rows owned by a runner that is still heartbeating are left alone."""
         cutoff = time.time() - older_than_s
+        alive = alive_runners or set()
         out = []
         with self._db() as db:
-            for table, key in (("attempts", "attempt_id"), ("branches", "branch_id")):
-                ids = [r[0] for r in db.execute(f"SELECT {key} FROM {table} WHERE status=? AND started_at<=?",
-                                                (RUNNING, cutoff))]
-                for i in ids:
-                    db.execute(f"UPDATE {table} SET status=?, finished_at=? WHERE {key}=?", (INTERRUPTED, time.time(), i))
-                    self._event(db, f"{table[:-1]}_interrupted", i, {})
-                out += ids
-            ids = [r[0] for r in db.execute("SELECT repair_id FROM repairs WHERE status=? AND started_at<=?", (RUNNING, cutoff))]
-            for i in ids:
-                db.execute("UPDATE repairs SET status=?, finished_at=? WHERE repair_id=?", (INTERRUPTED, time.time(), i))
-            out += ids
+            for table, key in (("attempts", "attempt_id"), ("branches", "branch_id"), ("repairs", "repair_id")):
+                rows = db.execute(f"SELECT * FROM {table} WHERE status=? AND started_at<=?", (RUNNING, cutoff)).fetchall()
+                for r in rows:
+                    owner = r["runner"] if "runner" in r.keys() else None
+                    if owner and owner in alive:
+                        continue
+                    db.execute(f"UPDATE {table} SET status=?, finished_at=? WHERE {key}=?", (INTERRUPTED, time.time(), r[key]))
+                    self._event(db, f"{table[:-1]}_interrupted", r[key], {"runner": owner})
+                    out.append(r[key])
         return out
 
     # ----------------------------------------------------------------- checkpoints
@@ -248,8 +257,9 @@ class Store:
             if db.execute("SELECT 1 FROM repairs WHERE repair_id=?", (repair_id,)).fetchone():
                 raise ValueError(f"repair {repair_id} already exists")
             db.execute("INSERT INTO repairs (repair_id, attempt_id, mode, teacher_policy_id, config_json, status, "
-                       "experiment_id, started_at) VALUES (?,?,?,?,?,?,?,?)",
-                       (repair_id, attempt_id, mode, teacher_policy_id, _j(config), RUNNING, experiment_id, time.time()))
+                       "experiment_id, started_at, runner) VALUES (?,?,?,?,?,?,?,?,?)",
+                       (repair_id, attempt_id, mode, teacher_policy_id, _j(config), RUNNING, experiment_id, time.time(),
+                        _runner()))
             self._event(db, "repair_started", repair_id, {"attempt_id": attempt_id, "mode": mode})
 
     def finish_repair(self, repair_id: str, *, status: str, result: dict) -> None:
@@ -273,8 +283,9 @@ class Store:
         with self._db() as db:
             if db.execute("SELECT 1 FROM branches WHERE branch_id=?", (branch_id,)).fetchone():
                 raise ValueError(f"branch {branch_id} already exists")
-            db.execute("INSERT INTO branches (branch_id, repair_id, ckpt_id, idx, status, run_dir, started_at) "
-                       "VALUES (?,?,?,?,?,?,?)", (branch_id, repair_id, ckpt_id, idx, RUNNING, run_dir, time.time()))
+            db.execute("INSERT INTO branches (branch_id, repair_id, ckpt_id, idx, status, run_dir, started_at, runner) "
+                       "VALUES (?,?,?,?,?,?,?,?)", (branch_id, repair_id, ckpt_id, idx, RUNNING, run_dir, time.time(),
+                                                    _runner()))
 
     def finish_branch(self, branch_id: str, *, status: str, reward: Optional[float], reason_code: Optional[str],
                       n_steps: int, restore: dict, info: Optional[dict] = None) -> None:

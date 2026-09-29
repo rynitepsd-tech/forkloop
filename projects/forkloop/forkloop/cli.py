@@ -12,6 +12,10 @@ Inspect and operate:
     forkloop run | metrics | export                   one episode; run summary; data export
     forkloop ledger | reap                            spend ledger; clean up leftover Solari machines
 
+Improve an agent from its failures (docs/correction.md):
+    forkloop record | failures | repair | dataset     attempts with checkpoints -> verified corrections -> dataset
+    forkloop evaluate | status | inspect              the student alone on held-out tasks; costs; HTML evidence
+
 Research tools: build-world, collect, reset-bench (see system.md).
 """
 
@@ -33,6 +37,9 @@ EXIT_ERROR = 4       # configuration or runtime error (argparse usage errors sta
 
 
 def _backend(name: str, world: Any, latency: float = 0.0):
+    if name == "docker":  # local containers, golden = FORKLOOP_DOCKER_IMAGE (docs/docker-world.md)
+        from .backends.docker import DockerBackend
+        return DockerBackend.for_world(world)
     if name == "fake":
         from .backends.fake import FakeBackend
 
@@ -611,10 +618,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="forkloop", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    from .correction.cli import add_commands as _add_correction_commands
 
     def common(p: argparse.ArgumentParser, *, policy: bool = False) -> None:
         p.add_argument("--world", default="claims-ops-v1")
-        p.add_argument("--backend", choices=["solari", "fake"], default=os.environ.get("FORKLOOP_BACKEND", "solari"))
+        p.add_argument("--backend", choices=["solari", "fake", "docker"], default=os.environ.get("FORKLOOP_BACKEND", "solari"))
         if policy:
             p.add_argument("--policy", default="teacher", help="scripted|random|teacher|student")
             p.add_argument("--model", default=None)
@@ -647,6 +655,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             p.add_argument("--mem-mb", type=int, default=None, help="RAM per machine in MB (default: world.yaml resources)")
 
     sub.add_parser("worlds", help="list worlds").set_defaults(fn=cmd_worlds)
+    _add_correction_commands(sub)  # record / failures / repair / dataset / evaluate / status / inspect
     p = sub.add_parser("demo", help="run five offline verifier controls and write inspectable HTML reports")
     p.add_argument("--out", default="runs/offline-controls", help="new output directory; never overwritten")
     p.set_defaults(fn=cmd_demo)

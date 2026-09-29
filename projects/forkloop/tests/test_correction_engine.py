@@ -208,3 +208,35 @@ def test_replay_fidelity_failure_is_recorded_not_scored(tmp_path, world, backend
     assert b["status"] == "restore_failed" and b["reward"] is None
     assert b["restore"]["attempts"][0]["fidelity"]["tables_equal"] is False
     assert rep.status == "unrepaired"
+
+
+def test_cli_loop_end_to_end(tmp_path, monkeypatch, capsys):
+    """record -> failures -> repair -> dataset -> status -> inspect through the CLI (toy world, replay)."""
+    import shutil
+    from forkloop.cli import main
+
+    shutil.copy(Path(__file__).parent / "fixtures" / "toy_loop_agents.py", tmp_path / "toy_loop_agents.py")
+    (tmp_path / "project.yaml").write_text(
+        "version: 1\nworld: toy-counter\nbackend: fake\nstore: store/forkloop.sqlite\nhistory_k: 50\n"
+        "checkpoints: {strategy: replay, every: 1}\n"
+        "student: {name: s, factory: 'toy_loop_agents:student', revision: t1}\n"
+        "teacher: {name: t, factory: 'toy_loop_agents:teacher', revision: t1}\n"
+        "repair: {k: 2, max_restart_points: 2, concurrency: 2}\nconcurrency: 2\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FORKLOOP_POOL_LOG", "0")
+    cfg = ["--config", "project.yaml"]
+    assert main(["record", *cfg, "--families", "reach_target", "--split", "train", "--seeds", "3", "--experiment", "e1"]) == 0
+    assert main(["failures", *cfg, "--experiment", "e1"]) == 0
+    assert main(["repair", *cfg, "--experiment", "e1"]) == 0
+    assert main(["dataset", *cfg, "--out", "ds", "--experiment", "e1"]) == 0
+    assert main(["status", *cfg]) == 0
+    assert main(["inspect", *cfg, "--out", "report/index.html"]) == 0
+    out = capsys.readouterr().out
+    assert '"verified": 1' in out and (tmp_path / "report" / "index.html").exists()
+    m = json.loads((tmp_path / "ds" / "manifest.json").read_text())
+    assert m["counts"]["records"] > 0
+    # re-running record does not re-run a finished cell
+    assert main(["record", *cfg, "--families", "reach_target", "--split", "train", "--seeds", "3", "--experiment", "e1"]) == 0
+    assert "0 to run, 1 skipped" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main(["record", *cfg, "--families", "reach_target", "--split", "final_test", "--seeds", "3", "--experiment", "e2"])
