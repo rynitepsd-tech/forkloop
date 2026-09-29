@@ -9,6 +9,8 @@ from __future__ import annotations
 from . import action_parse as ap
 
 OBSERVATION_SCHEMA = "forkloop.observation.v3"
+#: v3 plus the explicit-memory block (facts the policy itself wrote on earlier steps).
+OBSERVATION_SCHEMA_MEMORY = "forkloop.observation.v4-memory"
 
 
 def coordinate_size(space: str, style: str, image: tuple[int, int], screen: tuple[int, int]) -> tuple[int, int]:
@@ -29,7 +31,8 @@ def observation_messages(*, instruction: str, history: list[str], step: int | No
                          screen: tuple[int, int], coords: tuple[int, int], style: str,
                          history_k: int, image_count: int, system_template: str | None = None,
                          instruction_note: str | None = None, nav_macro: bool = False,
-                         fara_allowed: tuple[str, ...] | None = None, notes: list[str | None] | None = None) -> list[dict]:
+                         fara_allowed: tuple[str, ...] | None = None, notes: list[str | None] | None = None,
+                         memory: list[str] | None = None) -> list[dict]:
     from .student import build_system_prompt, build_user_text, fara_allowed_actions, format_prompt_override
 
     if history_k < 0:
@@ -44,7 +47,8 @@ def observation_messages(*, instruction: str, history: list[str], step: int | No
               else build_system_prompt(style, *coords, fara_allowed=allowed))
     if instruction_note and instruction_note.strip():
         instruction = instruction.rstrip() + "\n\n" + instruction_note.strip()
-    content = [{"type": "text", "text": build_user_text(instruction, history, style, step=step, notes=notes)}]
+    content = [{"type": "text", "text": build_user_text(instruction, history, style, step=step, notes=notes,
+                                                        memory=memory)}]
     if image_count == 2:
         label = f" ({history[-1]})" if history else ""
         content.extend([{"type": "text", "text": f"Screen BEFORE your last action{label}:"},

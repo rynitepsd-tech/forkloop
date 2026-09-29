@@ -46,6 +46,11 @@ oracle:
     # Opening an inbox message marks it read; viewing is not an edit (2026-09-22 review:
     # any inbox visit failed the task as COLLATERAL_EDIT).
     portal: [is_read]
+  # Wall-clock columns: two executions of the same actions write different values. Excluded from
+  # checkpoint fidelity digests (forkloop/correction/digest.py), never from the verifier.
+  volatile_columns:
+    portal: [created_at, updated_at]
+    openemr: [pc_time]
   checksum_tables:
     portal: [patients, claims, appeals, resubmissions, providers, users, messages]
     openemr: [patient_data, insurance_data, openemr_postcalendar_events, documents, categories_to_documents, users, insurance_companies]

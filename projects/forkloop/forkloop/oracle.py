@@ -201,6 +201,13 @@ class Baseline:
                 "watermarks": dict(self.watermarks), "ignore_columns": dict(self.ignore_columns),
                 "preserved_rows": self.preserved_rows}
 
+    @staticmethod
+    def from_dict(d: dict[str, Any]) -> "Baseline":
+        return Baseline(tables={k: TableSnapshot(pk=v["pk"], rows=dict(v["rows"])) for k, v in d.get("tables", {}).items()},
+                        watermarks={k: int(v) for k, v in d.get("watermarks", {}).items()},
+                        ignore_columns={k: list(v) for k, v in d.get("ignore_columns", {}).items()},
+                        preserved_rows={k: list(v) for k, v in d.get("preserved_rows", {}).items()})
+
 
 @dataclass
 class RowChange:

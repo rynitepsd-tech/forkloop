@@ -200,7 +200,7 @@ class Env:
                                     valid=parsed is not None and error is None,
                                     model_latency_s=float(meta.get("model_latency_s", 0.0)),
                                     tokens=meta.get("tokens"), policy_note=str(meta.get("note", "") or ""),
-                                    search=meta.get("search"), error=error)
+                                    search=meta.get("search"), error=error, agent=meta.get("agent"))
         # termination
         budget = {**ep.task.budget, **self.budget_override}
         reward = 0.0

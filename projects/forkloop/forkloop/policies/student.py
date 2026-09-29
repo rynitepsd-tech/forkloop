@@ -39,7 +39,7 @@ from PIL import Image
 
 from . import action_parse as ap
 from .base import BranchablePolicy
-from .observation import OBSERVATION_SCHEMA, coordinate_size, observation_messages, http_messages
+from .observation import OBSERVATION_SCHEMA, OBSERVATION_SCHEMA_MEMORY, coordinate_size, observation_messages, http_messages
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; forkloop.policies.base is written elsewhere
     from .base import Observation
@@ -337,11 +337,48 @@ def note_from_reply(text: str, *, max_chars: int = 160) -> str:
     return note
 
 
+#: One explicit-memory line in a reply: ``Memory: <fact>``. Facts come only from the policy's own
+#: output, so memory never carries anything the policy did not itself see or write.
+_MEMORY_LINE_RE = re.compile(r"^\s*memory\s*:\s*(.+?)\s*$", re.I | re.M)
+#: Memory bounds: enough for these workflows (an authorization number, a member id, a date), small
+#: enough that the rendered input never truncates. Oldest facts are dropped first beyond the cap.
+MEMORY_MAX_FACTS = 16
+MEMORY_MAX_CHARS = 200
+
+
+def memory_from_reply(text: str) -> list[str]:
+    """The ``Memory:`` facts written in one reply, in order (shared by serving and dataset export)."""
+    facts = []
+    for m in _MEMORY_LINE_RE.finditer(_THINK_TAG_RE.sub(" ", text or "")):
+        fact = " ".join(m.group(1).split())
+        if fact and fact.lower() not in ("none", "unchanged", "-", "n/a"):
+            facts.append(fact[:MEMORY_MAX_CHARS])
+    return facts
+
+
+def extend_memory(memory: list[str], facts: list[str]) -> list[str]:
+    """Append new facts (exact repeats are skipped) and keep the newest ``MEMORY_MAX_FACTS``."""
+    out = list(memory)
+    for f in facts:
+        if f not in out:
+            out.append(f)
+    return out[-MEMORY_MAX_FACTS:]
+
+
 def build_user_text(instruction: str, history: list[str] | None, style: str, step: int | None = None,
-                    notes: list[str | None] | None = None) -> str:
-    """The text part of the user turn: instruction + last-k history (+ a loop warning when stuck).
-    ``notes`` (same length as ``history``) puts the policy's own earlier reasoning next to each action."""
+                    notes: list[str | None] | None = None, memory: list[str] | None = None) -> str:
+    """The text part of the user turn: instruction + explicit memory + last-k history (+ a loop
+    warning when stuck). ``notes`` (same length as ``history``) puts the policy's own earlier
+    reasoning next to each action. ``memory`` (``None`` = the memory channel is off) is the list of
+    facts the policy itself wrote on earlier steps (``Memory:`` lines, :func:`memory_from_reply`)."""
     lines = [f"Task: {instruction.strip()}" if style != "fara" else instruction.strip()]
+    if memory is not None:
+        lines.append("")
+        if memory:
+            lines.append("Memory (facts you wrote down on earlier steps, oldest first):")
+            lines.extend(f"- {m}" for m in memory)
+        else:
+            lines.append("Memory: empty (you have not written anything down yet).")
     pairs = [(h, (notes[i] if notes and i < len(notes) else None))
              for i, h in enumerate(history or []) if isinstance(h, str) and h.strip()]
     hist = [h for h, _ in pairs]
@@ -426,7 +463,7 @@ GUARDED_OPENAI_PRICES: dict[str, tuple[float, float, float, float]] = {
 
 
 class StudentPolicy(BranchablePolicy):
-    branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step")
+    branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step", "_memory")
 
     """Vision-only GUI policy backed by an OpenAI-compatible ``/chat/completions`` endpoint.
 
@@ -523,6 +560,7 @@ class StudentPolicy(BranchablePolicy):
         history_notes: bool = False,
         nav_macro: bool = False,
         instruction_note: str | None = None,
+        memory: bool = False,
     ) -> None:
         self.validate_options(locals(), credentialed=bool(api_key))
         self.session_ledger = session_ledger or os.environ.get("FORKLOOP_SESSION_LEDGER")
@@ -565,6 +603,10 @@ class StudentPolicy(BranchablePolicy):
         #: across turns (the env's history is compact actions). Keyed by observation step.
         self.history_notes = bool(history_notes)
         self._notes: dict[int, str] = {}
+        #: Explicit memory: facts the policy wrote in ``Memory:`` lines of its own replies, shown
+        #: back on every later step. Part of the branchable policy state (checkpoints restore it).
+        self.memory_enabled = bool(memory)
+        self._memory: list[str] = []
         #: OpenAI-style image fidelity hint ("high"/"low"/"auto"); None omits the field (vLLM).
         #: Hosted models default to "auto", which may downscale a 1280x720 screenshot enough to
         #: misread an authorization code (measured 2026-09-03: "G" read as "6", digits dropped).
@@ -604,8 +646,8 @@ class StudentPolicy(BranchablePolicy):
             "prompt_style": self.prompt_style, "coord_space": self.coord_space,
             "image_max_side": self.image_max_side, "temperature": self.temperature,
             "max_tokens": self.max_tokens, "history_k": self.history_k, "seed": self.seed,
-            "nav_macro": self.nav_macro, "history_notes": self.history_notes,
-            "prev_screenshot": self.prev_screenshot, "observation_schema": OBSERVATION_SCHEMA,
+            "nav_macro": self.nav_macro, "history_notes": self.history_notes, "memory": self.memory_enabled,
+            "prev_screenshot": self.prev_screenshot, "observation_schema": OBSERVATION_SCHEMA_MEMORY if self.memory_enabled else OBSERVATION_SCHEMA,
             "instruction_note": self.instruction_note, "system_prompt_override": bool(self.system_prompt_override),
         }
 
@@ -651,7 +693,8 @@ class StudentPolicy(BranchablePolicy):
             instruction=str(getattr(obs, "instruction", "") or ""), history=history, step=step,
             screen=screen, coords=coord_size, style=self.prompt_style, history_k=self.history_k,
             image_count=len(urls), system_template=self.system_prompt_override,
-            instruction_note=self.instruction_note, fara_allowed=self.fara_allowed, notes=notes)
+            instruction_note=self.instruction_note, fara_allowed=self.fara_allowed, notes=notes,
+            memory=list(self._memory) if self.memory_enabled else None)
         messages = http_messages(canonical, urls, self.image_detail)
         ctx = {"model_size": model_size, "screen_size": screen, "coord_size": coord_size, "orig_size": orig}
         return messages, ctx
@@ -871,6 +914,7 @@ class StudentPolicy(BranchablePolicy):
     def reset(self) -> None:
         self._queue = []
         self._notes = {}
+        self._memory = []
         self._previous_png = self._current_png = b""
         self._observed_step = None
         self.usage = {"in": 0, "out": 0}
@@ -918,7 +962,31 @@ class StudentPolicy(BranchablePolicy):
         meta["tokens"] = dict(self.usage)
         if self.history_notes:
             self._notes[int(getattr(obs, "step", 0) or 0)] = note_from_reply(meta.get("raw_action") or "")
+        self._remember(meta)
         return action, meta
+
+    def agent_state(self) -> dict:
+        return {"memory": list(self._memory)} if self.memory_enabled else {}
+
+    def load_agent_state(self, state: dict) -> None:
+        """Adopt a checkpoint's declared agent state: the explicit memory (nothing else crosses)."""
+        if not state:
+            return
+        if set(state) - {"memory"}:
+            raise ValueError(f"unknown agent state fields {sorted(set(state) - {'memory'})}")
+        if not self.memory_enabled:
+            raise ValueError("cannot adopt explicit memory into a policy with memory disabled")
+        self._memory = [str(m) for m in state.get("memory", [])]
+        self._queue = []
+
+    def _remember(self, meta: dict) -> None:
+        """Fold this reply's ``Memory:`` facts into the explicit memory and expose it in ``meta``."""
+        if not self.memory_enabled:
+            return
+        facts = memory_from_reply(meta.get("raw_action") or "")
+        self._memory = extend_memory(self._memory, facts)
+        meta["memory_written"] = facts
+        meta["memory_after"] = list(self._memory)
 
     async def propose(self, obs: Any, n: int) -> list[tuple[Any, dict]]:
         """Best-of-N support: ``n`` sampled candidates for the same observation.
@@ -950,6 +1018,7 @@ class StudentPolicy(BranchablePolicy):
                 action, meta = self.parse_choice(ch, ctx)
                 if self.history_notes:
                     self._notes[int(obs.step)] = note_from_reply(meta.get("raw_action") or "")
+                self._remember(meta)
                 meta["_policy_state"] = self.snapshot_state()
                 meta.update({"model_latency_s": latency, "tokens": tokens, "candidate_index": len(results)})
                 results.append((action, meta))
@@ -977,6 +1046,7 @@ class StudentPolicy(BranchablePolicy):
                 a, m = self.parse_choice(chs[0], ctx)
                 if self.history_notes:
                     self._notes[int(obs.step)] = note_from_reply(m.get("raw_action") or "")
+                self._remember(m)
                 m["_policy_state"] = self.snapshot_state()
                 m.update({"model_latency_s": lat, "tokens": dict(self.usage), "candidate_index": idx})
                 return a, m
@@ -989,5 +1059,6 @@ class StudentPolicy(BranchablePolicy):
 
 __all__ = [
     "StudentPolicy", "PROMPT_STYLES", "COORD_SPACES", "build_system_prompt", "build_user_text",
+    "memory_from_reply", "extend_memory", "MEMORY_MAX_FACTS",
     "fara_computer_use_tool", "prepare_image", "FARA_DEFAULT_ALLOWED", "FARA_IDENTITY", "FARA_CRITICAL_POINTS",
 ]
