@@ -201,3 +201,9 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   `~/programs/exp1/logs/eval-a0-sw.done` when finished. Phase 5 skips their finished cells. Main's
   student server was ~75% idle (≈14 requests in flight for 56 episodes), so it does not slow round 1.
   Before `phase4_train_arms.sh` kills `vllm-qwen-dp`, check that main's A0/sw evaluation is done.
+- 09:08 UTC — **main's early A0/sw run stopped** (latency 6 → 21 s/request; round-1 120-step episodes
+  already at ~2,900–3,050 s of the 3,600 s limit). Its containers reaped by tmux `reap-eval`
+  (log `reap-eval.log`). Run `/tmp/eval-a0-sw-main.sh` on main (tmux `eval-a0-sw`) once round 1 is
+  complete and repairs (teacher only) are running; it must finish before phase 4 kills `vllm-qwen-dp`.
+  Aux's A0/sw shard continues (~11 s/request). Phase 5 keeps PER_MODEL 6 (main) / 5 (aux) for the
+  same reason (load vs the episode time limit).
