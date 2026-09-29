@@ -67,9 +67,13 @@ class Project:
         return _backend(self.backend_name, world)
 
 
-def load_project(path: str | Path, *, require_env: bool = True) -> Project:
+def load_project(path: str | Path, *, require_env: bool = True, overrides: Optional[dict[str, Any]] = None) -> Project:
     path = Path(path).resolve()
     raw = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")), "project", KEYS)
+    if overrides:
+        import copy
+        raw = copy.deepcopy(raw)
+        raw["student"] = {**raw["student"], "options": {**raw["student"].get("options", {}), **overrides}}
     if raw.get("version") != 1:
         raise ValueError("project configuration requires version: 1")
     backend = raw.get("backend", "docker")

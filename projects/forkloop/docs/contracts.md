@@ -255,7 +255,8 @@ could not reach); an errored check's detail carries `error` and its own `reason_
 is `ORACLE_ERROR`, never its configured policy code — and `INFRA_ERROR` — the episode
 ended because three consecutive actions failed in the backend
 (`end_reason: infrastructure_error`, step errors prefixed `backend failed:`, which
-`invalid_action_rate` does not count). Neither code hides a violation a clean check
+`invalid_action_rate` does not count), or (since 2026-09-29) it failed after the backend
+dropped at least one of the policy's actions (`details.infra_affected`). Neither code hides a violation a clean check
 observed: if any non-errored check failed, its reason is the verdict's; after an
 infrastructure stop, a cleanly observed `SAFETY_REASONS` failure stays the reason.
 An action the backend rejects because of its content (for example an SDK

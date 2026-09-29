@@ -60,6 +60,18 @@ def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (max(0.0, c - h), min(1.0, c + h))
 
 
+def _overrides(pairs: Optional[list[str]]) -> dict[str, Any]:
+    """``--set model=arm-a2-s1 --set temperature=0`` → student option overrides (values parsed as YAML)."""
+    import yaml
+    out: dict[str, Any] = {}
+    for p in pairs or []:
+        if "=" not in p:
+            raise SystemExit(f"--set expects key=value, got {p!r}")
+        k, v = p.split("=", 1)
+        out[k.strip()] = yaml.safe_load(v)
+    return out
+
+
 def summarize_attempts(rows: list[dict]) -> dict[str, Any]:
     scored = [r for r in rows if r["status"] == "finished"]
     wins = sum(1 for r in scored if (r["reward"] or 0) >= 1.0)
@@ -183,7 +195,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     from .project import load_project
     from .runner import run_attempts
 
-    proj = load_project(args.config)
+    proj = load_project(args.config, overrides=_overrides(args.set))
     _guard_final(args.split, args.final)
     world = proj.world()
     backend = proj.backend(world)
@@ -295,6 +307,8 @@ def add_commands(sub: Any) -> None:
     p.add_argument("--label", default="student")
     p.add_argument("--replicate", type=int, default=1)
     p.add_argument("--final", action="store_true", help="allow the final test pool (pre-registered evaluation only)")
+    p.add_argument("--set", action="append", default=None, metavar="KEY=VALUE",
+                   help="override a student option for this run (e.g. model=<served LoRA name>); recorded in the policy identity")
     p.add_argument("--concurrency", type=int, default=None)
     p.set_defaults(fn=cmd_evaluate)
 
