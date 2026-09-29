@@ -103,3 +103,42 @@ def test_self_hosted_transport_errors_are_retried_hosted_are_not():
     pol = StudentPolicy("http://127.0.0.1:9/v1", "m", transport=httpx.MockTransport(handler))
     a, m = asyncio.run(pol.act(Observation(_png(), "t", 0, [], 1280, 720)))
     assert a is not None and calls["n"] == 3 and not m.get("error")
+
+
+def test_rate_limited_request_is_resent_even_on_hosted_endpoint(tmp_path, monkeypatch):
+    """A 429 is a received refusal (never billed): re-sent, without extra ledger reservations."""
+    from forkloop.spending import SessionLedger
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    ledger = SessionLedger.create(tmp_path / "ledger.sqlite")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return httpx.Response(429, headers={"retry-after": "1"}, json={"error": {"message": "rate limited"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "click(10, 10)"}}],
+                                         "usage": {"prompt_tokens": 10, "completion_tokens": 1}})
+
+    pol = StudentPolicy("https://api.openai.com/v1", "gpt-5.6-luna", session_ledger=str(ledger.path),
+                        transport=httpx.MockTransport(handler))
+    a, m = asyncio.run(pol.act(Observation(_png(), "t", 0, [], 1280, 720)))
+    s = ledger.summary()["services"]["openai"]
+    assert a is not None and not m.get("error") and calls["n"] == 3 and pol.rate_limit_retries == 2
+    assert s["attempts"] == 1 and s["pending_upper_usd"] == 0
+
+
+def test_rate_limit_retries_are_bounded(monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    pol = StudentPolicy("http://127.0.0.1:9/v1", "m", transport=httpx.MockTransport(handler))
+    a, m = asyncio.run(pol.act(Observation(_png(), "t", 0, [], 1280, 720)))
+    assert m.get("error") and calls["n"] == 1 + StudentPolicy.RATE_LIMIT_RETRIES
+
+
+async def _no_sleep(*_a, **_k):
+    return None
