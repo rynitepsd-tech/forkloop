@@ -97,8 +97,13 @@ def repair_units(store: Store, attempt_experiment: str, repair_experiment: str, 
         if a["info"].get("role") != "student" or a["status"] not in (FINISHED, "infra_error"):
             continue
         c = ch.get(a["attempt_id"], [])
+        wall = _sum(c, "attempt_wall_seconds")
+        if mode == "full_restart":
+            # A restart-only pipeline would not capture mid-episode checkpoints: do not charge their overhead.
+            ck_ids = {ck["ckpt_id"] for ck in store.checkpoints(a["attempt_id"]) if ck["step"] > 0}
+            wall -= sum(x["amount"] for ref in ck_ids for x in ch.get(ref, []) if x["kind"] == "checkpoint_seconds")
         u = Unit(arm, _task_key(a["task_id"]), a["task_id"], a["attempt_id"], None, [],
-                 world_hours=_sum(c, "attempt_wall_seconds") / 3600, student_steps=a["n_steps"] or 0)
+                 world_hours=max(0.0, wall) / 3600, student_steps=a["n_steps"] or 0)
         rep = reps.get(a["attempt_id"])
         if rep is not None:
             u.repair_id = rep["repair_id"]
