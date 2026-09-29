@@ -272,3 +272,8 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   scripts/exp1/copy_adapters_to_aux.sh`, then `ADAPTERS_NAME=adapters-v2 PER_MODEL=8 phase5_eval.sh`
   (main) and `ADAPTERS_NAME=adapters-v2 PER_MODEL=7 phase5_eval_aux.sh` (aux). Expected: budget-v2
   ≈ 19:30, training ≈ 21:30, phase 5 ≈ 02:30–03:00 → **renew main/aux leases**.
+- 15:40 UTC — leases renewed: main/aux until 2026-09-30 06:33 UTC, dev until 01:33. Background waiter
+  (controller) starts the v2 A3-s3 on dev when budget-v2 exists and dev's void run has ended.
+  **Phase-5 staging**: main's Docker cap (96) cannot hold phase 5 (88) plus the remaining replacement
+  repairs (36), so aux starts phase 5 as soon as all v2 adapters are on aux, and main starts when
+  "replacement repairs complete" is in resume.log.
