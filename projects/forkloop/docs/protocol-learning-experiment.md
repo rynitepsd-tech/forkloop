@@ -126,3 +126,12 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   closed its tmux session); its 37 in-flight composition attempts are kept as `interrupted`. All
   unscored/interrupted round-1 and demonstration cells receive their replacement attempts under
   the registered rule (≤ 2 extra attempts per cell, original attempts kept).
+- 2026-09-29 09:00 UTC — A0 and `S_W` do not depend on round 1, so their final-test cells run now
+  (aux shard 1 from 08:52, main shard 0 from 09:00), on the same two boxes but on the
+  collection-phase servers (base model + the `sw` adapter only; main TP1 × DP7, aux TP2 × DP4)
+  rather than the phase-5 multi-LoRA servers. Weights, vLLM version, sampling, prompt, budgets
+  and verifier are identical; outcomes stay unread until every planned cell has run. The
+  registered "all models interleaved on the same servers" therefore holds for the nine trained
+  models but not for A0 and `S_W`; this is reported as a limitation. Reason: the student
+  server was ~75% idle during collection (episode time is dominated by the world), and moving
+  these 300 episodes off the last phase shortens it by hours of 3-box time.
