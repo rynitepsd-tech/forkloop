@@ -196,3 +196,11 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   teacher or the method; they will not count toward the replacement limit of the 15:28 rule. The
   rest of the 15:28 extension stands (repair-level replacement; unscored work charged to no arm).
   Collection cannot continue until credit is added. No final-test outcome has been read.
+- 2026-09-29 20:25 UTC — credit restored ≈ 20:10 (verified by a test request). Repairs voided by the
+  outage are annotated `void_reason=provider_outage` (`scripts/exp1/mark_provider_outage.py`: not clean
+  AND started 14:00–20:10 UTC or a branch refused with the 429): 212 checkpoint and 156 full-restart
+  repairs; they are not replacement tries. 14 void repairs with other causes (e.g. `ctrl+-`, failed
+  restores) still count. Clean repairs kept: 14 checkpoint, 37 full restart. Replacement repairs
+  resume at 32 concurrent branches per mode (the level that ran without refusals 10:24–14:00), first
+  for the first 50 failures in selection order (the budget window is at most 49 / 44 failures), then
+  the rest; `repair --order budget` now follows the full selection order over all scored attempts.
