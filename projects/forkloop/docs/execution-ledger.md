@@ -170,3 +170,13 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   `forkloop cleanup --config configs/loop-solari-student.yaml` after the evidence is exported.
 - **Owner actions pending**: push branch `correction-engine-20260929` (push blocked by the
   classifier); posting/submission.
+- 05:30 UTC (box clock) — **Automation on main**: tmux `exp1-chain` waits for the 80 warm-start
+  cells, trains S_W (GPU1, 50 steps), serves it as LoRA `sw` (DP7, :8010), records round 1
+  (`exp1-round1`, 160 tasks, checkpoints), then runs checkpoint repairs (`exp1-round1`) and
+  full-restart repairs (`exp1-restart`). Log: `~/programs/exp1/logs/chain.log`.
+  **Aux**: A0 final-test shard 1/2 running (`exp1-final`, store `~/programs/exp1aux/forkloop.sqlite`,
+  synced to `/lambda/nfs/forkloop-uswest2/programs/exp1aux`); outcomes unread until all cells run.
+  **Solari flagship finalized**: dataset `ds-fc98852a715d` (425 records: 189 correction suffixes, 236
+  restart demos; 6 preference pairs), evidence `runs/loop-solari-student/evidence/`; all 30 checkpoint
+  snapshots deleted after a second delete round (only the pre-existing golden remains).
+  Independent reviewer started on code + Solari artifacts.
