@@ -24,7 +24,8 @@ from typing import Any, Iterable, Optional
 from .store import FINISHED, Store
 
 
-def outcomes(store: "Store | list[Store]", experiment_id: str, arms: dict[str, tuple[str, int]]) -> dict[str, Any]:
+def outcomes(store: "Store | list[Store]", experiment_id: str, arms: dict[str, tuple[str, int]],
+             task_filter: Any = None) -> dict[str, Any]:
     """{arm: {run: {task_id: 0/1/None}}} plus per-cell metadata. The latest attempt of a cell counts
     only if earlier ones were unscored (the predeclared replacement rule)."""
     table: dict[str, dict[int, dict[str, Optional[int]]]] = defaultdict(lambda: defaultdict(dict))
@@ -36,7 +37,7 @@ def outcomes(store: "Store | list[Store]", experiment_id: str, arms: dict[str, t
         if not role.startswith("eval:"):
             continue
         label = role[len("eval:"):]
-        if label not in arms:
+        if label not in arms or (task_filter is not None and not task_filter(a["task_id"])):
             continue
         by_cell[a["cell"]].append(a)
     for cell, atts in by_cell.items():

@@ -43,7 +43,8 @@ def _pool_tasks(pool: str, families: str, per_family: int, skip: int) -> list[An
     from .. import splits
     fams = [f.strip() for f in families.split(",") if f.strip()]
     if pool in ("val", "final_test"):
-        tasks = splits.pool_tasks(pool, fams)
+        # the registered evaluation uses the frozen final_test list only, not the legacy sealed block
+        tasks = splits.pool_tasks(pool, fams, include_legacy_sealed=False)
         out = []
         for f in fams:
             out += [t for t in tasks if t.family == f][skip: skip + per_family]

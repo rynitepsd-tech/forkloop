@@ -76,7 +76,7 @@ def main(a: argparse.Namespace) -> None:
                                                            "world_hours", "student_steps", "teacher_steps", "records",
                                                            "dataset_id", "by_origin")} for k, v in b["arms"].items()}}
     if a.final:
-        res = outcomes(stores, "exp1-eval", ARMS)
+        res = outcomes(stores, "exp1-eval", ARMS, task_filter=lambda t: "-final_test-" in t)  # registered list only
         arms_present = sorted(res["table"])
         rep["evaluation"] = {"arms": {arm: arm_success(res, arm) | {"reasons": reason_rates(res, arm)} for arm in arms_present},
                              "paired": [paired(res, x, y) for x, y in (("A2", "A0"), ("A2", "A1"), ("A2", "A3"),
