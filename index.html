@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="description" content="Forkloop runs two versions of a computer-use agent on the same seeded healthcare task and scores what actually persisted in the database.">
+<meta name="description" content="Forkloop turns a computer-use agent's failures into verified training data: restore a checkpoint, let a teacher try again on independent copies, keep only what the database confirms, and test the retrained agent alone on unseen tasks.">
 <title>Forkloop</title>
 <style>
 :root {
@@ -60,8 +60,13 @@ th { color: var(--muted); font-weight: 600; }
 .table-wrap { overflow-x: auto; }
 .small { font-size: 14px; color: var(--muted); }
 footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; color: var(--muted); }
+.shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.shots figure { margin: 0; }
+.shots img { width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); display: block; }
+.shots figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.steps.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 760px) {
-  .example, .steps { grid-template-columns: 1fr; }
+  .example, .steps, .steps.six { grid-template-columns: 1fr; }
   main { padding-top: 28px; }
 }
 </style>
@@ -70,75 +75,65 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; 
 <main>
   <p class="brand">Forkloop</p>
 
-  <h1>Did your agent get better, or just more confident?</h1>
-  <p class="lede">Forkloop runs two versions of a computer-use agent on the same seeded task, in real OpenEMR and a payer portal, and scores what actually persisted in the database. Every verdict links to the screenshots and rows behind it.</p>
-  <p><strong>Measured:</strong> swapping <code>gpt-5.6-luna</code> for <code>gpt-6-luna</code> in the same agent dropped task success from 23/24 to 4/24 on held-out seeds (exact p = 3.8 × 10⁻⁶). The portal confirmed 13 of the newer model's appeals that the database rejected for a wrong authorization number. <a href="https://github.com/rynitepsd-tech/forkloop/blob/main/projects/forkloop/docs/live-model-upgrade-comparison.md">Read the report →</a></p>
+  <h1>Turn your agent's failures into verified training data.</h1>
+  <p class="lede">When a computer-use agent fails a workflow in real software, Forkloop restores an earlier checkpoint of the world and the agent's memory, lets a teacher try again on independent copies, keeps only the paths the application's database confirms, and exports them with full lineage. Then it tests the retrained agent alone, on tasks it has never seen.</p>
+  <!-- RESULT-LINE: one sentence from docs/results-exp1.md, written after the registered evaluation -->
   <div class="cta">
-    <a class="btn primary" href="report.html">See a real failure report</a>
-    <a class="btn" href="https://github.com/rynitepsd-tech/forkloop/tree/main/projects/forkloop#try-it-in-two-minutes-no-account-no-api-key">Try it offline in 2 minutes</a>
+    <a class="btn primary" href="evidence/solari-flagship/">See a repaired failure</a>
+    <a class="btn" href="https://github.com/rynitepsd-tech/forkloop/tree/main/projects/forkloop#two-minutes-no-account-no-key">Run the loop offline</a>
   </div>
 
-  <section class="card example" aria-labelledby="ex">
-    <a href="report.html"><img src="demo-poster.png" width="1080" height="1350" alt="Evidence report: the portal confirmed the appeal, but the stored authorization number was wrong."></a>
-    <div>
-      <h2 id="ex">The appeal went through. The number was wrong.</h2>
-      <p>A fine-tuned 4B GUI agent opened the patient's authorization letter in OpenEMR, then filed a denial appeal in the payer portal. The portal showed <em>“Appeal submitted.”</em> A screen recording would look like a success.</p>
-      <dl class="pair">
-        <dt>Required</dt><dd><span class="v-good">AUTH-36G14538</span></dd>
-        <dt>Persisted</dt><dd><span class="v-bad">AUTH-3614538</span></dd>
-        <dt>Verdict</dt><dd>WRONG_VALUE · reward 0</dd>
-      </dl>
-      <p class="small">From the retained 74-step episode. All patient and claims data is synthetic.</p>
-      <p><a href="report.html">Open the evidence report →</a> · <a href="demo.mp4">33-second explainer</a></p>
+  <section class="card" aria-labelledby="ex">
+    <h2 id="ex">A stalled attempt, finished from step 8.</h2>
+    <p>An untrained open-weights student (Qwen3.8-27B) had to find an authorization number in OpenEMR and file a denial appeal in a payer portal. It logged in, then stalled: the recorded evidence shows a loop from step 9 until its 90-step budget ran out. Forkloop chose the checkpoint where the stall began, restored two copies of that Solari desktop from a VM snapshot (memory and disk), and let a teacher continue each one.</p>
+    <div class="shots">
+      <figure><img src="img/student-step89.jpg" width="480" height="270" alt="The student's last screen: the OpenEMR calendar, with no appeal filed."><figcaption>Student, step 89 of 90: still on the calendar. Verdict <span class="v-bad">NOT_DONE</span>.</figcaption></figure>
+      <figure><img src="img/branch-done.jpg" width="480" height="270" alt="A teacher branch's last screen: the payer portal shows Appeal submitted for claim C-60011."><figcaption>Branch restored from step 8: appeal filed. Verdict <span class="v-good">OK</span>.</figcaption></figure>
     </div>
+    <dl class="pair">
+      <dt>Restore</dt><dd>79 s from a VM snapshot, twice</dd>
+      <dt>Fidelity</dt><dd>every checksummed table identical; screen distance 0</dd>
+      <dt>Verified</dt><dd>2 of 2 branches, by SQL on the portal and OpenEMR databases</dd>
+      <dt>Exported</dt><dd>the verified steps, each with the exact input the teacher saw</dd>
+    </dl>
+    <p class="small">One of six student failures in that run; four were repaired. All patient and claims data is synthetic. <a href="evidence/solari-flagship/">Open the evidence bundle →</a></p>
   </section>
 
   <section aria-labelledby="how">
-    <h2 id="how">How a comparison works</h2>
-    <div class="steps">
-      <div class="card"><span class="num">1</span><h3>Same world, twice</h3><p>Each seed resets both arms to one seeded snapshot. Task fingerprints, 14 table hashes and audit watermarks must match, or the pair is not compared.</p></div>
-      <div class="card"><span class="num">2</span><h3>One honest attempt</h3><p>Order alternates by seed, and each cell gets a fresh policy and exactly one attempt. Infrastructure failures stay unscored instead of counting against the model.</p></div>
-      <div class="card"><span class="num">3</span><h3>Scored by the database</h3><p>SQL checks for the right record, the right value, no duplicates, no collateral edits and no direct writes, with an exact paired test on the seeds where the arms disagree.</p></div>
+    <h2 id="how">The loop</h2>
+    <div class="steps six">
+      <div class="card"><span class="num">1</span><h3>Record</h3><p>Your agent attempts real workflows. Checkpoints bind the world (VM snapshot or deterministic replay) to the agent's explicit memory and history.</p></div>
+      <div class="card"><span class="num">2</span><h3>Find restart points</h3><p>From evidence only: the first near-miss of a required value, the first damaged checkpoint, the start of a loop, or step 0.</p></div>
+      <div class="card"><span class="num">3</span><h3>Repair</h3><p>A teacher continues from each restored checkpoint on k independent copies. It sees what the agent saw, and is never told why the attempt failed.</p></div>
+      <div class="card"><span class="num">4</span><h3>Verify</h3><p>SQL checks on the applications' databases: right record, right value, no duplicate, no collateral edit. No model judges.</p></div>
+      <div class="card"><span class="num">5</span><h3>Export</h3><p>Immutable datasets with sha256 lineage to every source trajectory, preference pairs, and audits of what each input contained.</p></div>
+      <div class="card"><span class="num">6</span><h3>Evaluate alone</h3><p>The retrained agent runs held-out tasks with no teacher and no search. Unscored infrastructure failures are reported, never counted as passes or failures.</p></div>
     </div>
+  </section>
+
+  <section aria-labelledby="res">
+    <h2 id="res">Does it make the agent better?</h2>
+    <!-- RESULTS: filled only from docs/results-exp1.md after every registered cell has run -->
   </section>
 
   <section aria-labelledby="try">
     <h2 id="try">Try it without an account</h2>
-    <p>The demo runs the real portal and the real verifier against local stand-ins, and writes an HTML report for each of five controls: correct, wrong value, wrong record, duplicate, and interrupted.</p>
+    <p>The offline demo runs every stage of the loop on a toy world with scripted agents (a labelled simulation) and writes the same evidence bundle as a real run.</p>
 <pre><code>git clone https://github.com/rynitepsd-tech/forkloop.git
 cd forkloop/projects/forkloop
 python3.11 -m venv .venv &amp;&amp; . .venv/bin/activate
-pip install '.[world]'
-forkloop demo --out runs/demo</code></pre>
-    <p>Then compare two versions of your own agent with a short YAML file: two variants, the same seeds. Your agent sees screenshots and its own history, never the expected values.</p>
+pip install -e '.[world]'
+forkloop demo-loop --out runs/demo-loop</code></pre>
+    <p>For real runs: the bundled claims-operations world (OpenEMR 8.3 and a synthetic payer portal) runs in Docker, dozens of copies per machine, or on Solari desktops with VM snapshots. Bring your agent through any OpenAI-compatible endpoint or a small Python class, and your own application through <code>world.yaml</code> and a verifier. <a href="evidence/kanboard/">A second world, Kanboard</a>, was built only through that public interface; 5 of its 6 recorded failures were repaired.</p>
   </section>
 
-  <section aria-labelledby="ev">
-    <h2 id="ev">What has been measured so far</h2>
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Evidence</th><th>Result</th><th>Caveat</th></tr></thead>
-      <tbody>
-        <tr><td><a href="https://github.com/rynitepsd-tech/forkloop/blob/main/projects/forkloop/docs/live-model-upgrade-comparison.md">Model upgrade 5.6 → 6 Luna</a> (live, 24 held-out seeds)</td><td>Full task 23/24 vs 4/24; all 19 discordant pairs favour the older model; the database rejected 13 of 17 portal-confirmed appeals from the newer one</td><td>p = 3.8 × 10⁻⁶, pre-registered; one task family and one prompt</td></tr>
-        <tr><td>Reading study, same frozen screens</td><td>Exact authorization typed 20/20 by 5.6 Luna vs 10/20 by 6 Luna</td><td>p = 0.002; recorded states, actions not executed</td></tr>
-        <tr><td>Image detail high/low (live, 14 held-out seeds)</td><td>Full task 4/14 vs 0/14; low detail never logged in; high detail filed 10 appeals and the database rejected 6 for a misread number</td><td>p = 0.125, not significant; a first run was voided by a reset defect</td></tr>
-        <tr><td>Notes on/off (live, 10 matched seeds)</td><td>1/10 vs 1/10; both arms typed the same wrong digit on one seed</td><td>Time budget decided 16 of 20 cells</td></tr>
-        <tr><td><a href="report.html">Live adapter episode</a></td><td>Full workflow completed; one character wrong → rejected</td><td>One episode</td></tr>
-        <tr><td><a href="navigation-comparison.html">Prompt comparison</a></td><td>Workflow prompt 2/2, compact prompt 0/2</td><td>Interrupted run; p = 0.5, not a winner</td></tr>
-        <tr><td>Image-detail study</td><td>Exact authorization typing 19/20 at high detail vs 0/20 at low</td><td>Recorded states; actions not executed</td></tr>
-      </tbody>
-    </table>
-    </div>
-  </section>
-
-  <section class="card" aria-labelledby="help">
-    <h2 id="help">Looking for one team to try it</h2>
-    <p>If you are deciding whether to keep a model, prompt, observation or memory change in a GUI agent, I would like to know whether this kind of evidence changes that decision, and what is missing.</p>
-    <p><a class="btn primary" href="https://github.com/rynitepsd-tech/forkloop/issues/2">Tell me on GitHub</a></p>
+  <section aria-labelledby="prior">
+    <h2 id="prior">What is and isn't new</h2>
+    <p>VM snapshots, GUI agent benchmarks, deterministic verification, agent debugging and corrective training all exist. Forkloop's contribution is joining them into one loop that keeps the evidence: every checkpoint, branch, verdict, charge and dataset is recorded, failed and unscored work stays visible, and the learning claim is tested on held-out tasks under a registered protocol.</p>
   </section>
 
   <footer>
-    Built on <a href="https://getsolari.com">Solari</a> desktops and <a href="https://www.open-emr.org/">OpenEMR</a>. Synthetic data only; not a HIPAA deployment. <a href="https://github.com/rynitepsd-tech/forkloop">Source (MIT)</a>.
+    Built on <a href="https://getsolari.com">Solari</a> desktops, Docker and <a href="https://www.open-emr.org/">OpenEMR</a>. Synthetic data only; not a HIPAA deployment. <a href="https://github.com/rynitepsd-tech/forkloop">Source (MIT)</a> · <a href="report.html">earlier regression reports</a>.
   </footer>
 </main>
 </body>
