@@ -59,11 +59,15 @@ def _hidden_strings(expected: dict[str, Any]) -> list[str]:
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]{3,}")
 
 
-def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, max_distance: int = 2) -> Optional[dict]:
+def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, max_distance: int = 2,
+                     instruction: str = "") -> Optional[dict]:
     """First step whose typed text or memory write contains a near miss (1..max_distance edits)
-    of a hidden expected value. Decoy values (exact matches of other hidden strings) count too:
-    ``decoy_numbers`` are hidden values the task deliberately plants."""
-    targets = _hidden_strings({k: v for k, v in expected.items() if not str(k).startswith("decoy")})
+    of a *hidden* expected value — one the agent must read from the application because the
+    instruction does not state it (an authorization number) — or a planted decoy value.
+    Identifiers the instruction states (claim numbers, a new member id) are excluded: mentioning a
+    neighbouring claim number on screen is not an error (2026-09-29 false positives)."""
+    targets = [t for t in _hidden_strings({k: v for k, v in expected.items() if not str(k).startswith("decoy")})
+               if t not in instruction]
     decoys = set(_hidden_strings({k: v for k, v in expected.items() if str(k).startswith("decoy")}))
     for s in steps:
         texts = []
@@ -117,7 +121,7 @@ def restart_points(attempt: dict[str, Any], ckpts: list[dict[str, Any]], task: A
         if c is not None and all(p.ckpt_id != c["ckpt_id"] for p in out):
             out.append(RestartPoint(c["ckpt_id"], c["step"], reason, evidence))
 
-    origin = near_miss_origin(steps, getattr(task, "expected", {}) or {})
+    origin = near_miss_origin(steps, getattr(task, "expected", {}) or {}, instruction=getattr(task, "instruction", ""))
     if origin is not None:
         add(_last_clean_at_or_before(ckpts, origin["step"]), "origin", origin)
     damaged = [c for c in ckpts if c["status"] == "damaged"]

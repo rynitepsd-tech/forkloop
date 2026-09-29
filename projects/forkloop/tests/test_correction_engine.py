@@ -240,3 +240,15 @@ def test_cli_loop_end_to_end(tmp_path, monkeypatch, capsys):
     assert "0 to run, 1 skipped" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         main(["record", *cfg, "--families", "reach_target", "--split", "final_test", "--seeds", "3", "--experiment", "e2"])
+
+
+def test_near_miss_origin_ignores_identifiers_in_the_instruction():
+    from forkloop.correction.diagnose import near_miss_origin
+    expected = {"claim_number": "C-40011", "auth_number": "AUTH-36G14538", "decoy_numbers": ["AUTH-11A11111"]}
+    instr = "Appeal claim C-40011 with the authorization number from the letter."
+    mention = [{"i": 0, "action": None, "agent": {"memory_written": ["Claim C-40012 belongs to another patient"]}}]
+    assert near_miss_origin(mention, expected, instruction=instr) is None
+    typo = [{"i": 3, "action": {"type": "type", "text": "AUTH-3614538"}, "agent": {}}]
+    assert near_miss_origin(typo, expected, instruction=instr)["step"] == 3
+    decoy = [{"i": 5, "action": None, "agent": {"memory_written": ["auth AUTH-11A11111"]}}]
+    assert near_miss_origin(decoy, expected, instruction=instr)["why"] == "decoy value"
