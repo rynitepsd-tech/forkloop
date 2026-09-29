@@ -8,7 +8,7 @@ not yet measured says so. <!-- PENDING sections are filled only from generated o
 
 | Deliverable | State | Where |
 | --- | --- | --- |
-| Correction engine: record → failures → repair → dataset → evaluate → evidence, API and CLI | Working; offline test suite passes (`pytest`, 700+ tests) | `forkloop/correction/`, `docs/correction.md` |
+| Correction engine: record → failures → repair → dataset → evaluate → evidence, API and CLI | Working; offline test suite passes (`pytest`, 660 tests) | `forkloop/correction/`, `docs/correction.md` |
 | Bound checkpoints (world + agent state) | VM snapshots on Solari; deterministic replay on Docker and any backend; every restore fidelity-checked (table digests + screen distance) | `checkpoint.py`, `restore.py` |
 | Evidence-based restart points | origin (near-miss of a required value), damage, stall, latest clean, start | `diagnose.py` |
 | Qualified world: claims-ops-v1 | Four families (denial, insurance, rescheduling, compositions), SQL verifier, Docker image `forkloop/claims-ops-v1:3` with the world clock at the task anchor | `docs/docker-world.md`, `docs/verifier.md`, `docs/tasks-and-splits.md` |
