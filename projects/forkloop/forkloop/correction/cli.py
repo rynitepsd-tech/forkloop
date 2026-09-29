@@ -530,7 +530,55 @@ def cmd_evidence(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_budget(args: argparse.Namespace) -> int:
+    """Matched-collection-cost datasets per arm (docs/protocol-learning-experiment.md)."""
+    from .budget import Rates, demo_units, repair_units, select, summarize
+    from .dataset import export_dataset
+    from .project import load_project
+
+    proj = load_project(args.config, require_env=False)
+    store, world = proj.store(), proj.world()
+    rates = Rates(args.world_usd_per_hour, args.student_usd_per_step, note=args.rates_note)
+    arms = {"A1": demo_units(store, args.demo_experiment),
+            "A2": repair_units(store, args.attempt_experiment, args.checkpoint_experiment, "checkpoint", "A2"),
+            "A3": repair_units(store, args.attempt_experiment, args.restart_experiment, "full_restart", "A3")}
+    totals = {k: summarize(v, rates) for k, v in arms.items()}
+    budget = min(t["cost_usd"] for t in totals.values())
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    report: dict[str, Any] = {"rates": rates.to_dict(), "totals": totals, "budget_usd": budget, "arms": {}}
+    for frac in [float(x) for x in args.fractions.split(",")]:
+        for arm, units in arms.items():
+            chosen, spent = select(units, budget * frac, rates)
+            tag = f"{arm}-b{int(round(frac * 100)):03d}"
+            srcs = [x for u in chosen for x in u.verified_sources]
+            if arm == "A1":
+                m = export_dataset(store, world, out / tag, include_corrections=False, attempt_ids=srcs, name=f"exp1 {tag}")
+            else:
+                reps = [u.repair_id for u in chosen if u.repair_id]
+                m = export_dataset(store, world, out / tag, include_demos=False, repair_ids=reps, name=f"exp1 {tag}")
+            report["arms"][tag] = {**summarize(chosen, rates), "spent_usd": round(spent, 4), "dataset_id": m["dataset_id"],
+                                   "records": m["counts"]["records"], "by_origin": m["counts"]["by_origin"],
+                                   "units": [u.to_dict(rates) for u in chosen]}
+            print(f"{tag}: units={len(chosen)} spent=${spent:.2f} verified_paths={len(srcs)} records={m['counts']['records']}")
+    (out / "budget-report.json").write_text(json.dumps(report, indent=2, default=str))
+    print(json.dumps({"budget_usd": budget, "totals": totals}, indent=2))
+    return 0
+
+
 def add_cleanup_command(sub: Any) -> None:
+    p = sub.add_parser("budget", help="matched-collection-cost datasets for the demonstration, Forkloop and restart arms")
+    p.add_argument("--config", required=True)
+    p.add_argument("--demo-experiment", required=True)
+    p.add_argument("--attempt-experiment", required=True)
+    p.add_argument("--checkpoint-experiment", required=True)
+    p.add_argument("--restart-experiment", required=True)
+    p.add_argument("--world-usd-per-hour", type=float, default=0.35)
+    p.add_argument("--student-usd-per-step", type=float, default=0.001)
+    p.add_argument("--rates-note", default="main box $22.32/h / 64 worlds; 7 A100 replicas ≈ $19.53/h at ≈ 6 steps/s")
+    p.add_argument("--fractions", default="0.25,0.5,1.0")
+    p.add_argument("--out", required=True)
+    p.set_defaults(fn=cmd_budget)
     p = sub.add_parser("evidence", help="shareable evidence bundle: one repaired failure end to end, datasets, lineage")
     p.add_argument("--config", action="append", required=True, help="project YAML (repeatable)")
     p.add_argument("--out", required=True)
