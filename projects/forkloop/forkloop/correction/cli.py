@@ -440,7 +440,57 @@ def cmd_reap_machines(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo_loop(args: argparse.Namespace) -> int:
+    """The whole loop offline on the toy world: record -> failures -> repair -> dataset -> evidence."""
+    import os
+    import shutil
+
+    out = Path(args.out).resolve()
+    if out.exists():
+        raise SystemExit(f"{out} exists; choose a new directory")
+    out.mkdir(parents=True)
+    here = Path(__file__).resolve().parents[2]
+    shutil.copy(here / "examples" / "loop_agents.py", out / "loop_agents.py")
+    (out / "project.yaml").write_text(
+        "# OFFLINE SIMULATION: toy world on the in-process fake backend (no browser, no model).\n"
+        "version: 1\nworld: toy-counter\nbackend: fake\nstore: store/forkloop.sqlite\nhistory_k: 50\nsettle: fixed\n"
+        "checkpoints: {strategy: replay, every: 1}\n"
+        "student: {name: toy student, factory: 'loop_agents:student', revision: examples/loop_agents.py}\n"
+        "teacher: {name: toy teacher, factory: 'loop_agents:teacher', revision: examples/loop_agents.py}\n"
+        "repair: {k: 2, max_restart_points: 2, concurrency: 2, settle: fixed}\nconcurrency: 2\n")
+    os.environ.setdefault("FORKLOOP_POOL_LOG", "0")
+    cwd = os.getcwd()
+    os.chdir(out)
+    try:
+        from ..cli import main as cli_main
+        cfg = ["--config", "project.yaml"]
+        steps = [["record", *cfg, "--families", "reach_target", "--split", "train", "--seeds", "1-4", "--experiment", "demo"],
+                 ["failures", *cfg, "--experiment", "demo"],
+                 ["repair", *cfg, "--experiment", "demo"],
+                 ["dataset", *cfg, "--out", "dataset", "--experiment", "demo", "--name", "toy corrections"]]
+        for argv in steps:
+            print(f"\n$ forkloop {' '.join(argv)}")
+            rc = cli_main(argv)
+            if rc:
+                return rc
+        from .evidence import write_evidence
+        from .project import load_project
+        store = load_project("project.yaml", require_env=False).store()
+        path = write_evidence({"toy": store}, Path("evidence"), title="Toy loop evidence (offline simulation)",
+                              datasets=[Path("dataset")],
+                              intro="<p class='note'>OFFLINE SIMULATION on the toy-counter world and the in-process fake "
+                                    "backend: synthetic screens, scripted agents. It shows the mechanics of the loop, not "
+                                    "model or application evidence.</p>")
+        print(f"\nEvidence: {out / path.relative_to(out) if path.is_absolute() else out / path}")
+    finally:
+        os.chdir(cwd)
+    return 0
+
+
 def add_cleanup_command(sub: Any) -> None:
+    p = sub.add_parser("demo-loop", help="the whole correction loop offline on the toy world (no account, no model)")
+    p.add_argument("--out", default="runs/demo-loop")
+    p.set_defaults(fn=cmd_demo_loop)
     p = sub.add_parser("reap-machines", help="kill machines whose runner (on this store) stopped heartbeating")
     p.add_argument("--config", required=True)
     p.add_argument("--dry-run", action="store_true")
