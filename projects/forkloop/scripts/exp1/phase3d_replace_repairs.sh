@@ -1,5 +1,5 @@
 #!/bin/bash
-# exp1 phase 3d (protocol deviation 2026-09-29 15:45): replacement repairs for void repairs, both modes, in
+# exp1 phase 3d (protocol deviation 2026-09-29 15:28): replacement repairs for void repairs, both modes, in
 # the matched-cost selection order, 18 concurrent branches each; budget-v2 as soon as every selected
 # failure is settled (dry run until then); then phase 4 on budget-v2 → adapters-v2. The remaining
 # replacement repairs keep running for the descriptive repair statistics.

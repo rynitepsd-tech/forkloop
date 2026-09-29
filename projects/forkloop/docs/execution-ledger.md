@@ -260,3 +260,15 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   8 finish; then `PER_MODEL=8 scripts/exp1/phase5_eval.sh` on main (11 models × 8 = 88 < cap 96) and
   **`PER_MODEL=7`** `scripts/exp1/phase5_eval_aux.sh` on aux (9 models × 7 = 63 < aux cap **64**; the
   earlier note saying 8 was wrong for aux).
+- 15:15–15:31 UTC — **collection found to be dominated by OpenAI 429s** (622 of 1,029 repair branches;
+  see protocol deviation 15:28). Void training runs (main tmux `train-*`, dev `train-A3-s3`, started
+  15:08–15:11 on `datasets/budget`) are left to finish and never evaluated. Code `d344f80`/`1358318`
+  deployed to all boxes 15:30. Main tmux **`exp1-repair2`** (`scripts/exp1/phase3d_replace_repairs.sh`,
+  logs `repair2-*.log`, `budget-v2-dryrun.log`, `phase4-v2.log`): replacement repairs (18 + 18 concurrent,
+  selection order) → `datasets/budget-v2` when the window is settled (dry run every 10 min) → phase 4
+  on `adapters-v2`. At 15:31 the dry run gave B = $27.27 (A1, unscored work excluded) and 107 of 121
+  checkpoint repairs void/pending. Controller next: `BUDGET_NAME=budget-v2 ADAPTERS_NAME=adapters-v2
+  scripts/exp1/train_on_dev.sh start` once budget-v2 exists (then `fetch`), `ADAPTERS_NAME=adapters-v2
+  scripts/exp1/copy_adapters_to_aux.sh`, then `ADAPTERS_NAME=adapters-v2 PER_MODEL=8 phase5_eval.sh`
+  (main) and `ADAPTERS_NAME=adapters-v2 PER_MODEL=7 phase5_eval_aux.sh` (aux). Expected: budget-v2
+  ≈ 19:30, training ≈ 21:30, phase 5 ≈ 02:30–03:00 → **renew main/aux leases**.

@@ -162,7 +162,7 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   is unscored under the infrastructure rule. Early in the repairs 7 of 64 finished branches (both
   modes) were lost this way. The mapping is left unchanged until exp1 ends, so every collection and
   evaluation cell runs with the same backend; affected cells are reported with the unscored counts.
-- 2026-09-29 15:45 UTC — **repairs were dominated by infrastructure; the registered infrastructure
+- 2026-09-29 15:28 UTC — **repairs were dominated by infrastructure; the registered infrastructure
   rule is extended to repairs** (before any trained model was evaluated; no final-test outcome of any
   model has been read). Of 1,029 repair branches, 622 failed on OpenAI HTTP 429 (the account's rate
   limit at 64 concurrent teacher branches; the bounded retry gave up), 26 on the `ctrl+-` backend
