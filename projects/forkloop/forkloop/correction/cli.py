@@ -216,12 +216,15 @@ def cmd_repair(args: argparse.Namespace) -> int:
     fails = [a for a in failures(store, experiment_id=args.source_experiment or args.experiment)
              if a["info"].get("role") == args.role]
     if args.order == "budget":
-        # the matched-cost selection order (families round-robin, each in seed order), so the repairs
-        # inside a budget window finish first
+        # the matched-cost selection order over ALL scored attempts of the source experiment (families
+        # round-robin, each in seed order; successes take their slots too), so the repairs inside a
+        # budget window come first
         from .budget import Unit, _task_key, interleave
-        fails = [a for u in interleave([Unit("", _task_key(a["task_id"]), a["task_id"], a["attempt_id"], None, [])
-                                        for a in fails])
-                 for a in fails if a["attempt_id"] == u.attempt_id]
+        src = [a for a in store.attempts(experiment_id=args.source_experiment or args.experiment)
+               if a["info"].get("role") == args.role and a["status"] == "finished"]
+        pos = {u.attempt_id: i for i, u in enumerate(interleave(
+            [Unit("", _task_key(a["task_id"]), a["task_id"], a["attempt_id"], None, []) for a in src]))}
+        fails = sorted(fails, key=lambda a: pos.get(a["attempt_id"], len(pos)))
     ids = args.attempt or [a["attempt_id"] for a in fails]
     if args.limit:
         ids = ids[: args.limit]
