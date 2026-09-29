@@ -57,6 +57,7 @@ def _hidden_strings(expected: dict[str, Any]) -> list[str]:
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]{3,}")
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, max_distance: int = 2,
@@ -66,9 +67,15 @@ def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, m
     instruction does not state it (an authorization number) — or a planted decoy value.
     Identifiers the instruction states (claim numbers, a new member id) are excluded: mentioning a
     neighbouring claim number on screen is not an error (2026-09-29 false positives)."""
-    targets = list(values) if values is not None else [
-        t for t in _hidden_strings({k: v for k, v in expected.items() if not str(k).startswith("decoy")})
-        if t not in instruction]
+    base = list(values) if values is not None else _hidden_strings(
+        {k: v for k, v in expected.items() if not str(k).startswith("decoy")})
+    # Dates are not transcription codes: a different date on screen is a different appointment,
+    # not a misread (review 2026-09-29).
+    base = [t for t in base if not _DATE_RE.fullmatch(t)]
+    typed_targets = base
+    # A memorized near miss counts only for values the agent must read from the application (not in
+    # the instruction): noting an on-screen lure next to an instructed value is correct behaviour.
+    memory_targets = [t for t in base if t not in instruction]
     decoys = set(_hidden_strings({k: v for k, v in expected.items() if str(k).startswith("decoy")}))
     for s in steps:
         texts = []
@@ -78,6 +85,7 @@ def near_miss_origin(steps: list[dict[str, Any]], expected: dict[str, Any], *, m
         for fact in (s.get("agent") or {}).get("memory_written", []) or []:
             texts.append(("memory", fact))
         for kind, text in texts:
+            targets = typed_targets if kind == "typed" else memory_targets
             for tok in _TOKEN_RE.findall(text):
                 if tok in decoys:
                     return {"step": s["i"], "kind": kind, "why": "decoy value"}

@@ -252,3 +252,25 @@ def test_near_miss_origin_ignores_identifiers_in_the_instruction():
     assert near_miss_origin(typo, expected, instruction=instr)["step"] == 3
     decoy = [{"i": 5, "action": None, "agent": {"memory_written": ["auth AUTH-11A11111"]}}]
     assert near_miss_origin(decoy, expected, instruction=instr)["why"] == "decoy value"
+
+
+def test_origin_ignores_dates_and_noted_lures_but_catches_typed_typos():
+    from forkloop.correction.diagnose import near_miss_origin
+    exp = {"target_date": "2026-09-17", "new_member": "W12345678", "auth_number": "AUTH-36G14538"}
+    instr = "Resubmit with member ID W12345678."
+    note_date = [{"i": 2, "action": None, "agent": {"memory_written": ["Current appointment 2026-09-14"]}}]
+    assert near_miss_origin(note_date, exp, instruction=instr, values=["2026-09-17", "W12345678"]) is None
+    note_lure = [{"i": 4, "action": None, "agent": {"memory_written": ["form prefilled W12345679 (wrong)"]}}]
+    assert near_miss_origin(note_lure, exp, instruction=instr, values=["W12345678"]) is None
+    typo = [{"i": 6, "action": {"type": "type", "text": "W12345679"}, "agent": {}}]
+    assert near_miss_origin(typo, exp, instruction=instr, values=["W12345678"])["step"] == 6
+
+
+def test_budget_interleaves_families():
+    from forkloop.correction.budget import Unit, interleave
+    us = []
+    for fam, rng in (("compose_claims", range(100, 104)), ("resolve_denial", range(1, 5))):
+        for seed in rng:
+            us.append(Unit("A", f"{seed:09d}:{fam}", f"{fam}-train_v2-{seed:06d}", f"a{fam}{seed}", None, []))
+    fams = [u.task_id.split("-")[0] for u in interleave(us)[:4]]
+    assert fams == ["compose_claims", "resolve_denial", "compose_claims", "resolve_denial"]

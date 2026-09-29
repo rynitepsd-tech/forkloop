@@ -155,14 +155,23 @@ class Env:
         shot_before = ep.last_shot
         parsed: Optional[Action] = None
         error: Optional[str] = None
+        provider_failure = False
         if action is None:
             error = meta.get("error") or "policy produced no action"
+            # A truthy ``error`` is a provider/runtime failure (model server down, timeout, HTTP error),
+            # not the policy's invalid output (policies/base.py): infrastructure, never scored as invalid.
+            provider_failure = meta.get("error") is True or (isinstance(meta.get("error"), str) and bool(meta.get("error")))
+            if provider_failure:
+                error = f"{BACKEND_FAILURE_PREFIX} policy provider: {meta.get('note') or meta.get('error')}"
         else:
             try:
                 parsed = Action.parse(action, width=self.width, height=self.height)
             except InvalidAction as e:
                 error = str(e)
-        if parsed is None:
+        if parsed is None and provider_failure:
+            ep.infra_errors += 1
+            ep.infra_total += 1
+        elif parsed is None:
             ep.invalid += 1
         else:
             try:
@@ -238,6 +247,11 @@ class Env:
             verdict = await Oracle(ctx).evaluate(ep.task.oracle)
         except Exception as e:  # noqa: BLE001
             verdict = Verdict.error(f"{type(e).__name__}: {e}")
+        if ep.infra_total > 0 and verdict.reward >= 1.0:
+            # Symmetric rule (review 2026-09-29): an episode the infrastructure interfered with is
+            # unscored whatever its outcome, so replacement cannot favour successes.
+            verdict.details["infra_affected"] = {"backend_failures": ep.infra_total, "end_reason": ep.end_reason}
+            verdict.reason_code = "INFRA_ERROR"
         if (ep.end_reason == "infrastructure_error" or ep.infra_total > 0) and verdict.reward < 1.0:
             # The backend cut the episode short or dropped an action the policy chose, so missing
             # or wrong work is not attributable to the policy (2026-09-29: an agent that counted a

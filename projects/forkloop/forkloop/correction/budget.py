@@ -118,9 +118,25 @@ def repair_units(store: Store, attempt_experiment: str, repair_experiment: str, 
     return sorted(units, key=lambda u: (u.key, u.attempt_id))
 
 
+def interleave(units: list[Unit]) -> list[Unit]:
+    """Round-robin across families (each family in seed order), so a truncated budget keeps every
+    family represented (review 2026-09-29: seed order starved compose_claims)."""
+    fams: dict[str, list[Unit]] = {}
+    for u in sorted(units, key=lambda u: (u.key, u.attempt_id)):
+        fams.setdefault(u.task_id.rsplit("-", 2)[0], []).append(u)
+    out, i = [], 0
+    names = sorted(fams)
+    while any(i < len(fams[f]) for f in names):
+        for f in names:
+            if i < len(fams[f]):
+                out.append(fams[f][i])
+        i += 1
+    return out
+
+
 def select(units: list[Unit], budget_usd: float, rates: Rates) -> tuple[list[Unit], float]:
     chosen, spent = [], 0.0
-    for u in units:
+    for u in interleave(units):
         c = u.cost(rates)
         if spent + c > budget_usd + 1e-9:
             break
@@ -137,4 +153,4 @@ def summarize(units: list[Unit], rates: Rates) -> dict[str, Any]:
             "student_steps": sum(u.student_steps for u in units), "teacher_steps": sum(u.teacher_steps for u in units)}
 
 
-__all__ = ["Rates", "Unit", "demo_units", "repair_units", "select", "summarize"]
+__all__ = ["Rates", "Unit", "demo_units", "repair_units", "select", "summarize", "interleave"]

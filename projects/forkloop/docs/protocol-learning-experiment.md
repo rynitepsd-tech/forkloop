@@ -104,3 +104,14 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   exhaustion; wrong current date; OpenEMR date-picker trouble), against 18/20 insurance and 10/12
   denial. No change to teacher, prompt or budget; rescheduling stays in training collection and
   evaluation as registered and is reported per family.
+- 2026-09-29 05:50 UTC — **deviations after the independent review, before round 1 or any
+  training** (review report `runs/review/review-1.md`, local):
+  1. Matched-cost selection takes units **round-robin across families** (each in seed order)
+     instead of pure seed order, which would have dropped `compose_claims` from truncated arms.
+  2. A model-server failure (HTTP error, timeout: `metadata.error`) is **infrastructure**, not the
+     policy's invalid action; and an episode the infrastructure interfered with is **unscored
+     whatever its outcome** (previously only failures), then replaced under the same rule.
+  3. Restart-point "origin" evidence ignores dates and, for memory notes, values stated in the
+     instruction (typed near misses still count).
+  Phase-1 teacher collection (W, A1) ran before these changes; (2) could only have turned a few
+  teacher failures into unscored cells, and those cells are not training data either way.
