@@ -238,6 +238,9 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         raise SystemExit("the project has no student policy")
     tasks = _tasks(world, args.families, args.split, args.seeds, allow_final=args.final, pool=args.pool,
                    per_family=args.per_family, skip=args.skip)
+    if args.shard:
+        k, n = (int(x) for x in args.shard.split("/"))
+        tasks = [t for i, t in enumerate(tasks) if i % n == k]   # same split for every model (server balance)
     # the student alone: no teacher, no search, one attempt per cell; step-0 bookkeeping only
     ckpt = CheckpointPolicy(strategy="replay", every=0, before_types=False, before_keys=(), oracle_status=False)
     role = f"eval:{args.label}"
@@ -352,6 +355,7 @@ def add_commands(sub: Any) -> None:
     p.add_argument("--label", default="student")
     p.add_argument("--replicate", type=int, default=1)
     p.add_argument("--final", action="store_true", help="allow the final test pool (pre-registered evaluation only)")
+    p.add_argument("--shard", default=None, metavar="K/N", help="only tasks whose list position %% N == K")
     p.add_argument("--set", action="append", default=None, metavar="KEY=VALUE",
                    help="override a student option for this run (e.g. model=<served LoRA name>); recorded in the policy identity")
     p.add_argument("--concurrency", type=int, default=None)

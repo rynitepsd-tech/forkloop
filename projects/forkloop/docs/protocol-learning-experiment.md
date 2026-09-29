@@ -95,3 +95,7 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
 
 - 2026-09-29 05:20 UTC — registration. Pilots (train positions 0–9, images `:1`, prompts v2/v3)
   are development evidence only.
+- 2026-09-29 05:30 UTC — evaluation runs on two servers (main: 8×A100-80, TP1; aux: 8×A100-40,
+  TP2). For **every** model the final-test list is split the same way: list position mod 2 = 0 on
+  main, = 1 on aux, so any server effect is balanced across arms. Cells of one model may run at
+  different times; nobody reads final-test outcomes until all planned cells have run.
