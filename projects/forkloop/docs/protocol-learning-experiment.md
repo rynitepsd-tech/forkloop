@@ -118,3 +118,11 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
 - 2026-09-29 05:55 UTC — experiment id `exp1-final` (A0, aux shard) was started at 05:25 under the
   pre-review scoring rules and stopped at 05:55 with its outcomes unread. It is **void** and never
   analysed; all final-test cells run under `exp1-eval` with the fixed code (`4d7ef5d`).
+- 2026-09-29 08:45 UTC — round 1 showed ~3 vLLM transport `ReadError`s per 120-step student
+  episode; under the symmetric rule those episodes were unscored (correctly), leaving few scored
+  failures to repair. The student policy now re-sends a request that failed in transport to a
+  self-hosted endpoint (no response was received; hosted, billable endpoints never retry). The
+  round-1 recorder was also interrupted at 08:30 by an operator error (killing the phase chain
+  closed its tmux session); its 37 in-flight composition attempts are kept as `interrupted`. All
+  unscored/interrupted round-1 and demonstration cells receive their replacement attempts under
+  the registered rule (≤ 2 extra attempts per cell, original attempts kept).
