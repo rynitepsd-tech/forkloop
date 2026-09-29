@@ -21,6 +21,11 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+#: Stored ceiling of an owner-authorized uncapped service (``SessionLedger.create``). A real
+#: number, not infinity, so SQLite and JSON round-trip it; no reservation can approach it.
+UNCAPPED = 1e15
+
+
 SOLARI_LIFETIME_ENV = "FORKLOOP_SOLARI_MAX_LIFETIME_MIN"
 SOLARI_BALANCE_ENV = "FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND"
 SOLARI_SETUP_MARGIN_H = 10 / 60
@@ -176,6 +181,10 @@ class SessionLedger:
 
     @classmethod
     def create(cls, path: str | Path, *, limits: dict | None = None):
+        """``limits``: ``{service: {"ceiling": usd, "stop": usd}}``, or ``{service: {"uncapped": True,
+        "authorization": "<who authorized what, when>"}}`` for an owner-authorized service with no
+        monetary cap. Uncapped services still reserve, reconcile and report every operation; only
+        the ceiling check is lifted, and the authorization text is stored in the ledger."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         # Exclusive creation prevents an accidental new session from clearing spend.
@@ -191,13 +200,28 @@ class SessionLedger:
                 CREATE TABLE operations(id TEXT PRIMARY KEY, service TEXT NOT NULL, label TEXT NOT NULL,
                     reserved REAL NOT NULL, actual REAL, status TEXT NOT NULL, created REAL NOT NULL,
                     updated REAL NOT NULL, evidence TEXT NOT NULL DEFAULT '{}');
+                CREATE TABLE authorizations(service TEXT PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL);
             """)
             for name, spec in limits.items():
+                if spec.get("uncapped"):
+                    text = str(spec.get("authorization") or "").strip()
+                    if len(text) < 20:
+                        raise ValueError(f"{name}: an uncapped service needs a recorded authorization statement")
+                    db.execute("INSERT INTO services VALUES (?, ?, ?)", (name, UNCAPPED, UNCAPPED))
+                    db.execute("INSERT INTO authorizations VALUES (?, ?, ?)", (name, text, time.time()))
+                    continue
                 ceiling, stop = float(spec["ceiling"]), float(spec["stop"])
                 if not (math.isfinite(ceiling) and 0 <= stop <= ceiling):
                     raise ValueError("invalid service limit")
                 db.execute("INSERT INTO services VALUES (?, ?, ?)", (name, ceiling, stop))
         return cls(path)
+
+    def authorizations(self) -> dict[str, str]:
+        with sqlite3.connect(self.path) as db:
+            try:
+                return {s: t for s, t in db.execute("SELECT service, text FROM authorizations")}
+            except sqlite3.OperationalError:
+                return {}
 
     def reserve(self, service: str, upper_usd: float, *, label: str, cleanup: bool = False,
                 evidence: dict | None = None) -> str:
@@ -283,7 +307,9 @@ class SessionLedger:
                 pending = sum(o["reserved"] for o in ops if o["actual"] is None)
                 out[spec["name"]] = {"actual_usd": actual, "pending_upper_usd": pending,
                                      "accounted_upper_usd": actual + pending, "attempts": len(ops),
-                                     "ceiling_usd": spec["ceiling"], "stop_usd": spec["stop"],
+                                     "ceiling_usd": None if spec["ceiling"] >= UNCAPPED else spec["ceiling"],
+                                     "stop_usd": None if spec["stop"] >= UNCAPPED else spec["stop"],
+                                     "uncapped": spec["ceiling"] >= UNCAPPED,
                                      "blocked": any(json.loads(o["evidence"]).get("reservation_bound_violated") for o in ops)}
             return {"services": out, "operations": operations}
 

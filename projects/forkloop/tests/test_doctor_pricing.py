@@ -57,22 +57,25 @@ async def test_fractional_memory_cannot_underreserve_before_create(tmp_path, rev
     assert ledger.summary()['operations'] == []
 
 
-async def test_compute_review_cannot_authorize_unbounded_storage(tmp_path, monkeypatch):
-    monkeypatch.delenv('FORKLOOP_SOLARI_PRICING_FILE', raising=False)
-    pricing = load_solari_pricing(today=dt.date(2026, 9, 15))
-    data = pricing.public_info()
-    data.update(acknowledged=True, reviewed_on=dt.date.today().isoformat(),
-                valid_until=(dt.date.today() + dt.timedelta(days=1)).isoformat(),
-                storage_starts_on=min(dt.date.today(), dt.date(2026, 10, 1)).isoformat())
-    path = tmp_path / 'pricing.json'
-    path.write_text(json.dumps(data))
+async def test_snapshots_are_registered_with_a_lease_before_the_provider_call(tmp_path, monkeypatch):
+    """Replaces the 2026-09 date guard: retained storage is bounded by an explicit registry row
+    (purpose, owner, lease) written before the provider is asked, and by cleanup/reap."""
+    from forkloop.ops.registry import Registry
+    monkeypatch.setenv('FORKLOOP_REGISTRY', str(tmp_path / 'resources.jsonl'))
+    import forkloop.ops.registry as regmod
+    monkeypatch.setattr(regmod, 'DEFAULT_REGISTRY', str(tmp_path / 'resources.jsonl'))
+    seen = []
+
     class Desktop:
         id = 'synthetic'
         async def snapshot(self, name=None):
-            pytest.fail('unbounded retained storage reached provider')
-    machine = SolariMachine(Desktop(), SimpleNamespace(pricing_file=str(path)), (1280, 720), {})
-    with pytest.raises(BackendError):
-        await machine.snapshot()
+            seen.append([r.state for r in Registry(tmp_path / 'resources.jsonl').live()])
+            return 'snap_x1'
+    machine = SolariMachine(Desktop(), SimpleNamespace(pricing_file=None), (1280, 720), {'run_id': 'r1'})
+    assert await machine.snapshot('cp') == 'snap_x1'
+    assert seen == [['requested']]
+    live = Registry(tmp_path / 'resources.jsonl').live()
+    assert len(live) == 1 and live[0].provider_id == 'snap_x1' and live[0].lease_until and live[0].owner == 'r1'
 
 
 async def test_offline_doctor_never_constructs_client_or_leaks_private_evidence(tmp_path, monkeypatch, reviewed_solari_pricing):

@@ -427,6 +427,11 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         limits = {"solari": {"ceiling": args.solari_usd, "stop": args.solari_usd * 0.8},
                   "openai": {"ceiling": args.openai_usd, "stop": args.openai_usd * 0.9},
                   "gpu": {"ceiling": 0.0, "stop": 0.0}}
+        for service in (args.uncapped or "").split(","):
+            if service.strip():
+                if not args.authorization:
+                    raise SystemExit("--uncapped needs --authorization: who authorized uncapped spending, and when")
+                limits[service.strip()] = {"uncapped": True, "authorization": args.authorization}
         SessionLedger.create(path, limits=limits)
         print(f"created {path}")
         print(f"export FORKLOOP_SESSION_LEDGER={path.resolve()}")
@@ -656,6 +661,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     sub.add_parser("worlds", help="list worlds").set_defaults(fn=cmd_worlds)
     _add_correction_commands(sub)  # record / failures / repair / dataset / evaluate / status / inspect
+    from .ops.cli import add_commands as _add_ops_commands
+    _add_ops_commands(sub)  # ops inventory / renew / retain / reap
     p = sub.add_parser("demo", help="run five offline verifier controls and write inspectable HTML reports")
     p.add_argument("--out", default="runs/offline-controls", help="new output directory; never overwritten")
     p.set_defaults(fn=cmd_demo)
@@ -731,6 +738,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--create", action="store_true")
     p.add_argument("--solari-usd", type=float, default=10.0, help="Solari ceiling in USD for this session (create)")
     p.add_argument("--openai-usd", type=float, default=0.0, help="OpenAI ceiling in USD for this session (create)")
+    p.add_argument("--uncapped", default=None, help="comma-separated services with no monetary cap (still fully accounted)")
+    p.add_argument("--authorization", default=None, help="the owner's authorization statement recorded for --uncapped")
     p.set_defaults(fn=cmd_ledger)
     p = sub.add_parser("reset-bench", help="reset benchmark (Chart 2)", add_help=False)
     p.add_argument("rest", nargs=argparse.REMAINDER)

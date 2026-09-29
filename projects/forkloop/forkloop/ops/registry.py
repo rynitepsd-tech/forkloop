@@ -20,7 +20,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-DEFAULT_REGISTRY = os.environ.get("FORKLOOP_REGISTRY", "runs/ops/resources.jsonl")
+#: Default location (cwd-independent): ``$FORKLOOP_REGISTRY`` or ``~/.forkloop/resources.jsonl``.
+DEFAULT_REGISTRY = str(Path.home() / ".forkloop" / "resources.jsonl")
+
+
+def default_registry_path() -> Path:
+    return Path(os.environ.get("FORKLOOP_REGISTRY") or DEFAULT_REGISTRY)
 
 #: Terminal states: the resource no longer exists at the provider (confirmed by inventory).
 GONE = {"terminated", "deleted"}
@@ -54,8 +59,8 @@ class Resource:
 
 
 class Registry:
-    def __init__(self, path: str | Path = DEFAULT_REGISTRY) -> None:
-        self.path = Path(path)
+    def __init__(self, path: str | Path | None = None) -> None:
+        self.path = Path(path) if path else default_registry_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     # ---------------------------------------------------------------- writes
