@@ -50,6 +50,9 @@ def plan_cells(store: Store, tasks: Iterable[Any], *, role: str, experiment_id: 
         prior = store.attempts(experiment_id=experiment_id, cell=cell)
         if any(a["status"] == FINISHED for a in prior):
             plans.append(CellPlan(cell, task, 0, "finished"))
+        elif any(a["status"] == "running" for a in prior):
+            # rows of dead runners were just marked interrupted; a running row belongs to a live runner
+            plans.append(CellPlan(cell, task, 0, "running in another live runner"))
         elif len(prior) >= 1 + infra_retries:
             plans.append(CellPlan(cell, task, 0, f"exhausted after {len(prior)} unscored attempts"))
         else:

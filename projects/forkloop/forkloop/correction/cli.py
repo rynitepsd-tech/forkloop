@@ -101,6 +101,23 @@ def _overrides(pairs: Optional[list[str]]) -> dict[str, Any]:
     return out
 
 
+def _preflight_served(policy: Any) -> None:
+    """Refuse to start if a self-hosted student endpoint does not serve the requested model name
+    (a missing adapter would otherwise turn every cell into provider errors; review 2026-09-29)."""
+    opts = (policy.identity or {}).get("options", {}) if policy is not None else {}
+    base, model = str(opts.get("base_url", "")), opts.get("model")
+    if not base or "api.openai.com" in base or not model:
+        return
+    import httpx
+    try:
+        r = httpx.get(base.rstrip("/") + "/models", timeout=15)
+        ids = {m.get("id") for m in r.json().get("data", [])}
+    except Exception as e:  # noqa: BLE001
+        raise SystemExit(f"cannot reach the student endpoint {base}: {type(e).__name__}: {e}")
+    if model not in ids:
+        raise SystemExit(f"{base} does not serve model {model!r} (serves {sorted(i for i in ids if i)})")
+
+
 def summarize_attempts(rows: list[dict]) -> dict[str, Any]:
     scored = [r for r in rows if r["status"] == "finished"]
     wins = sum(1 for r in scored if (r["reward"] or 0) >= 1.0)
@@ -132,6 +149,7 @@ def cmd_record(args: argparse.Namespace) -> int:
     policy = proj.teacher if args.role == "teacher" else proj.student
     if policy is None:
         raise SystemExit(f"the project has no {args.role} policy")
+    _preflight_served(policy)
     tasks = _tasks(world, args.families, args.split, args.seeds, pool=args.pool, per_family=args.per_family,
                    skip=args.skip)
     ckpt = proj.checkpoints
@@ -236,6 +254,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     policy = proj.student
     if policy is None:
         raise SystemExit("the project has no student policy")
+    _preflight_served(policy)
     tasks = _tasks(world, args.families, args.split, args.seeds, allow_final=args.final, pool=args.pool,
                    per_family=args.per_family, skip=args.skip)
     if args.shard:

@@ -12,9 +12,11 @@ if ! curl -s -m 3 127.0.0.1:8010/v1/models | grep -q '"A3-s3"'; then
   until curl -s -m 3 127.0.0.1:8010/v1/models | grep -q '"A3-s3"'; do sleep 15; done
 fi
 SHARD=${SHARD:-0/2}
-for m in A0 sw A1-s1 A1-s2 A1-s3 A2-s1 A2-s2 A2-s3 A3-s1 A3-s2 A3-s3; do
-  SET=""; [ "$m" != "A0" ] && SET="--set model=$m"
-  forkloop evaluate --config ${EVAL_CONFIG:-configs/exp1.yaml} --pool final_test --final --per-family 1000 --shard $SHARD \
-    --families $FAMS --label $m $SET --experiment exp1-eval --concurrency ${PER_MODEL:-6} > ~/programs/exp1/logs/eval-$m.log 2>&1 &
+for pass in 1 2 3; do   # later passes only retry unscored cells (the declared replacement rule)
+  for m in A0 sw A1-s1 A1-s2 A1-s3 A2-s1 A2-s2 A2-s3 A3-s1 A3-s2 A3-s3; do
+    SET=""; [ "$m" != "A0" ] && SET="--set model=$m"
+    forkloop evaluate --config ${EVAL_CONFIG:-configs/exp1.yaml} --pool final_test --final --per-family 1000 --shard $SHARD \
+      --families $FAMS --label $m $SET --experiment exp1-eval --concurrency ${PER_MODEL:-6} >> ~/programs/exp1/logs/eval-$m.log 2>&1 &
+  done
+  wait
 done
-wait
