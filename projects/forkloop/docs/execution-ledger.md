@@ -64,3 +64,22 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
 
 - 2026-09-29 01:50 UTC — branch `correction-engine-20260929` from `78fa0f2`. Baseline offline
   test run started.
+- 01:50–02:40 UTC — **Resources.** Lambda filesystem `forkloop-usw3` (us-west-3, registry
+  `lambda-filesystem-0e09b1bb6b`) and instance `forkloop-dev-0929a` (gpu_1x_h100_pcie, $3.29/h,
+  209.20.157.23, registry `lambda-instance-55ea6c9aa2`, lease 14 h, renewable). Registry:
+  `~/.forkloop/resources.jsonl`; reaper: LaunchAgent `com.forkloop.reaper` runs `forkloop ops reap`
+  every 10 min (remove: `launchctl bootout gui/$(id -u)/com.forkloop.reaper`). OpenAI key deployed to
+  the box at `~/.config/forkloop/env` (0600). Program ledger (uncapped, authorization recorded):
+  `runs/program-20260929/ledger-mac.sqlite`.
+- **Agents (parallel, explicit file ownership).** Docker world backend (`worlds/claims_ops_v1/docker/`,
+  `forkloop/backends/docker.py`); student serving + parity (`train/`); task families, compositions,
+  split policy, adversarial verifier tests (`worlds/claims_ops_v1/tasks/`, `forkloop/splits.py`).
+- **Built and committed** (`91f0f7a`, `1db06d2`, `f4b8953`): correction engine
+  (`forkloop/correction/`), explicit agent memory, CLI `record/failures/repair/dataset/evaluate/
+  status/inspect`, `forkloop ops`, uncapped-but-accounted ledger, registry-tracked Solari snapshots
+  (date guard removed), Solari pricing re-reviewed (`configs/pricing/solari-starter-2026-09-29.json`).
+  Offline suite green; toy-world end-to-end tests for both checkpoint strategies.
+- 02:37 UTC — **Live Solari qualification started**: `configs/loop-solari-flagship.yaml`,
+  experiment `solari-flagship-1`, gpt-6-luna (agent under repair) on `resolve_denial` train
+  900001–900002 with snapshot checkpoints. Resume: `runs/loop-solari-flagship/record.sh`.
+  Competitor/deadline research: `docs/` pending; deadline confirmed 2026-09-30 (organizer's X post).

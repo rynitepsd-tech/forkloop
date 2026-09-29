@@ -70,3 +70,9 @@ def test_policy_carries_memory_across_steps_and_checkpoints():
     assert "- auth AUTH-9Z" in seen[1]
     clone = pol.clone_for_branch(state)
     assert clone._memory == ["auth AUTH-9Z"] and clone._memory is not pol._memory
+
+
+def test_memory_line_does_not_swallow_the_next_line_and_bullets_are_facts():
+    assert memory_from_reply("ok\nMemory:\n- auth A-1\n- member W2\nclick(1, 2)") == ["auth A-1", "member W2"]
+    assert memory_from_reply("Memory: x\nclick(1, 2)") == ["x"]
+    assert memory_from_reply("Memory:\nclick(1, 2)") == []

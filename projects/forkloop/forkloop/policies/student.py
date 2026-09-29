@@ -339,7 +339,9 @@ def note_from_reply(text: str, *, max_chars: int = 160) -> str:
 
 #: One explicit-memory line in a reply: ``Memory: <fact>``. Facts come only from the policy's own
 #: output, so memory never carries anything the policy did not itself see or write.
-_MEMORY_LINE_RE = re.compile(r"^\s*memory\s*:\s*(.+?)\s*$", re.I | re.M)
+_MEMORY_LINE_RE = re.compile(r"^[ \t]*memory[ \t]*:[ \t]*(\S.*?)[ \t]*$", re.I | re.M)
+#: A bare "Memory:" line followed by "- fact" bullet lines (a form some models write).
+_MEMORY_BLOCK_RE = re.compile(r"^[ \t]*memory[ \t]*:[ \t]*\n((?:[ \t]*[-*•][ \t]*\S.*(?:\n|$))+)", re.I | re.M)
 #: Memory bounds: enough for these workflows (an authorization number, a member id, a date), small
 #: enough that the rendered input never truncates. Oldest facts are dropped first beyond the cap.
 MEMORY_MAX_FACTS = 16
@@ -348,9 +350,14 @@ MEMORY_MAX_CHARS = 200
 
 def memory_from_reply(text: str) -> list[str]:
     """The ``Memory:`` facts written in one reply, in order (shared by serving and dataset export)."""
+    text = _THINK_TAG_RE.sub(" ", text or "")
+    found: list[tuple[int, str]] = [(m.start(), m.group(1)) for m in _MEMORY_LINE_RE.finditer(text)]
+    for m in _MEMORY_BLOCK_RE.finditer(text):
+        for j, line in enumerate(m.group(1).splitlines()):
+            found.append((m.start() + j + 1, re.sub(r"^[ \t]*[-*•][ \t]*", "", line)))
     facts = []
-    for m in _MEMORY_LINE_RE.finditer(_THINK_TAG_RE.sub(" ", text or "")):
-        fact = " ".join(m.group(1).split())
+    for _, raw in sorted(found):
+        fact = " ".join(raw.split())
         if fact and fact.lower() not in ("none", "unchanged", "-", "n/a"):
             facts.append(fact[:MEMORY_MAX_CHARS])
     return facts

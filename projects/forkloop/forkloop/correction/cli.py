@@ -242,6 +242,8 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
 
 def add_commands(sub: Any) -> None:
+    add_cleanup_command(sub)
+
     def cfg(p: argparse.ArgumentParser) -> None:
         p.add_argument("--config", required=True, help="project YAML (see forkloop/correction/project.py)")
 
@@ -311,3 +313,58 @@ def add_commands(sub: Any) -> None:
 
 
 __all__ = ["add_commands", "parse_seeds", "summarize_attempts"]
+
+
+async def cleanup_snapshots(store: Any, backend: Any, *, experiment_id: Optional[str] = None, dry_run: bool = False,
+                            log: Any = print) -> list[dict]:
+    """Delete provider snapshots behind checkpoints that are no longer needed: the attempt succeeded,
+    or it is not a failure pending repair (every repair of it finished). Retained checkpoints and
+    replay/reset checkpoints are left alone. The store keeps the checkpoint row (``deleted_at``)."""
+    out = []
+    for a in store.attempts(**({"experiment_id": experiment_id} if experiment_id else {})):
+        reps = store.repairs(attempt_id=a["attempt_id"])
+        pending = a["status"] == "running" or any(r["status"] == "running" for r in reps)
+        failure_unrepaired = a["status"] == "finished" and (a["reward"] or 0) < 1 and not reps
+        for c in store.checkpoints(a["attempt_id"]):
+            if c["strategy"] != "snapshot" or c.get("deleted_at") or c.get("retained"):
+                continue
+            if pending or failure_unrepaired:
+                out.append({"ckpt_id": c["ckpt_id"], "action": "kept (repair pending)"})
+                continue
+            action = "would delete" if dry_run else "deleted"
+            if not dry_run:
+                try:
+                    await backend.delete_snapshot(c["world_ref"])
+                    store.mark_checkpoint_deleted(c["ckpt_id"])
+                    store.event("snapshot_deleted", c["ckpt_id"], snapshot=c["world_ref"])
+                except Exception as e:  # noqa: BLE001
+                    action = f"delete failed: {type(e).__name__}: {str(e)[:200]}"
+            out.append({"ckpt_id": c["ckpt_id"], "snapshot": c["world_ref"], "action": action})
+            log(f"[cleanup] {c['ckpt_id']} {c['world_ref']}: {action}")
+    return out
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    from .project import load_project
+
+    proj = load_project(args.config, require_env=False)
+    world = proj.world()
+    backend = proj.backend(world)
+
+    async def run():
+        try:
+            return await cleanup_snapshots(proj.store(), backend, experiment_id=args.experiment, dry_run=args.dry_run)
+        finally:
+            await backend.close()
+
+    res = asyncio.run(run())
+    print(json.dumps({"checkpoints": len(res), "deleted": sum(1 for r in res if r["action"] == "deleted")}, indent=2))
+    return 0
+
+
+def add_cleanup_command(sub: Any) -> None:
+    p = sub.add_parser("cleanup", help="delete provider snapshots behind checkpoints no repair still needs")
+    p.add_argument("--config", required=True)
+    p.add_argument("--experiment", default=None)
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(fn=cmd_cleanup)

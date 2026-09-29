@@ -112,9 +112,13 @@ async def record_attempt(env: Env, policy: Any, task: Any, *, store: Store, role
             meta["agent"] = {"memory_before": list(agent.get("memory", [])), "memory_written": meta.get("memory_written", [])}
             kind = ckpt.boundary(step, action, last_ckpt)
             if kind:
+                t_ck = time.monotonic()
                 c = await capture(env, store=store, blobs=blobs, attempt_id=attempt_id, step=step, boundary=kind,
                                   policy_state=full, agent_state=agent, cfg=ckpt, snapshots_taken=snapshots,
                                   reference=reference, experiment_id=experiment_id)
+                # Checkpoint overhead is the controller's cost, not the agent's: pause the episode
+                # clock (a Solari snapshot takes ~70 s). It is reported in charges instead.
+                env.ep.started_at += time.monotonic() - t_ck
                 snapshots += int(c["strategy"] == "snapshot")
                 last_ckpt = step
                 ckpts.append({k: c[k] for k in ("ckpt_id", "strategy", "status")} | {"step": step})
