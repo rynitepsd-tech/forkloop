@@ -306,3 +306,6 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   Phase-5 waiters: main + aux tmux **`exp1-phase5`** (`scripts/exp1/phase5_when_ready.sh main|aux`;
   main also waits for no `forkloop repair` process). Controller bg job: dev exit → `train_on_dev.sh
   fetch` → main's 8 finals → `copy_adapters_to_aux.sh` (both with `ADAPTERS_NAME=adapters-v2`).
+- 08:50 UTC — main waiter restarted with `STOP_REPAIRS=1` (kills `exp1-repair4/5` once the 9 v2 adapters
+  are on main, reaps, waits for ≤ 4 containers, then phase 5 shard 0/2 PER_MODEL 8). Aux waiter starts
+  shard 1/2 PER_MODEL 7 when the 9 adapters arrive. Expected: training ≈ 10:20 UTC, phase 5 ≈ 10:30–15:30.
