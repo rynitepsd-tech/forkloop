@@ -92,7 +92,7 @@ def main(a: argparse.Namespace) -> None:
     backend = proj.backend_name
     frames: list[tuple[Image.Image, float]] = []
     frames.append((card([("Forkloop", 72, INK, True),
-                         ("failure → checkpoint → verified corrections → dataset", 34, ACCENT, False),
+                         ("failure · checkpoint · verified corrections · dataset", 34, ACCENT, False),
                          (f"real {('Solari desktops' if backend == 'solari' else 'Docker worlds')}, real OpenEMR 8.3 + synthetic payer portal", 26, MUTED, False)],
                         "All screens are real captures from recorded runs. Synthetic patient data."), 4.0))
     man = ep["manifest"]
@@ -106,15 +106,25 @@ def main(a: argparse.Namespace) -> None:
             act = next((s for s in steps if s["i"] == i), {}).get("raw_action", "").strip().splitlines()[-1:] or [""]
             frames.append((framed(shot, f"student, step {i}/{n}: {act[0][:70]}  (time-compressed)", "STUDENT", MUTED), 1.4))
     v = ep["verdict"] or {}
+    found = []
+    for cid in (v.get("failed") or [])[:2]:
+        d = (v.get("details") or {}).get(cid) or {}
+        if "actual" in d:
+            has = "no matching row" if d.get("actual") in (None, "") else d.get("actual")
+            found.append((f"{cid}: database has {has}, task needs {d.get('expected')}", 26, INK, False))
     frames.append((card([("The student failed", 48, BAD, True),
-                         (f"{n} steps, verdict {v.get('reason_code')}", 30, INK, False),
-                         ("The database, not the agent's own account, decides.", 26, MUTED, False)]), 3.5))
+                         (f"{n} steps, verdict {v.get('reason_code')}", 30, INK, False), *found,
+                         ("The database, not the agent's own account, decides.", 26, MUTED, False)]), 4.5))
     pts = rep["config"].get("restart_points", [])
     why = next((p for p in pts if p["ckpt_id"] == ck["ckpt_id"]), {})
+    same_ck = [b for b in branches if b["ckpt_id"] == ck["ckpt_id"]]
+    last = [((b.get("restore") or {}).get("attempts") or [{}])[-1] for b in same_ck]
+    equal = sum(1 for r in last if r.get("ok") and (r.get("fidelity") or {}).get("tables_equal"))
     frames.append((card([("Restore a checkpoint", 48, INK, True),
                          (f"step {ck['step']} · {ck['strategy']} · chosen by evidence: {why.get('reason')}", 28, ACCENT, False),
-                         (f"{len(branches)} independent copies: world and agent memory restored", 26, INK, False),
-                         ("restore fidelity: every checksummed table identical to the checkpoint", 24, MUTED, False)]), 4.0))
+                         (f"{len(same_ck)} independent copies: world and agent memory restored", 26, INK, False),
+                         (f"restore fidelity: checksummed tables identical to the checkpoint in {equal} of {len(same_ck)}",
+                          24, MUTED, False)]), 4.0))
     for b in wins[:2]:
         bep = load_episode(Path(b["run_dir"]))
         acted = [s for s in bep["steps"] if not (s.get("search") or {}).get("replayed")]
