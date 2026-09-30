@@ -344,3 +344,6 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   pre-existing golden snapshot. Final spend: Lambda instances $1,523.92 (list price), OpenAI $126.90
   (reported usage), Solari ≤ $13.29 → ≈ $1,664 (+ monthly storage for the three retained filesystems).
   **Program complete**; open owner actions in `docs/final-report-20260929.md` §6.
+- 2026-09-30 ≈ 17:30 UTC — **published** with the owner's git permission: PR #3 merged into `main` (`dcc6484`,
+  CI green), site `gh-pages` updated (live), release v0.3.0 created (assets uploading). Remaining owner
+  actions: posting/submission, filesystem retention.

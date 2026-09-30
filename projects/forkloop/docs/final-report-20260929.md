@@ -176,14 +176,13 @@ From `forkloop ops inventory --provider` (registry and live provider listings), 
 The filesystems bill monthly per GB until deleted. Deleting them is permanent and left to the owner. The
 release bundle and store copies on this Mac are enough to reproduce every reported number.
 
-## 6. Actions left for the owner
+## 6. Published, and actions left for the owner
 
-- **Push branch `correction-engine-20260929`** and merge it. The session's permission check blocked `git push`.
-- **Publish the site** from local branch `gh-pages-correction` in the worktree
-  `projects/forkloop/runs/pages-20260922`. It is based on `origin/gh-pages` and adds the new landing page,
-  the three evidence bundles and the video. Its links to `main` work once the branch is merged.
-- **Publish the release** from `~/Desktop/Solari/forkloop-exp1-release/` (34 files; each under 2 GB), for
-  example as a GitHub release on the merged commit.
-- **Posting and the challenge submission.** The drafts are in `~/Desktop/Solari/posts/2026-09-29/`; the
-  challenge closes 2026-09-30.
+Published on 2026-09-30 with the owner's git permission:
+- **Code:** PR [#3](https://github.com/rynitepsd-tech/forkloop/pull/3), merged into `main` as `dcc6484` after CI passed.
+- **Site:** updated at https://rynitepsd-tech.github.io/forkloop/.
+- **Release:** [v0.3.0](https://github.com/rynitepsd-tech/forkloop/releases/tag/v0.3.0) with the verified bundle as assets.
+
+Left for the owner:
+- **Posting and the challenge submission.** The drafts are in `~/Desktop/Solari/posts/2026-09-29/`; the challenge closes 2026-09-30.
 - **Decide on the three retained Lambda filesystems.** `usw3` holds only a model cache.
