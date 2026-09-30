@@ -29,7 +29,43 @@ demonstrations from initial states (A1) at matched collection cost, and than one
 full-restart repairs (A3)? Three LoRA training runs per trained arm, one attempt per cell, SQL
 verifier, family-balanced success, paired bootstrap.
 
-**Evaluation results.** PENDING — from `docs/results-exp1.md` after every planned cell has run.
+**Evaluation results** (`docs/results-exp1.md`; all 1,650 planned cells scored, none unscored;
+student alone, one attempt per task, family-balanced success on the 150 registered final-test tasks):
+
+| Model | Success | Per family (compose / reschedule / denial / insurance) |
+| --- | ---: | --- |
+| A0 untrained | 0.033 | 0.00 / 0.00 / 0.00 / 0.13 |
+| S_W warm start (W only) | 0.208 | 0.07 / 0.00 / 0.30 / 0.47 |
+| A1 demonstrations (3 runs) | 0.268 | 0.11 / 0.00 / 0.43 / 0.53 |
+| A2 Forkloop corrections (3 runs) | 0.260 | 0.12 / 0.00 / 0.40 / 0.52 |
+| A3 full-restart repairs (3 runs) | 0.269 | 0.10 / 0.00 / 0.38 / 0.60 |
+
+| Paired comparison | Difference | 95% CI | Sign test |
+| --- | ---: | --- | ---: |
+| A2 − A0 | +0.226 | [+0.165, +0.290] | 35 vs 0 tasks, p = 6e-11 |
+| A2 − A1 | −0.008 | [−0.042, +0.022] | 4 vs 6, p = 0.75 |
+| A2 − A3 | −0.010 | [−0.064, +0.054] | 8 vs 8, p = 1 |
+| S_W − A0 | +0.175 | [+0.117, +0.237] | 23 vs 0, p = 2e-7 |
+
+**What this means.**
+- **The registered hypothesis is not supported.** Training on Forkloop corrections did not beat
+  training on teacher demonstrations of the same (counted) collection cost, nor full-restart repairs.
+  The registered "practically meaningful effect" needed A2 − A1 > 0 with the interval excluding 0 (or
+  the untested half-cost alternative); A2 − A1 is −0.008 [−0.042, +0.022].
+- Every trained arm improved the student a lot over A0 (+0.23), but most of that came from the shared
+  warm-start data W (S_W − A0 = +0.175); each arm's own data added about +0.05–0.06 over S_W, and the
+  three arms were indistinguishable. Rescheduling stayed at 0 for every model (no rescheduling data).
+- At matched cost the arms' own data differed greatly in size (78 vs 21 vs 24 verified paths), yet
+  gave the same result: with ~29% of training examples, A2's 21 corrections did as well as A1's 78
+  demonstrations at ~63%. This is suggestive of higher value per example for corrections, but it rests
+  on one small dataset per arm and was not a registered test.
+- Robustness: identical under "unscored = failure" and "key-name failures = policy failures" (no cell
+  was unscored). A3's seed 3 (the only run on the H100 dev box) scored 0.208 against 0.296/0.304 for
+  seeds 1–2; without it A3 is 0.300 and A2 − A3 = −0.040 [−0.079, −0.004]. Per training run: A1 0.254–
+  0.287, A2 0.254–0.263. Main's shard scored lower than aux's for every trained arm (e.g. A1 0.22 vs
+  0.32; same split for every model, so comparisons are balanced); the episode time limit ended 1 of
+  1,650 evaluation episodes. A0/S_W's aux cells ran earlier on a collection-phase server (median model
+  latency 11–12 s vs 16 s) — the only arm-specific server difference.
 
 **Collection (training pool only; measured).**
 
