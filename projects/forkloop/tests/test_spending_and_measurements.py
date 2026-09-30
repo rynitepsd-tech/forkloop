@@ -125,7 +125,8 @@ async def test_openai_reserves_before_request_counts_discarded_output_and_failed
     try:
         await pol.act(obs); await pol.act(obs)
         s=ledger.summary()['services']['openai']
-        assert s['attempts']==2 and s['actual_usd']>0 and s['pending_upper_usd']>0
+        # the failed step's sends are each reserved and kept in full (re-sent under new reservations)
+        assert s['attempts']==2+StudentPolicy.HOSTED_TRANSPORT_RETRIES and s['actual_usd']>0 and s['pending_upper_usd']>0
         assert pol.usage=={'in':1000,'out':20}
     finally: await pol.aclose()
 
@@ -193,3 +194,45 @@ def test_measurements_count_secondary_failures_setup_and_losing_branches(tmp_pat
     assert s['setup_seconds']==50 and s['branch_resource_seconds']==70
     assert s['cost_vm_usd']==round(220/3600*.134,4)
     assert s['cost_authoritative'] is False
+
+
+async def test_hosted_send_dropped_in_transport_is_resent_under_a_new_reservation(tmp_path, monkeypatch):
+    import asyncio as _a
+    async def _no_sleep(*_x, **_k): return None
+    monkeypatch.setattr(_a, "sleep", _no_sleep)
+    ledger = SessionLedger.create(tmp_path / "ledger.sqlite"); calls = []
+    def respond(req):
+        calls.append(req)
+        if len(calls) == 1:
+            raise httpx.ReadError("connection reset")
+        return httpx.Response(200, json={"id": "ok", "choices": [{"message": {"content": "click(10, 10)"}}],
+                                         "usage": {"prompt_tokens": 1000, "completion_tokens": 20}})
+    pol = StudentPolicy("https://api.openai.com/v1", "gpt-5.6-luna", hosted_reasoning=True, max_tokens=100,
+                        session_ledger=str(ledger.path), transport=httpx.MockTransport(respond))
+    try:
+        a, m = await pol.act(Observation(png("white"), "synthetic", 0, [], 1280, 720))
+        s = ledger.summary()["services"]["openai"]
+        assert a is not None and not m.get("error") and len(calls) == 2 and pol.transport_retries == 1
+        assert s["attempts"] == 2 and s["actual_usd"] > 0 and s["pending_upper_usd"] > 0   # the dropped send stays reserved
+    finally:
+        await pol.aclose()
+
+
+async def test_received_429_releases_the_reservation_and_quota_exhaustion_fails_fast(tmp_path, monkeypatch):
+    import asyncio as _a
+    async def _no_sleep(*_x, **_k): return None
+    monkeypatch.setattr(_a, "sleep", _no_sleep)
+    ledger = SessionLedger.create(tmp_path / "ledger.sqlite"); calls = []
+    def respond(req):
+        calls.append(req)
+        return httpx.Response(429, json={"error": {"type": "insufficient_quota", "code": "credit_balance_exhausted",
+                                                   "message": "You have no credits remaining."}})
+    pol = StudentPolicy("https://api.openai.com/v1", "gpt-5.6-luna", hosted_reasoning=True, max_tokens=100,
+                        session_ledger=str(ledger.path), transport=httpx.MockTransport(respond))
+    try:
+        a, m = await pol.act(Observation(png("white"), "synthetic", 0, [], 1280, 720))
+        s = ledger.summary()["services"]["openai"]
+        assert m.get("error") and "credit_balance_exhausted" in m["note"] and len(calls) == 1   # no waiting it out
+        assert s["pending_upper_usd"] == 0 and s["actual_usd"] == 0                          # a refusal costs nothing
+    finally:
+        await pol.aclose()

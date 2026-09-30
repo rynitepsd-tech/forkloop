@@ -39,3 +39,9 @@ def simulated_solari_lifetime(monkeypatch):
     """Exercise lifecycle mechanics using test-local SDK fakes, never a provider."""
     monkeypatch.setattr("forkloop.spending.SolariPricing.reservation", lambda self, hourly_usd: hourly_usd)
     monkeypatch.setattr("forkloop.spending.require_solari_lifetime_bound", lambda: 5.0)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_resource_registry(tmp_path, monkeypatch):
+    """Tests never write to the operator's real resource registry (~/.forkloop/resources.jsonl)."""
+    monkeypatch.setenv("FORKLOOP_REGISTRY", str(tmp_path / "resource-registry.jsonl"))

@@ -50,7 +50,8 @@ async def test_fara_real_processor_all_images_prefix_and_target_mask(tmp_path,pr
             assert torch.all(batch['labels'][i,n:stats['seq_len']]!=-100)
             target=processor.tokenizer.decode(batch['labels'][i,n:stats['seq_len']].tolist())
             full=processor.apply_chat_template(ex['full_messages'],tokenize=False,add_generation_prompt=False)
-            assert target==full[len(serving):]
+            # supervised: the target through its first <|im_end|>; the template's trailing newline is not
+            assert target==full[len(serving):].split('<|im_end|>')[0]+'<|im_end|>'
             assert 'TARGETONLY123' in target and 'TARGETONLY123' not in serving
             assert 'Continuation only.' in target
     finally: await pol.aclose()

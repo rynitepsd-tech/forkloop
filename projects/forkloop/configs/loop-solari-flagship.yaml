@@ -1,0 +1,38 @@
+# Live correction loop on Solari desktops with provider VM snapshots as checkpoints.
+# The agent under repair is gpt-6-luna (it misreads authorization codes on this workflow,
+# docs/live-model-upgrade-comparison.md); the teacher is gpt-5.6-luna. Both use the same
+# explicit-memory observation contract (agent_memory_v1). Keys and the ledger come from the env.
+version: 1
+world: claims-ops-v1
+backend: solari
+store: ../runs/loop-solari-flagship/forkloop.sqlite
+budget: {max_steps: 120, max_seconds: 1500}
+history_k: 16
+checkpoints: {strategy: snapshot, every: 10, before_types: true, before_keys: [Return], max_snapshots: 6}
+concurrency: 2
+infra_retries: 1
+student:
+  name: gpt-6-luna agent
+  policy: student
+  system_prompt_file: ../forkloop/policies/prompts/agent_memory_v1.md
+  options: &hosted
+    base_url: https://api.openai.com/v1
+    model: gpt-6-luna
+    prompt_style: compact
+    image_max_side: 1280
+    image_detail: high
+    history_k: 16
+    prev_screenshot: true
+    memory: true
+    hosted_reasoning: true
+    max_tokens: 4096
+    timeout_s: 120
+    extra_body: {reasoning_effort: high}
+teacher:
+  name: gpt-5.6-luna teacher
+  policy: student
+  system_prompt_file: ../forkloop/policies/prompts/agent_memory_v1.md
+  options:
+    <<: *hosted
+    model: gpt-5.6-luna
+repair: {k: 2, max_restart_points: 2, concurrency: 2, settle: stable, max_screen_distance: 0.10, restore_retries: 3}

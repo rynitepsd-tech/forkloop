@@ -61,6 +61,7 @@ class EpisodeState:
     recorder: Optional[EpisodeRecorder] = None
     end_reason: str = ""
     infra_errors: int = 0  # consecutive backend/transport failures while applying actions
+    infra_total: int = 0   # all backend/transport failures in the episode (never reset)
 
 
 class Env:
@@ -154,14 +155,23 @@ class Env:
         shot_before = ep.last_shot
         parsed: Optional[Action] = None
         error: Optional[str] = None
+        provider_failure = False
         if action is None:
             error = meta.get("error") or "policy produced no action"
+            # A truthy ``error`` is a provider/runtime failure (model server down, timeout, HTTP error),
+            # not the policy's invalid output (policies/base.py): infrastructure, never scored as invalid.
+            provider_failure = meta.get("error") is True or (isinstance(meta.get("error"), str) and bool(meta.get("error")))
+            if provider_failure:
+                error = f"{BACKEND_FAILURE_PREFIX} policy provider: {meta.get('note') or meta.get('error')}"
         else:
             try:
                 parsed = Action.parse(action, width=self.width, height=self.height)
             except InvalidAction as e:
                 error = str(e)
-        if parsed is None:
+        if parsed is None and provider_failure:
+            ep.infra_errors += 1
+            ep.infra_total += 1
+        elif parsed is None:
             ep.invalid += 1
         else:
             try:
@@ -172,6 +182,7 @@ class Env:
                     # A dropped connection or dead machine is not the policy's mistake:
                     # count it separately so it cannot end the episode as INVALID_ACTION_LIMIT.
                     ep.infra_errors += 1
+                    ep.infra_total += 1
                 else:
                     error = f"apply failed: {type(e).__name__}: {e}"
                     ep.invalid += 1
@@ -200,7 +211,7 @@ class Env:
                                     valid=parsed is not None and error is None,
                                     model_latency_s=float(meta.get("model_latency_s", 0.0)),
                                     tokens=meta.get("tokens"), policy_note=str(meta.get("note", "") or ""),
-                                    search=meta.get("search"), error=error)
+                                    search=meta.get("search"), error=error, agent=meta.get("agent"))
         # termination
         budget = {**ep.task.budget, **self.budget_override}
         reward = 0.0
@@ -236,9 +247,17 @@ class Env:
             verdict = await Oracle(ctx).evaluate(ep.task.oracle)
         except Exception as e:  # noqa: BLE001
             verdict = Verdict.error(f"{type(e).__name__}: {e}")
-        if ep.end_reason == "infrastructure_error" and verdict.reward < 1.0:
-            # The backend cut the episode short, so missing work is not the policy's failure.
-            # A safety violation the verifier observed cleanly is, and stays the reason.
+        if ep.infra_total > 0 and verdict.reward >= 1.0:
+            # Symmetric rule (review 2026-09-29): an episode the infrastructure interfered with is
+            # unscored whatever its outcome, so replacement cannot favour successes.
+            verdict.details["infra_affected"] = {"backend_failures": ep.infra_total, "end_reason": ep.end_reason}
+            verdict.reason_code = "INFRA_ERROR"
+        if (ep.end_reason == "infrastructure_error" or ep.infra_total > 0) and verdict.reward < 1.0:
+            # The backend cut the episode short or dropped an action the policy chose, so missing
+            # or wrong work is not attributable to the policy (2026-09-29: an agent that counted a
+            # dropped click as done would otherwise be scored WRONG_VALUE). A safety violation the
+            # verifier observed cleanly is the policy's, and stays the reason.
+            verdict.details["infra_affected"] = {"backend_failures": ep.infra_total, "end_reason": ep.end_reason}
             observed = {d.get("reason_code") for c, d in verdict.details.items()
                         if c in verdict.failed and isinstance(d, dict) and "error" not in d}
             if not observed & SAFETY_REASONS:

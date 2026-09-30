@@ -42,6 +42,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from forkloop import splits  # noqa: E402
 from forkloop.exporters.observations import image_fields
 from forkloop.policies.observation import OBSERVATION_SCHEMA
 from forkloop.policies.action_parse import to_compact  # noqa: E402
@@ -352,6 +353,9 @@ def build_sft_records(
                 stats.episodes_filtered_family += 1
                 continue
             if excl and _matches_any(split, excl):
+                stats.episodes_filtered_split += 1
+                continue
+            if splits.final_reasons(ep.manifest):  # final-test tasks never reach a training set (forkloop/splits.py)
                 stats.episodes_filtered_split += 1
                 continue
             if seed_ranges and seed_excluded(ep.manifest.get("seed"), seed_ranges):

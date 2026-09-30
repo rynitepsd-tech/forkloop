@@ -151,6 +151,14 @@ class World:
     def primary_keys(self) -> dict[str, str]:
         return dict(self.config.oracle.get("primary_keys", {}))
 
+    def volatile_columns(self) -> dict[str, list[str]]:
+        """db → columns whose values legitimately differ between two executions of the same
+        actions (wall-clock timestamps). Left out of checkpoint fidelity digests only; the
+        verifier still sees them."""
+        vol = self.config.oracle.get("volatile_columns", {})
+        ign = self.ignore_columns()
+        return {db: sorted(set(ign.get(db, [])) | set(vol.get(db, []))) for db in set(ign) | set(vol)}
+
     # -------------------------------------------------------------- hooks
     async def build(self, machine: "Machine", *, log: Callable[[str], None] = print) -> str:
         """One-time world build on a fresh machine → golden snapshot id."""

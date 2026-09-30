@@ -179,8 +179,8 @@ def load_config(path: str | Path, *, require_env: bool = True) -> tuple[dict, li
         config.setdefault(key, default)
         if not isinstance(config[key], str) or not config[key]:
             raise ValueError(f"{key} must be a nonempty string")
-    if config["backend"] not in ("solari", "fake"):
-        raise ValueError("backend must be solari or fake")
+    if config["backend"] not in ("solari", "fake", "docker"):
+        raise ValueError("backend must be solari, fake or docker")
     # revert: one long-lived machine reverted per cell; fork: a fresh machine per cell, which keeps
     # every machine's lifetime to one cell (fits FORKLOOP_SOLARI_MAX_LIFETIME_MIN).
     config.setdefault("reset_mode", "revert")

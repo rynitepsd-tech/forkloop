@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.7
+# Runtime update of an existing golden image: the same world state and the same Chrome profile, with the
+# boot/agent scripts from this checkout. Used by `build_image.sh --update-from <golden>`.
+# Why not re-bake: Chrome randomises its field-trial entropy per profile (Local State
+# user_experience_metrics.*entropy*), so two bakes of the same Dockerfile rendered toolbar icons with
+# different stroke weights (measured 2026-09-29: 870 px of the toolbar differ between two bakes).
+ARG GOLDEN
+# libfaketime for the world clock (entrypoint.sh), upstream v0.9.10, built twice: the full library for every
+# process (MariaDB needs FAKE_PTHREAD: without it its 1 s realtime waits return at once and InnoDB aborts),
+# and one without FAKE_PTHREAD for Chrome only (with it, headed Chrome segfaulted at start, even with a zero
+# offset — Ubuntu 22.04's 0.9.8 package and upstream 0.9.10 alike; bisected 2026-09-29).
+FROM ubuntu:22.04 AS faketime
+ARG LIBFAKETIME_VERSION=0.9.10
+ARG LIBFAKETIME_SHA256=729ad33b9c750a50d9c68e97b90499680a74afd1568d859c574c0fe56fe7947f
+RUN apt-get update && apt-get install -y --no-install-recommends gcc make libc6-dev curl ca-certificates \
+ && curl -fsSL -o /tmp/lft.tar.gz "https://github.com/wolfcw/libfaketime/archive/refs/tags/v${LIBFAKETIME_VERSION}.tar.gz" \
+ && echo "${LIBFAKETIME_SHA256}  /tmp/lft.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/lft.tar.gz -C /tmp \
+ && cd "/tmp/libfaketime-${LIBFAKETIME_VERSION}/src" \
+ && make libfaketime.so.1 && install -D -m 755 libfaketime.so.1 /out/libfaketime.so.1 \
+ && make clean && make libfaketime.so.1 FAKETIME_COMPILE_CFLAGS="-UFAKE_PTHREAD" \
+ && install -D -m 755 libfaketime.so.1 /out/libfaketime-nopthread.so.1
+
+FROM ${GOLDEN}
+COPY worlds/claims_ops_v1/docker/entrypoint.sh worlds/claims_ops_v1/docker/agent.py \
+     worlds/claims_ops_v1/docker/svc.sh worlds/claims_ops_v1/docker/bake.sh /usr/local/forkloop/
+COPY worlds/claims_ops_v1/docker/systemctl /usr/local/bin/systemctl
+RUN chmod 755 /usr/local/forkloop/*.sh /usr/local/forkloop/agent.py /usr/local/bin/systemctl
+# World clock (entrypoint.sh): libfaketime in every process, one relative offset per boot.
+COPY --from=faketime /out/ /usr/local/lib/faketime/
+COPY worlds/claims_ops_v1/docker/chrome-wrapper.sh /usr/local/forkloop/chrome-wrapper.sh
+RUN rm -f /etc/ld.so.preload /usr/bin/google-chrome \
+ && install -m 755 /usr/local/forkloop/chrome-wrapper.sh /usr/bin/google-chrome
+ARG WORLD_CLOCK=2026-09-07T09:00:00Z
+ENV LD_PRELOAD=/usr/local/lib/faketime/libfaketime.so.1 FAKETIME_DONT_FAKE_MONOTONIC=1 \
+    FORKLOOP_WORLD_CLOCK=${WORLD_CLOCK}
+ARG GOLDEN
+ARG VERSION
+LABEL forkloop.kind=golden forkloop.version=${VERSION} forkloop.runtime_update_of=${GOLDEN} forkloop.world_clock=${WORLD_CLOCK}

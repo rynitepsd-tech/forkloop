@@ -16,6 +16,16 @@ change, and several of these already have.
 | 2026-09-15 to 09-24 | No longer bimodal in our runs. **Fork restore p50 34.8 s** (p10 28.9, p90 56.2, max 65.8) over 81 live resets; whole reset (restore, seeding, health, baseline, initial screen) p50 47.9 s, p90 68.5 s. Revert, 11 resets on 09-15: restore p50 39.5 s, max 80.9 s. | [`scripts/reset_times.py`](../scripts/reset_times.py) over the local `runs/**/reset.json` |
 | 2026-09-23 | `revert()` on a fresh desktop restored in 21 s with a killed Mousepad back under the same PID and its unsaved text intact. | [upstream PR #82](https://github.com/solari-sdk/solari-cookbook/pull/82) |
 
+## Mid-episode snapshots as checkpoints (2026-09-29, SDK 0.2.0)
+
+| Date | Observation | Evidence |
+| --- | --- | --- |
+| 2026-09-29 | `snapshot()` on a running desktop mid-episode took **68–93 s** (median 80 s, 12 snapshots across two desktops) and every snapshot reported ~9.6 GB (the full image, not a delta). | local `runs/loop-solari-flagship/forkloop.sqlite` (charges `snapshot_seconds`) |
+| 2026-09-29 | A fork from a mid-episode snapshot (step 2 of a denial workflow, OpenEMR tab open) came up in 34.6 s and 44.4 s for two **simultaneous** branches, both with every checksummed table identical to the checkpoint and screen distance 0.0; a seeded document was byte-identical; a row and a file written on one branch were absent from the other. | local `runs/loop-solari-flagship/restore-check-ck-f060914d5bad.json`, [`scripts/checkpoint_restore_check.py`](../scripts/checkpoint_restore_check.py) |
+| 2026-09-29 | Snapshot lookups were **inconsistent**: of 12 new snapshots, `get_snapshot` found 2 while `list_snapshots` listed 4 others that `get_snapshot` called "Not found". Two simultaneous creates from the same such snapshot split: one restored exactly (33.5 s, tables equal), the other failed in 0.2 s with "Snapshot not found" — on two different snapshots. Deletes also answered "Not found" for snapshots that a later retry deleted; all 12 were gone after at most four passes. | local `runs/loop-solari-flagship/restore-check-ck-1f9e7ac4d7d1.json`, `…-ck-1ed9734e8295.json` |
+| 2026-09-29 | Second flagship run (30 checkpoint snapshots over six student attempts): forks from 6 of the snapshots (the step-2/8/16 restart points of four repairs) answered "Snapshot not found" on every one of 4 quick retries, while forks from two other step-8 snapshots restored exactly (79 s; all tables equal, screen distance 0.0). 30 `delete_snapshot` calls all returned success but every snapshot stayed listed; a second round of deletes removed all 30 (only the pre-existing golden remained). | local `runs/loop-solari-student/forkloop.sqlite` (branch restore logs) |
+| 2026-09-29 | Pricing page (reviewed 2026-09-29): Starter compute unchanged; snapshot storage $0.05/GB-month pro-rated daily beyond the first 10 GB per organization, effective 2026-10-01; Starter max session 5 hours. | [pricing](https://docs.getsolari.com/pricing), [`configs/pricing/solari-starter-2026-09-29.json`](../configs/pricing/solari-starter-2026-09-29.json) |
+
 ## Lifetime and billing
 
 | Date | Observation | Evidence |
@@ -47,6 +57,10 @@ change, and several of these already have.
   separate `forkloop reap --older-than-min` loop, and books each machine's worst case in a
   session ledger before creating it ([solari-lifetime-probe.md](solari-lifetime-probe.md)).
 - Uses fork resets (a fresh desktop per cell) for experiments, so no machine outlives one cell.
+- Registers every snapshot (purpose, owner, lease) before requesting it, retries restores (then
+  falls back to a replay restore of the same checkpoint) and verifies deletes against the listing, records a failed restore as unscored (never as the policy's
+  failure), and excludes snapshot time from the agent's episode clock
+  ([correction.md](correction.md)).
 - Checks after every reset that the world is usable, not only equivalent across arms: the
   portal must be logged in, and the task's seeded records must exist
   ([live-image-detail-comparison.md](live-image-detail-comparison.md)).

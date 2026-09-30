@@ -122,17 +122,27 @@ class SolariMachine:
             return False
 
     async def snapshot(self, name: Optional[str] = None) -> str:
-        from ..spending import load_solari_pricing
-        pricing = load_solari_pricing(getattr(self.backend, "pricing_file", None))
-        if dt.date.today() >= pricing.storage_starts_on:
-            raise BackendError(
-                "snapshot creation refused: Solari now bills retained storage and this SDK has no "
-                "provider-enforced snapshot expiry. A compute pricing review does not bound indefinite storage; "
-                "use an existing golden snapshot in fork mode (no branch snapshots).")
+        """Take a provider snapshot (memory + disk of the running desktop).
+
+        Solari bills retained snapshot storage ($0.05/GB-month beyond 10 GB per organization from
+        2026-10-01, docs.getsolari.com/pricing, reviewed 2026-09-29) and the SDK has no snapshot
+        expiry, so every snapshot is written to the resource registry *before* it is requested,
+        with a purpose and a lease. ``forkloop ops cleanup`` / the correction engine delete
+        temporary snapshots once their evidence is secured; ``forkloop ops reap`` deletes
+        snapshots whose lease expired. Retained snapshots carry an explicit retention reason."""
+        from ..ops.registry import Registry
+        reg = Registry()
+        lease_s = float(os.environ.get("FORKLOOP_SNAPSHOT_LEASE_S", 24 * 3600))
+        res = reg.request(provider="solari", kind="snapshot", name=name or f"forkloop-{self.id[-8:]}",
+                          purpose=os.environ.get("FORKLOOP_SNAPSHOT_PURPOSE", "correction checkpoint"),
+                          owner=self.metadata.get("run_id", "unknown"), lease_s=lease_s, machine=self.id)
         try:
-            return await self._d.snapshot(name)
+            sid = await self._d.snapshot(name)
         except Exception as e:  # noqa: BLE001
+            reg.update(res.rid, "create_failed", state="uncertain", error=f"{type(e).__name__}: {str(e)[:200]}")
             raise _wrap_error(e)
+        reg.update(res.rid, "created", state="running", provider_id=sid)
+        return sid
 
     async def revert(self, snapshot_id: str) -> None:
         try:
@@ -444,6 +454,14 @@ class SolariBackend:
 
     async def delete_snapshot(self, snapshot_id: str) -> None:
         await self._client.delete_snapshot(snapshot_id)
+        try:
+            from ..ops.registry import Registry
+            reg = Registry()
+            for r in reg.live():
+                if r.provider == "solari" and r.kind == "snapshot" and r.provider_id == snapshot_id:
+                    reg.update(r.rid, "deleted", state="deleted")
+        except Exception:  # noqa: BLE001 - the registry is bookkeeping; the provider delete succeeded
+            pass
 
     async def list_machines(self, *, metadata: Optional[dict[str, str]] = None) -> list[MachineInfo]:
         out: list[MachineInfo] = []

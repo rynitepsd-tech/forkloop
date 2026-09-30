@@ -39,7 +39,7 @@ from PIL import Image
 
 from . import action_parse as ap
 from .base import BranchablePolicy
-from .observation import OBSERVATION_SCHEMA, coordinate_size, observation_messages, http_messages
+from .observation import OBSERVATION_SCHEMA, OBSERVATION_SCHEMA_MEMORY, coordinate_size, observation_messages, http_messages
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; forkloop.policies.base is written elsewhere
     from .base import Observation
@@ -337,11 +337,55 @@ def note_from_reply(text: str, *, max_chars: int = 160) -> str:
     return note
 
 
+#: One explicit-memory line in a reply: ``Memory: <fact>``. Facts come only from the policy's own
+#: output, so memory never carries anything the policy did not itself see or write.
+_MEMORY_LINE_RE = re.compile(r"^[ \t]*memory[ \t]*:[ \t]*(\S.*?)[ \t]*$", re.I | re.M)
+#: A bare "Memory:" line followed by "- fact" bullet lines (a form some models write).
+_MEMORY_BLOCK_RE = re.compile(r"^[ \t]*memory[ \t]*:[ \t]*\n((?:[ \t]*[-*•][ \t]*\S.*(?:\n|$))+)", re.I | re.M)
+#: Memory bounds: enough for these workflows (an authorization number, a member id, a date), small
+#: enough that the rendered input never truncates. Oldest facts are dropped first beyond the cap.
+MEMORY_MAX_FACTS = 16
+MEMORY_MAX_CHARS = 200
+
+
+def memory_from_reply(text: str) -> list[str]:
+    """The ``Memory:`` facts written in one reply, in order (shared by serving and dataset export)."""
+    text = _THINK_TAG_RE.sub(" ", text or "")
+    found: list[tuple[int, str]] = [(m.start(), m.group(1)) for m in _MEMORY_LINE_RE.finditer(text)]
+    for m in _MEMORY_BLOCK_RE.finditer(text):
+        for j, line in enumerate(m.group(1).splitlines()):
+            found.append((m.start() + j + 1, re.sub(r"^[ \t]*[-*•][ \t]*", "", line)))
+    facts = []
+    for _, raw in sorted(found):
+        fact = " ".join(raw.split())
+        if fact and fact.lower() not in ("none", "unchanged", "-", "n/a"):
+            facts.append(fact[:MEMORY_MAX_CHARS])
+    return facts
+
+
+def extend_memory(memory: list[str], facts: list[str]) -> list[str]:
+    """Append new facts (exact repeats are skipped) and keep the newest ``MEMORY_MAX_FACTS``."""
+    out = list(memory)
+    for f in facts:
+        if f not in out:
+            out.append(f)
+    return out[-MEMORY_MAX_FACTS:]
+
+
 def build_user_text(instruction: str, history: list[str] | None, style: str, step: int | None = None,
-                    notes: list[str | None] | None = None) -> str:
-    """The text part of the user turn: instruction + last-k history (+ a loop warning when stuck).
-    ``notes`` (same length as ``history``) puts the policy's own earlier reasoning next to each action."""
+                    notes: list[str | None] | None = None, memory: list[str] | None = None) -> str:
+    """The text part of the user turn: instruction + explicit memory + last-k history (+ a loop
+    warning when stuck). ``notes`` (same length as ``history``) puts the policy's own earlier
+    reasoning next to each action. ``memory`` (``None`` = the memory channel is off) is the list of
+    facts the policy itself wrote on earlier steps (``Memory:`` lines, :func:`memory_from_reply`)."""
     lines = [f"Task: {instruction.strip()}" if style != "fara" else instruction.strip()]
+    if memory is not None:
+        lines.append("")
+        if memory:
+            lines.append("Memory (facts you wrote down on earlier steps, oldest first):")
+            lines.extend(f"- {m}" for m in memory)
+        else:
+            lines.append("Memory: empty (you have not written anything down yet).")
     pairs = [(h, (notes[i] if notes and i < len(notes) else None))
              for i, h in enumerate(history or []) if isinstance(h, str) and h.strip()]
     hist = [h for h, _ in pairs]
@@ -370,22 +414,15 @@ def build_user_text(instruction: str, history: list[str] | None, style: str, ste
 # Image handling
 # --------------------------------------------------------------------------- #
 
-def prepare_image(png_bytes: bytes, image_max_side: int) -> tuple[str, tuple[int, int], tuple[int, int]]:
-    """Resize preserving aspect so max(w, h) <= image_max_side.
+def prepare_image(png_bytes: bytes, image_max_side: int, image_scale: float = 1.0) -> tuple[str, tuple[int, int], tuple[int, int]]:
+    """Upscale by ``image_scale`` then cap the longest side at ``image_max_side`` (the shared
+    :func:`forkloop.policies.observation.resize_for_model`). Returns ``(data_url, model_size, original_size)``."""
+    from .observation import resize_for_model
 
-    Returns ``(data_url, model_size, original_size)``.
-    """
     im = Image.open(io.BytesIO(png_bytes))
     im.load()
     orig = (im.width, im.height)
-    if im.mode != "RGB":
-        im = im.convert("RGB")
-    scale = 1.0
-    if image_max_side and max(orig) > image_max_side:
-        scale = image_max_side / float(max(orig))
-    if scale < 1.0:
-        new = (max(1, int(round(orig[0] * scale))), max(1, int(round(orig[1] * scale))))
-        im = im.resize(new, Image.LANCZOS)
+    im = resize_for_model(im, image_max_side=image_max_side, image_scale=image_scale)
     buf = io.BytesIO()
     im.save(buf, format="PNG", optimize=False)
     data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
@@ -425,8 +462,22 @@ GUARDED_OPENAI_PRICES: dict[str, tuple[float, float, float, float]] = {
 }
 
 
+def _error_code(resp: "httpx.Response") -> str:
+    """The provider's machine-readable error (e.g. ``insufficient_quota`` vs ``rate_limit_exceeded``); both
+    arrive as HTTP 429 and only the body tells them apart (2026-09-29: a credit outage was misread)."""
+    try:
+        err = (resp.json() or {}).get("error") or {}
+        return str(err.get("code") or err.get("type") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _quota_exhausted(resp: "httpx.Response") -> bool:
+    return resp.status_code == 429 and _error_code(resp) in ("insufficient_quota", "credit_balance_exhausted")
+
+
 class StudentPolicy(BranchablePolicy):
-    branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step")
+    branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step", "_memory")
 
     """Vision-only GUI policy backed by an OpenAI-compatible ``/chat/completions`` endpoint.
 
@@ -523,6 +574,8 @@ class StudentPolicy(BranchablePolicy):
         history_notes: bool = False,
         nav_macro: bool = False,
         instruction_note: str | None = None,
+        memory: bool = False,
+        image_scale: float = 1.0,
     ) -> None:
         self.validate_options(locals(), credentialed=bool(api_key))
         self.session_ledger = session_ledger or os.environ.get("FORKLOOP_SESSION_LEDGER")
@@ -565,6 +618,14 @@ class StudentPolicy(BranchablePolicy):
         #: across turns (the env's history is compact actions). Keyed by observation step.
         self.history_notes = bool(history_notes)
         self._notes: dict[int, str] = {}
+        #: Explicit memory: facts the policy wrote in ``Memory:`` lines of its own replies, shown
+        #: back on every later step. Part of the branchable policy state (checkpoints restore it).
+        self.memory_enabled = bool(memory)
+        #: Client-side upscale of every screenshot before it is sent (training renders the same way).
+        self.image_scale = float(image_scale)
+        if not (0.25 <= self.image_scale <= 4.0):
+            raise ValueError("image_scale must be between 0.25 and 4")
+        self._memory: list[str] = []
         #: OpenAI-style image fidelity hint ("high"/"low"/"auto"); None omits the field (vLLM).
         #: Hosted models default to "auto", which may downscale a 1280x720 screenshot enough to
         #: misread an authorization code (measured 2026-09-03: "G" read as "6", digits dropped).
@@ -604,8 +665,9 @@ class StudentPolicy(BranchablePolicy):
             "prompt_style": self.prompt_style, "coord_space": self.coord_space,
             "image_max_side": self.image_max_side, "temperature": self.temperature,
             "max_tokens": self.max_tokens, "history_k": self.history_k, "seed": self.seed,
-            "nav_macro": self.nav_macro, "history_notes": self.history_notes,
-            "prev_screenshot": self.prev_screenshot, "observation_schema": OBSERVATION_SCHEMA,
+            "nav_macro": self.nav_macro, "history_notes": self.history_notes, "memory": self.memory_enabled,
+            "image_scale": self.image_scale,
+            "prev_screenshot": self.prev_screenshot, "observation_schema": OBSERVATION_SCHEMA_MEMORY if self.memory_enabled else OBSERVATION_SCHEMA,
             "instruction_note": self.instruction_note, "system_prompt_override": bool(self.system_prompt_override),
         }
 
@@ -635,7 +697,7 @@ class StudentPolicy(BranchablePolicy):
         Returns ``(messages, ctx)`` where ctx has ``model_size``, ``screen_size``,
         ``coord_size`` and ``orig_size`` used for rescaling.
         """
-        data_url, model_size, orig = prepare_image(obs.screenshot, self.image_max_side)
+        data_url, model_size, orig = prepare_image(obs.screenshot, self.image_max_side, self.image_scale)
         screen = self._screen_size(obs, orig)
         coord_size = self._coord_from_size(model_size, screen)
         history = list(getattr(obs, "history", None) or [])
@@ -645,13 +707,14 @@ class StudentPolicy(BranchablePolicy):
         previous = getattr(obs, "previous_screenshot", b"") or self._previous_png
         urls = []
         if self.prev_screenshot and step > 0 and previous:
-            urls.append(prepare_image(previous, self.image_max_side)[0])
+            urls.append(prepare_image(previous, self.image_max_side, self.image_scale)[0])
         urls.append(data_url)
         canonical = observation_messages(
             instruction=str(getattr(obs, "instruction", "") or ""), history=history, step=step,
             screen=screen, coords=coord_size, style=self.prompt_style, history_k=self.history_k,
             image_count=len(urls), system_template=self.system_prompt_override,
-            instruction_note=self.instruction_note, fara_allowed=self.fara_allowed, notes=notes)
+            instruction_note=self.instruction_note, fara_allowed=self.fara_allowed, notes=notes,
+            memory=list(self._memory) if self.memory_enabled else None)
         messages = http_messages(canonical, urls, self.image_detail)
         ctx = {"model_size": model_size, "screen_size": screen, "coord_size": coord_size, "orig_size": orig}
         return messages, ctx
@@ -804,12 +867,34 @@ class StudentPolicy(BranchablePolicy):
             # context per choice; do not assume automatic caching is a discount.
             upper = n * (1_050_000 * long_in * 1.25 + output_limit * long_out) / 1e6
             ledger = SessionLedger(self.session_ledger)
-            operation = ledger.reserve("openai", upper, label=f"chat/completions:{body['model']}",
-                                       evidence={"max_output_tokens": output_limit, "n": n, "input_bound": 1050000,
-                                                 "cache_write_multiplier": 1.25})
-        self.n_requests += 1
+        tries = self.HOSTED_TRANSPORT_RETRIES + 1 if ledger is not None else 1
+        for k in range(tries):
+            if ledger is not None:
+                # every hosted send gets its own worst-case reservation
+                operation = ledger.reserve("openai", upper, label=f"chat/completions:{body['model']}",
+                                           evidence={"max_output_tokens": output_limit, "n": n, "input_bound": 1050000,
+                                                     "cache_write_multiplier": 1.25, "send": k + 1})
+            self.n_requests += 1
+            try:
+                resp = await self._post_with_transport_retry(body, retry=ledger is None)
+                break
+            except httpx.TransportError as exc:
+                if ledger is not None:
+                    # the request may have been billed: keep this send's full reservation
+                    ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
+                if k + 1 >= tries:
+                    raise
+                self.transport_retries = getattr(self, "transport_retries", 0) + 1
+                await asyncio.sleep(1.0 * (k + 1))
+            except BaseException as exc:
+                if ledger is not None and type(exc).__name__ != "BudgetExceeded":
+                    ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
+                raise
+        if resp.status_code == 429 and ledger is not None:
+            # a received refusal is never billed: release this send's reservation, keep the provider's code
+            ledger.reconcile(operation, 0.0, status="refused_http_429", evidence={"error": _error_code(resp)})
+            raise httpx.HTTPStatusError(f"429 refused by provider ({_error_code(resp)})", request=resp.request, response=resp)
         try:
-            resp = await self._client.post("/chat/completions", json=body)
             resp.raise_for_status()
             data = resp.json()
             self._tokens(data)  # count even a response with no usable choices
@@ -832,10 +917,45 @@ class StudentPolicy(BranchablePolicy):
             return data
         except BaseException as exc:
             if ledger is not None and type(exc).__name__ != "BudgetExceeded":
-                # A network failure may happen AFTER a billable completion. Keep
-                # the full reservation; automatic retries are intentionally off.
+                # A failure may happen AFTER a billable completion. Keep the full reservation.
                 ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
             raise
+
+    #: Self-hosted endpoints: a request that failed in transport (no response received: connection
+    #: reset, ReadError, RemoteProtocolError) is sent again, so a flaky serving connection never becomes a
+    #: policy step.
+    TRANSPORT_RETRIES = 3
+    #: Hosted (billed) endpoints: a send that failed in transport may still have been charged, so its
+    #: reservation is kept in full ("uncertain") and the request is re-sent under a NEW reservation, at
+    #: most this many times (2026-09-30: dropped connections voided about a third of 120-step episodes).
+    HOSTED_TRANSPORT_RETRIES = 3
+    #: Any endpoint: an HTTP 429 is a received refusal, never billed, so it is re-sent after an
+    #: exponential backoff (at least the server's Retry-After; capped at 60 s), at most this many times
+    #: (~4 minutes in all). A sustained token-rate limit needs the growing wait, not Retry-After alone.
+    RATE_LIMIT_RETRIES = 8
+
+    async def _post_with_transport_retry(self, body: dict, *, retry: bool) -> httpx.Response:
+        attempts = self.TRANSPORT_RETRIES + 1 if retry else 1
+        i = limited = 0
+        while True:
+            try:
+                resp = await self._client.post("/chat/completions", json=body)
+            except httpx.TransportError:
+                i += 1
+                if i >= attempts:
+                    raise
+                self.transport_retries = getattr(self, "transport_retries", 0) + 1
+                await asyncio.sleep(0.5 * i)
+                continue
+            if resp.status_code != 429 or limited >= self.RATE_LIMIT_RETRIES or _quota_exhausted(resp):
+                return resp   # an exhausted credit balance does not recover by waiting: fail fast
+            limited += 1
+            self.rate_limit_retries = getattr(self, "rate_limit_retries", 0) + 1
+            try:
+                hinted = float(resp.headers.get("retry-after", ""))
+            except ValueError:
+                hinted = 0.0
+            await asyncio.sleep(min(max(hinted, 2.0 ** limited), 60.0))
 
     def _tokens(self, data: dict, n: int = 1) -> dict:
         if not isinstance(data, dict):
@@ -871,6 +991,7 @@ class StudentPolicy(BranchablePolicy):
     def reset(self) -> None:
         self._queue = []
         self._notes = {}
+        self._memory = []
         self._previous_png = self._current_png = b""
         self._observed_step = None
         self.usage = {"in": 0, "out": 0}
@@ -918,7 +1039,31 @@ class StudentPolicy(BranchablePolicy):
         meta["tokens"] = dict(self.usage)
         if self.history_notes:
             self._notes[int(getattr(obs, "step", 0) or 0)] = note_from_reply(meta.get("raw_action") or "")
+        self._remember(meta)
         return action, meta
+
+    def agent_state(self) -> dict:
+        return {"memory": list(self._memory)} if self.memory_enabled else {}
+
+    def load_agent_state(self, state: dict) -> None:
+        """Adopt a checkpoint's declared agent state: the explicit memory (nothing else crosses)."""
+        if not state:
+            return
+        if set(state) - {"memory"}:
+            raise ValueError(f"unknown agent state fields {sorted(set(state) - {'memory'})}")
+        if not self.memory_enabled:
+            raise ValueError("cannot adopt explicit memory into a policy with memory disabled")
+        self._memory = [str(m) for m in state.get("memory", [])]
+        self._queue = []
+
+    def _remember(self, meta: dict) -> None:
+        """Fold this reply's ``Memory:`` facts into the explicit memory and expose it in ``meta``."""
+        if not self.memory_enabled:
+            return
+        facts = memory_from_reply(meta.get("raw_action") or "")
+        self._memory = extend_memory(self._memory, facts)
+        meta["memory_written"] = facts
+        meta["memory_after"] = list(self._memory)
 
     async def propose(self, obs: Any, n: int) -> list[tuple[Any, dict]]:
         """Best-of-N support: ``n`` sampled candidates for the same observation.
@@ -950,6 +1095,7 @@ class StudentPolicy(BranchablePolicy):
                 action, meta = self.parse_choice(ch, ctx)
                 if self.history_notes:
                     self._notes[int(obs.step)] = note_from_reply(meta.get("raw_action") or "")
+                self._remember(meta)
                 meta["_policy_state"] = self.snapshot_state()
                 meta.update({"model_latency_s": latency, "tokens": tokens, "candidate_index": len(results)})
                 results.append((action, meta))
@@ -977,6 +1123,7 @@ class StudentPolicy(BranchablePolicy):
                 a, m = self.parse_choice(chs[0], ctx)
                 if self.history_notes:
                     self._notes[int(obs.step)] = note_from_reply(m.get("raw_action") or "")
+                self._remember(m)
                 m["_policy_state"] = self.snapshot_state()
                 m.update({"model_latency_s": lat, "tokens": dict(self.usage), "candidate_index": idx})
                 return a, m
@@ -989,5 +1136,6 @@ class StudentPolicy(BranchablePolicy):
 
 __all__ = [
     "StudentPolicy", "PROMPT_STYLES", "COORD_SPACES", "build_system_prompt", "build_user_text",
+    "memory_from_reply", "extend_memory", "MEMORY_MAX_FACTS",
     "fara_computer_use_tool", "prepare_image", "FARA_DEFAULT_ALLOWED", "FARA_IDENTITY", "FARA_CRITICAL_POINTS",
 ]

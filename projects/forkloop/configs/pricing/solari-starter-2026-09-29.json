@@ -1,0 +1,14 @@
+{
+  "source": "https://docs.getsolari.com/pricing",
+  "plan": "starter",
+  "acknowledged": true,
+  "reviewed_on": "2026-09-28",
+  "valid_until": "2026-10-28",
+  "cpu_hour_usd": 0.035,
+  "memory_gb_hour_usd": 0.011,
+  "screen_hour_usd": 0.02,
+  "max_session_hours": 5.0,
+  "storage_starts_on": "2026-10-01",
+  "storage_gb_month_usd": 0.05,
+  "storage_free_gb": 10.0
+}

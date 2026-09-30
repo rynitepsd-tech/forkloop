@@ -1,0 +1,68 @@
+# kanboard-v1: the second world. Kanboard v1.2.54 (open source, MIT; the official kanboard/kanboard image's
+# application tree) with SQLite storage, in a Docker image with the claims-ops-v1 desktop (Xvfb 1280x720,
+# XFCE, Chrome). Built by worlds/kanboard_v1/docker/build_image.sh; documented in docs/second-world.md.
+name: kanboard-v1
+version: 1
+resolution: 1280x720
+template: default
+resources: {cpu: 2, mem_mb: 2048}
+# The golden "snapshot" is a Docker image on the docker backend (DockerBackend.for_world sets this variable
+# to FORKLOOP_DOCKER_IMAGE when it is unset). No Solari golden exists for this world.
+golden_snapshot_env: FORKLOOP_GOLDEN_SNAPSHOT_KANBOARD_V1
+# Consumed by the proposed world-aware DockerBackend hook (docs/second-world.md): until it lands, export
+# FORKLOOP_DOCKER_IMAGE=forkloop/kanboard-v1:1 and FORKLOOP_DOCKER_SNAPSHOT_DB=none.
+docker: {image: "forkloop/kanboard-v1:1", snapshot_db: none}
+module: worlds.kanboard_v1.world:KanboardWorld
+seed_module: worlds.kanboard_v1.tasks
+paths:
+  kanboard_root: /var/www/app
+  kanboard_db: /var/www/app/data/db.sqlite
+databases:
+  kanboard: {dialect: sqlite, path: /var/www/app/data/db.sqlite}
+apps:
+  kanboard: {url: "http://localhost", health: "/healthcheck.php"}
+families: [move_and_assign, due_and_comment]
+budget: {max_steps: 40, max_seconds: 600}
+# Kanboard keeps no request log in its database, so screen visits cannot be verified (docs/second-world.md).
+forbidden_paths: []
+oracle:
+  # Kanboard renumbers `position` of every open card in the source and destination columns when one card
+  # moves (TaskPositionModel::saveTaskPositions), and bumps `projects.last_modified` on every task event:
+  # neither is an edit of those rows. (`position` is also the display order of columns and swimlanes, so a
+  # reordering of columns is not detected.)
+  ignore_columns:
+    kanboard: [position, last_modified]
+  # Wall-clock columns (a replayed action writes a different second): left out of checkpoint fidelity
+  # digests only. `date_due` keeps the time of day of the save when a date is typed without a time.
+  volatile_columns:
+    kanboard: [date_modification, date_moved, date_completed, date_creation, date_due, date_started]
+  checksum_tables:
+    kanboard: [tasks, comments, subtasks, task_has_tags, tags, task_has_links, task_has_external_links,
+               task_has_files, projects, columns, swimlanes, project_has_users, project_has_categories, users,
+               actions]
+  watermark_tables:
+    kanboard: [forkloop_task_audit]
+  primary_keys:
+    kanboard.project_has_users: rowid
+    kanboard.task_has_tags: rowid
+    kanboard.forkloop_task_audit: id
+  exempt_tables: []
+  # Every change to a task or to a row keyed by a task must be matched by a Kanboard activity-stream event
+  # (project_activities, through the read-only view forkloop_task_audit) for that task after seeding.
+  audit:
+    kanboard: {table: forkloop_task_audit, entity_col: entity, id_col: entity_id, pk: id}
+  audit_entity_names:
+    kanboard.tasks: task
+    kanboard.comments: task
+    kanboard.subtasks: task
+    kanboard.task_has_tags: task
+    kanboard.task_has_links: task
+    kanboard.task_has_external_links: task
+    kanboard.task_has_files: task
+  audit_id_lookup:
+    kanboard.comments: task_id
+    kanboard.subtasks: task_id
+    kanboard.task_has_tags: task_id
+    kanboard.task_has_links: task_id
+    kanboard.task_has_external_links: task_id
+    kanboard.task_has_files: task_id

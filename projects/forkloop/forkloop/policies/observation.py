@@ -9,6 +9,26 @@ from __future__ import annotations
 from . import action_parse as ap
 
 OBSERVATION_SCHEMA = "forkloop.observation.v3"
+#: v3 plus the explicit-memory block (facts the policy itself wrote on earlier steps).
+OBSERVATION_SCHEMA_MEMORY = "forkloop.observation.v4-memory"
+
+
+def resize_for_model(im, *, image_max_side: int, image_scale: float = 1.0):
+    """The one image transform shared by serving (StudentPolicy) and training (train_lora): upscale by
+    ``image_scale`` (LANCZOS; small text such as authorization codes is resolution-limited: 4/14 exact
+    reads at 1x vs 12/14 at 1.5x for Qwen3.8-27B, 2026-09-29), then cap the longest side at
+    ``image_max_side``. Returns an RGB PIL image."""
+    from PIL import Image
+
+    if im.mode != "RGB":
+        im = im.convert("RGB")
+    if image_scale and abs(image_scale - 1.0) > 1e-9:
+        im = im.resize((max(1, int(round(im.width * image_scale))), max(1, int(round(im.height * image_scale)))),
+                       Image.LANCZOS)
+    if image_max_side and max(im.size) > image_max_side:
+        k = image_max_side / float(max(im.size))
+        im = im.resize((max(1, int(round(im.width * k))), max(1, int(round(im.height * k)))), Image.LANCZOS)
+    return im
 
 
 def coordinate_size(space: str, style: str, image: tuple[int, int], screen: tuple[int, int]) -> tuple[int, int]:
@@ -29,7 +49,8 @@ def observation_messages(*, instruction: str, history: list[str], step: int | No
                          screen: tuple[int, int], coords: tuple[int, int], style: str,
                          history_k: int, image_count: int, system_template: str | None = None,
                          instruction_note: str | None = None, nav_macro: bool = False,
-                         fara_allowed: tuple[str, ...] | None = None, notes: list[str | None] | None = None) -> list[dict]:
+                         fara_allowed: tuple[str, ...] | None = None, notes: list[str | None] | None = None,
+                         memory: list[str] | None = None) -> list[dict]:
     from .student import build_system_prompt, build_user_text, fara_allowed_actions, format_prompt_override
 
     if history_k < 0:
@@ -44,7 +65,8 @@ def observation_messages(*, instruction: str, history: list[str], step: int | No
               else build_system_prompt(style, *coords, fara_allowed=allowed))
     if instruction_note and instruction_note.strip():
         instruction = instruction.rstrip() + "\n\n" + instruction_note.strip()
-    content = [{"type": "text", "text": build_user_text(instruction, history, style, step=step, notes=notes)}]
+    content = [{"type": "text", "text": build_user_text(instruction, history, style, step=step, notes=notes,
+                                                        memory=memory)}]
     if image_count == 2:
         label = f" ({history[-1]})" if history else ""
         content.extend([{"type": "text", "text": f"Screen BEFORE your last action{label}:"},

@@ -53,6 +53,9 @@ class StepRecord:
     policy_note: str = ""
     search: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    #: Declared agent state around this step (explicit memory before the step and the facts the
+    #: policy wrote in it). Recorded so datasets can rebuild exactly what the policy saw.
+    agent: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         d = {"i": self.i, "t_wall": round(self.t_wall, 4), "action": self.action, "raw_action": self.raw_action,
@@ -66,6 +69,8 @@ class StepRecord:
             d["search"] = self.search
         if self.error:
             d["error"] = self.error
+        if self.agent is not None:
+            d["agent"] = self.agent
         return d
 
 
@@ -95,14 +100,14 @@ class EpisodeRecorder:
                     raw_action: str, valid: bool, model_latency_s: float = 0.0,
                     tokens: Optional[dict[str, int]] = None, milestones: Optional[float] = None,
                     policy_note: str = "", search: Optional[dict[str, Any]] = None,
-                    error: Optional[str] = None) -> StepRecord:
+                    error: Optional[str] = None, agent: Optional[dict[str, Any]] = None) -> StepRecord:
         rec = StepRecord(
             i=i, t_wall=time.monotonic() - self.t0, action=action.to_dict() if action else None,
             raw_action=raw_action, valid=valid,
             shot_before=self._shot(f"{i:03d}_before.png", shot_before),
             shot_after=self._shot(f"{i:03d}_after.png", shot_after),
             model_latency_s=model_latency_s, tokens=dict(tokens or {}), milestones=milestones,
-            policy_note=policy_note, search=search, error=error)
+            policy_note=policy_note, search=search, error=error, agent=agent)
         self.steps.append(rec)
         self._steps_fh.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
         self._steps_fh.flush()

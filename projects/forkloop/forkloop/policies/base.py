@@ -36,6 +36,16 @@ class BranchablePolicy:
         for k, v in copy.deepcopy(state).items():
             setattr(self, k, v)
 
+    def agent_state(self) -> dict:
+        """The declared, observation-contract state another policy may adopt at a checkpoint
+        (e.g. a teacher continuing from a student's checkpoint). Default: none."""
+        return {}
+
+    def load_agent_state(self, state: dict) -> None:
+        """Adopt another policy's declared agent state (see :meth:`agent_state`)."""
+        if state:
+            raise ValueError(f"{type(self).__name__} declares no agent state but was given {sorted(state)}")
+
     def clone_for_branch(self, state: dict | None = None):
         clone = copy.copy(self)  # config/client references intentionally shared
         clone.restore_state(self.snapshot_state() if state is None else state)

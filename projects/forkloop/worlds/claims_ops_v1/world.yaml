@@ -33,7 +33,8 @@ apps:
     health: "/interface/login/login.php?site=default"
 # resolve_denial_easy is the diagnostic variant of family 3 (page-1 auth number, no distractor
 # claims); always pass --families explicitly to collect/eval so it is not run by accident.
-families: [reschedule_constrained, update_insurance_reconcile, resolve_denial, resolve_denial_easy]
+# compose_claims (2026-09-29): two subtasks from different families per episode (tasks/compose_claims.py).
+families: [reschedule_constrained, update_insurance_reconcile, resolve_denial, resolve_denial_easy, compose_claims]
 budget: {max_steps: 60, max_seconds: 600}
 forbidden_paths: ["/admin", "/debug", "/api/"]
 oracle:
@@ -46,6 +47,11 @@ oracle:
     # Opening an inbox message marks it read; viewing is not an edit (2026-09-22 review:
     # any inbox visit failed the task as COLLATERAL_EDIT).
     portal: [is_read]
+  # Wall-clock columns: two executions of the same actions write different values. Excluded from
+  # checkpoint fidelity digests (forkloop/correction/digest.py), never from the verifier.
+  volatile_columns:
+    portal: [created_at, updated_at]
+    openemr: [pc_time]
   checksum_tables:
     portal: [patients, claims, appeals, resubmissions, providers, users, messages]
     openemr: [patient_data, insurance_data, openemr_postcalendar_events, documents, categories_to_documents, users, insurance_companies]

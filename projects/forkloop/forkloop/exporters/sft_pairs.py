@@ -41,6 +41,10 @@ def export_sft_pairs(run_dir: str | Path, out: str | Path, *, history_k: int = 8
             continue
         if m["split"] in exclude_splits:
             continue
+        if m.get("world") == "claims-ops-v1":
+            from ..splits import final_reasons
+            if final_reasons(m):  # final-test split, sealed block or held-out structure
+                continue
         eps.append(ep)
     eps.sort(key=lambda e: e["manifest"]["task_id"])
     if limit_episodes is not None:

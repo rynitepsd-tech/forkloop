@@ -160,7 +160,8 @@ class WorkerPool:
                  cpu: Optional[int] = None, mem_mb: Optional[int] = None, record: Optional[bool] = None,
                  timeout_ms: int = 30 * 60_000, max_retries: int = 10, disk_gb: Optional[int] = None,
                  fallback_to_fork: bool = True, create_timeout_s: float = 240.0,
-                 concurrency_backoff_max_s: float = 15.0, reap_orphans_enabled: bool = True) -> None:
+                 concurrency_backoff_max_s: float = 15.0, reap_orphans_enabled: bool = True,
+                 metadata: Optional[dict[str, str]] = None) -> None:
         if mode not in ("revert", "fork"):
             raise ValueError("mode must be 'revert' or 'fork'")
         self.backend = backend
@@ -181,6 +182,9 @@ class WorkerPool:
         #: shares the account with a live parent pool (best_of_n branch pools) must not reap: on
         #: 2026-09-03 a branch pool killed the episode's main worker at start-up.
         self.reap_orphans_enabled = reap_orphans_enabled
+        #: Extra provider tags on every machine (e.g. the owning runner, so an out-of-process reaper can
+        #: find machines whose runner died).
+        self.metadata = dict(metadata or {})
         self.size = max(1, min(size or backend.concurrency_cap, backend.concurrency_cap))
         # The fake backend's snapshots are directories of this process; a Solari snapshot id left in
         # the environment (``source ~/.config/forkloop/env``) would make every offline reset fail
@@ -263,7 +267,8 @@ class WorkerPool:
                     machine = await asyncio.wait_for(self.backend.create(
                         template=self.world.config.template, from_snapshot=from_snapshot,
                         resolution=self.world.config.resolution, cpu=self.cpu, mem_mb=self.mem_mb,
-                        record=self.record, metadata={"forkloop": "1", "run_id": self.run_id, "world": self.world.name},
+                        record=self.record, metadata={**self.metadata, "forkloop": "1", "run_id": self.run_id,
+                                                      "world": self.world.name},
                         timeout_ms=self.timeout_ms, disk_gb=self.disk_gb), timeout=self.create_timeout_s)
                 finally:
                     _INFLIGHT[self.run_id].pop(token, None)
