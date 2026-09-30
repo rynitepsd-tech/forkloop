@@ -15,9 +15,9 @@ Nested budgets (B/4, B/2, B) give the data-scaling curve. Nothing here looks at 
 **Unscored work** (infrastructure: unscored attempts, repairs with an unscored branch) is not a cost of
 any arm by default: each arm is charged for its scored attempts and, per failure, its *counted*
 repair (the first one with no unscored branch; ``repair.counted_repair``), exactly as unscored cells
-are replaced rather than counted in the evaluation. ``count_unscored=True`` reproduces the earlier
-accounting (every attempt with status finished/infra_error and the latest repair, whatever its
-branches). A failure whose repairs are still missing is *pending*: ``select`` refuses to cut the
+are replaced rather than counted in the evaluation. ``count_unscored=True`` is the all-work accounting
+(review 2, B1): every attempt with status finished/infra_error and every repair of a failure, void ones
+included, is charged; the data still come only from the counted repair. A failure whose repairs are still missing is *pending*: ``select`` refuses to cut the
 budget past it, and one with ``1 + infra_retries`` unscored repairs is excluded and reported.
 """
 from __future__ import annotations
@@ -105,7 +105,6 @@ def repair_units(store: Store, attempt_experiment: str, repair_experiment: str, 
     from .repair import counted_repair
 
     ch = _charges_by_ref(store)
-    latest = {r["attempt_id"]: r for r in store.repairs(experiment_id=repair_experiment) if r["mode"] == mode}
     units = []
     for a in store.attempts(experiment_id=attempt_experiment):
         if a["info"].get("role") != "student" or a["status"] not in ((FINISHED, "infra_error") if count_unscored else (FINISHED,)):
@@ -120,7 +119,15 @@ def repair_units(store: Store, attempt_experiment: str, repair_experiment: str, 
                  world_hours=max(0.0, wall) / 3600, student_steps=a["n_steps"] or 0)
         failed = a["status"] == FINISHED and (a["reward"] or 0) < 1.0
         if count_unscored:
-            rep = latest.get(a["attempt_id"])
+            # all work: every repair of this failure is charged (void ones too); data only from the counted one
+            rep, _ = counted_repair(store, a["attempt_id"], experiment_id=repair_experiment, mode=mode) if failed else (None, 0)
+            for other in (r for r in store.repairs(attempt_id=a["attempt_id"], experiment_id=repair_experiment)
+                          if r["mode"] == mode and (rep is None or r["repair_id"] != rep["repair_id"])):
+                for b in store.branches(repair_id=other["repair_id"]):
+                    bc = ch.get(b["branch_id"], [])
+                    u.teacher_usd += _sum(bc, "model_tokens", "usd")
+                    u.world_hours += _sum(bc, "branch_wall_seconds") / 3600
+                    u.teacher_steps += b["n_steps"] or 0
         elif failed:
             rep, tried = counted_repair(store, a["attempt_id"], experiment_id=repair_experiment, mode=mode)
             if rep is None and tried >= 1 + infra_retries:

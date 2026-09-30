@@ -25,9 +25,15 @@ from .store import FINISHED, Store
 
 
 def outcomes(store: "Store | list[Store]", experiment_id: str, arms: dict[str, tuple[str, int]],
-             task_filter: Any = None) -> dict[str, Any]:
+             task_filter: Any = None, *, unscored_as_failure: bool = False,
+             policy_failure: Any = None) -> dict[str, Any]:
     """{arm: {run: {task_id: 0/1/None}}} plus per-cell metadata. The latest attempt of a cell counts
-    only if earlier ones were unscored (the predeclared replacement rule)."""
+    only if earlier ones were unscored (the predeclared replacement rule).
+
+    Sensitivity options (not the registered analysis): ``unscored_as_failure`` scores a cell that stayed
+    unscored as 0; ``policy_failure(attempt) -> bool`` marks an unscored attempt whose failure the policy
+    caused (e.g. an action the backend cannot send) as a scored failure, so it becomes the cell's
+    first scored attempt."""
     table: dict[str, dict[int, dict[str, Optional[int]]]] = defaultdict(lambda: defaultdict(dict))
     meta: dict[tuple[str, int, str], dict] = {}
     by_cell: dict[str, list[dict]] = defaultdict(list)
@@ -42,14 +48,24 @@ def outcomes(store: "Store | list[Store]", experiment_id: str, arms: dict[str, t
         by_cell[a["cell"]].append(a)
     for cell, atts in by_cell.items():
         atts.sort(key=lambda a: a["started_at"])
-        scored = [a for a in atts if a["status"] == FINISHED]
+        pf = [a for a in atts if a["status"] != FINISHED and policy_failure is not None and policy_failure(a)]
+        scored = [a for a in atts if a["status"] == FINISHED or a in pf]
         a = scored[0] if scored else atts[-1]
         label = a["info"]["role"][len("eval:"):]
         arm, run = arms[label]
-        y = (1 if (a["reward"] or 0) >= 1.0 else 0) if a["status"] == FINISHED else None
+        if a["status"] == FINISHED:
+            y: Optional[int] = 1 if (a["reward"] or 0) >= 1.0 else 0
+        elif scored or unscored_as_failure:
+            y = 0
+        else:
+            y = None
         table[arm][run][a["task_id"]] = y
-        meta[(arm, run, a["task_id"])] = {"reason": a["reason_code"], "steps": a["n_steps"], "status": a["status"],
-                                          "attempts": len(atts), "wall_s": a["info"].get("wall_s")}
+        meta[(arm, run, a["task_id"])] = {"reason": a["reason_code"] if a["status"] == FINISHED else
+                                          ("POLICY_BACKEND_FAILURE" if a in pf else a["reason_code"]),
+                                          "steps": a["n_steps"], "status": a["status"],
+                                          "attempts": len(atts), "wall_s": a["info"].get("wall_s"),
+                                          "end_reason": a["info"].get("end_reason"), "attempt_id": a["attempt_id"],
+                                          "run_dir": a.get("run_dir"), "error": a["info"].get("error")}
     return {"table": {k: dict(v) for k, v in table.items()}, "meta": meta}
 
 

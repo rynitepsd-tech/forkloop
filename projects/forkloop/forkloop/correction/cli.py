@@ -634,7 +634,7 @@ def add_cleanup_command(sub: Any) -> None:
     p.add_argument("--fractions", default="0.25,0.5,1.0")
     p.add_argument("--dry-run", action="store_true", help="selection only; fails while a selected failure is unsettled")
     p.add_argument("--count-unscored-cost", action="store_true",
-                   help="charge unscored attempts and the latest repair whatever its branches (earlier accounting)")
+                   help="all-work accounting: charge unscored attempts and every repair of a failure (void ones too)")
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_budget)
     p = sub.add_parser("evidence", help="shareable evidence bundle: one repaired failure end to end, datasets, lineage")

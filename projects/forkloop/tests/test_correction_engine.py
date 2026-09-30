@@ -346,7 +346,8 @@ def test_repair_with_an_unscored_branch_is_replaced_and_only_the_clean_one_count
     assert chosen == [u] and spent == pytest.approx(u.cost(rates))
     # the earlier accounting (every branch of the latest repair, unscored attempts too) stays available
     old = repair_units(store, "round", "rep", "checkpoint", "A2", count_unscored=True)[0]
-    assert old.repair_id == reps[1]["repair_id"]
+    assert old.repair_id == reps[1]["repair_id"] and set(old.verified_sources) == good
+    assert old.world_hours > u.world_hours          # all-work accounting also charges the void repair
 
 
 def test_repairs_are_exhausted_after_the_registered_number_of_unscored_tries(tmp_path, world, backend):

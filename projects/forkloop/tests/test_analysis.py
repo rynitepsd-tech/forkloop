@@ -37,3 +37,26 @@ def test_paired_analysis(tmp_path):
     p = paired(res, "A2", "A0", n_boot=500)
     assert p["tasks"] == 19 and p["tasks_a_better"] == 8 and p["ci95"][0] > 0
     assert sign_test(7, 0) < 0.05 and sign_test(3, 3) == 1.0
+
+
+def test_outcome_sensitivity_options():
+    from forkloop.correction.analysis import outcomes
+
+    class _S:
+        def __init__(self, rows): self.rows = rows
+        def attempts(self, **w): return [r for r in self.rows if r["experiment_id"] == w["experiment_id"]]
+
+    def att(i, cell, status, reward, t, err=""):
+        return {"attempt_id": f"a{i}", "experiment_id": "ev", "cell": cell, "task_id": cell.split("/")[0],
+                "status": status, "reward": reward, "reason_code": "OK" if reward else None, "n_steps": 3,
+                "started_at": t, "run_dir": "", "info": {"role": "eval:m", "error": err}}
+    rows = [att(1, "fam-final_test-000001/eval:m/r1", "infra_error", None, 1, "key"),
+            att(2, "fam-final_test-000001/eval:m/r1", "finished", 1.0, 2),
+            att(3, "fam-final_test-000002/eval:m/r1", "infra_error", None, 1)]
+    arms = {"m": ("M", 1)}
+    base = outcomes(_S(rows), "ev", arms)["table"]["M"][1]
+    assert base == {"fam-final_test-000001": 1, "fam-final_test-000002": None}
+    assert outcomes(_S(rows), "ev", arms, unscored_as_failure=True)["table"]["M"][1]["fam-final_test-000002"] == 0
+    pf = outcomes(_S(rows), "ev", arms, policy_failure=lambda a: a["info"]["error"] == "key")
+    assert pf["table"]["M"][1]["fam-final_test-000001"] == 0            # the key failure came first: it counts
+    assert pf["meta"][("M", 1, "fam-final_test-000001")]["reason"] == "POLICY_BACKEND_FAILURE"
