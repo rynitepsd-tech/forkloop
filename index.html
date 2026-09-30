@@ -102,7 +102,7 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; 
   <section aria-labelledby="how">
     <h2 id="how">The loop</h2>
     <div class="steps six">
-      <div class="card"><span class="num">1</span><h3>Record</h3><p>Your agent attempts real workflows. Checkpoints bind the world (VM snapshot or deterministic replay) to the agent's explicit memory and history.</p></div>
+      <div class="card"><span class="num">1</span><h3>Record</h3><p>Your agent attempts real workflows. Checkpoints bind the world (VM snapshot, or replay of the recorded prefix with a fidelity check) to the agent's explicit memory and history.</p></div>
       <div class="card"><span class="num">2</span><h3>Find restart points</h3><p>From evidence only: the first near-miss of a required value, the first damaged checkpoint, the start of a loop, or step 0.</p></div>
       <div class="card"><span class="num">3</span><h3>Repair</h3><p>A teacher continues from each restored checkpoint on k independent copies. It sees what the agent saw, and is never told why the attempt failed.</p></div>
       <div class="card"><span class="num">4</span><h3>Verify</h3><p>SQL checks on the applications' databases: right record, right value, no duplicate, no collateral edit. No model judges.</p></div>
@@ -124,7 +124,7 @@ cd forkloop/projects/forkloop
 python3.11 -m venv .venv &amp;&amp; . .venv/bin/activate
 pip install -e '.[world]'
 forkloop demo-loop --out runs/demo-loop</code></pre>
-    <p>For real runs: the bundled claims-operations world (OpenEMR 8.3 and a synthetic payer portal) runs in Docker, dozens of copies per machine, or on Solari desktops with VM snapshots. Bring your agent through any OpenAI-compatible endpoint or a small Python class, and your own application through <code>world.yaml</code> and a verifier. <a href="evidence/kanboard/">A second world, Kanboard</a>, was built only through that public interface; 5 of its 6 recorded failures were repaired.</p>
+    <p>For real runs: the bundled claims-operations world (OpenEMR 8.3 and a synthetic payer portal) runs in Docker, dozens of copies per machine, or on Solari desktops with VM snapshots. Bring your agent through any OpenAI-compatible endpoint or a small Python class, and your own application through <code>world.yaml</code> and a verifier. <a href="evidence/kanboard/">A second world, Kanboard</a>, was built only through that public interface; across three student configurations it recorded 13 failures, and 5 were repaired (all in the third).</p>
   </section>
 
   <section aria-labelledby="prior">
