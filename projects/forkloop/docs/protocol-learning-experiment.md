@@ -214,3 +214,8 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   were all transport drops or interrupted by the stop are annotated `void_reason=provider_transport`
   (`scripts/exp1/mark_transport_voids.py`) and are not replacement tries; other voids still count.
   The window-first replacement repairs were relaunched (tmux `exp1-repair4`).
+- 2026-09-30 01:35 UTC — added a secondary, descriptive analysis (`report.py` `repair_modes`): per
+  failure, whether its counted checkpoint repair and its counted full-restart repair verified, with an
+  exact sign test on discordant failures. It was defined after partial first-round counts had been
+  seen (40 vs 19 verified repairs, largely voided later), so it is not a registered test and is
+  reported as descriptive only.
