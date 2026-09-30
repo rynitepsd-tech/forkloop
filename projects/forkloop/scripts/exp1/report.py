@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from forkloop.correction import Store
-from forkloop.correction.analysis import arm_success, checkpoint_tradeoffs, outcomes, paired, reason_rates
+from forkloop.correction.analysis import arm_success, checkpoint_tradeoffs, outcomes, paired, reason_rates, sign_test
 from forkloop.correction.repair import counted_repair
 
 ARMS = {"A0": ("A0", 0), "sw": ("S_W", 0),
@@ -57,6 +57,28 @@ def collection(stores: list[Store]) -> dict:
     return out
 
 
+def repair_modes(stores: list[Store]) -> dict:
+    """Secondary, descriptive: per failure, did its counted checkpoint repair and its counted
+    full-restart repair verify? Same failures, teacher and k; exact sign test on discordant failures."""
+    st = stores[0]
+    failed = [a for a in st.attempts(experiment_id="exp1-round1")
+              if a["info"].get("role") == "student" and a["status"] == "finished" and (a["reward"] or 0) < 1]
+    both = Counter()
+    per_fam = defaultdict(Counter)
+    for a in failed:
+        ck, _ = counted_repair(st, a["attempt_id"], experiment_id="exp1-round1", mode="checkpoint")
+        fr, _ = counted_repair(st, a["attempt_id"], experiment_id="exp1-restart", mode="full_restart")
+        if ck is None or fr is None:
+            both["not both scored"] += 1
+            continue
+        key = ("ckpt+" if ck["status"] == "verified" else "ckpt-") + ("/restart+" if fr["status"] == "verified" else "/restart-")
+        both[key] += 1
+        per_fam[fam(a["task_id"])][key] += 1
+    pos, neg = both["ckpt+/restart-"], both["ckpt-/restart+"]
+    return {"failures": len(failed), "paired": dict(both), "per_family": {f: dict(c) for f, c in sorted(per_fam.items())},
+            "checkpoint_only": pos, "restart_only": neg, "sign_test_p": sign_test(pos, neg)}
+
+
 def training(adapters: Path) -> dict:
     out = {}
     for d in sorted(adapters.iterdir()) if adapters.exists() else []:
@@ -75,7 +97,8 @@ def training(adapters: Path) -> dict:
 
 def main(a: argparse.Namespace) -> None:
     stores = [Store(p) for p in a.store]
-    rep: dict = {"collection": collection(stores), "checkpoints": checkpoint_tradeoffs(stores),
+    rep: dict = {"collection": collection(stores), "repair_modes": repair_modes(stores),
+                 "checkpoints": checkpoint_tradeoffs(stores),
                  "training": training(Path(a.adapters)) if a.adapters else {}}
     if a.budget_dir and (Path(a.budget_dir) / "budget-report.json").exists():
         b = json.loads((Path(a.budget_dir) / "budget-report.json").read_text())
@@ -112,6 +135,11 @@ def main(a: argparse.Namespace) -> None:
         md.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for k, v in sorted(rep["budget"]["arms"].items()):
             md.append(f"| {k} | {v['units']} | {v['verified_paths']} | {v['records']} | {v['cost_usd']:.2f} | {v['teacher_usd']:.2f} | {v['world_hours']:.2f} | {v['student_steps']} |")
+    rm = rep["repair_modes"]
+    md.append(f"\n## Checkpoint vs full-restart repairs (secondary, per failure)\n\n"
+              f"{rm['failures']} failures; both modes scored on {sum(v for k, v in rm['paired'].items() if k != 'not both scored')}. "
+              f"Repaired only from the checkpoint: {rm['checkpoint_only']}; only from the start: {rm['restart_only']}; "
+              f"exact sign test p = {rm['sign_test_p']:.3g}. `{json.dumps(rm['paired'])}`")
     md.append(f"\n## Checkpoints\n\n```json\n{json.dumps(rep['checkpoints'], indent=1)[:4000]}\n```")
     if rep["training"]:
         md.append("\n## Training runs\n\n| run | steps | first loss | final loss | GPU h |\n| --- | ---: | ---: | ---: | ---: |")
