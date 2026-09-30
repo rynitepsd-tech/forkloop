@@ -338,3 +338,9 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   only main active; Solari: no machines, only the pre-existing golden `snap_dlft9omnpkyw`. Lambda so far
   $1,518.89 at list price (dev $105.89, aux $567.93, main $845.07 and counting). Main terminates after
   the Mac copy is verified.
+- 16:47 UTC — **main terminated** (reaper; termination confirmed ≈ 16:50) after the release was verified on
+  the Mac (34/34 SHA256SUMS), the final program sync to NFS, and the session ledger saved
+  (`runs/exp1-stores/ledger-main.sqlite`, NFS). No Lambda instances remain; Solari: no machines, only the
+  pre-existing golden snapshot. Final spend: Lambda instances $1,523.92 (list price), OpenAI $126.90
+  (reported usage), Solari ≤ $13.29 → ≈ $1,664 (+ monthly storage for the three retained filesystems).
+  **Program complete**; open owner actions in `docs/final-report-20260929.md` §6.

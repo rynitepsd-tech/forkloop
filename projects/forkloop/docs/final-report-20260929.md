@@ -147,16 +147,43 @@ student alone, one attempt per task, family-balanced success on the 150 register
 
 ## 4. Spend
 
-PENDING — OpenAI (response-usage sums; the session ledger's "uncertain" amount includes refused
-calls that were never billed, so the invoice is authoritative), Solari (reservation upper bound and
-billing), Lambda (instance hours × list price; the invoice is authoritative).
+For the whole program (2026-09-29 01:50 UTC to 2026-09-30 16:47 UTC). Provider invoices are authoritative.
+
+| Service | Amount | Source |
+| --- | ---: | --- |
+| Lambda instances | **$1,523.92** | registry lifecycle × list price: dev 1×H100 32.19 h × $3.29 = $105.89; aux 8×A100-40 35.67 h × $15.92 = $567.93; main 8×A100-80 38.09 h × $22.32 = $850.10 |
+| Lambda filesystems | monthly storage, not included above | three retained filesystems (§5), billed per GB-month |
+| OpenAI (gpt-5.6-luna teacher) | **$126.90** | reported token usage: main ledger $125.71, local ledger $0.56, Kanboard $0.63 |
+| Solari | **≤ $13.29** | reservation upper bound over 70 operations (the flagship's snapshots and desktops); actual not reconciled |
+| **Total** | **≈ $1,664** | |
+
+- **The OpenAI ledger's "uncertain" amount is not spend.** Main's ledger shows $6,402 as uncertain. It comes almost entirely from requests refused during the credit outage (never billed) and from dropped connections, each held at its worst-case reservation. The code now releases a refused request's reservation (`8dff05a`).
+- **About $190 of Lambda time was lost to the credit outage** (≈ 4.5 h of three boxes). About $23 of OpenAI usage went to repairs later voided.
 
 ## 5. Resources remaining
 
-PENDING — final `forkloop ops inventory`, Solari listing, what is retained and why.
+From `forkloop ops inventory --provider` (registry and live provider listings), 2026-09-30 16:50 UTC; main's termination confirmed by the reaper:
+
+| Resource | State | Why kept / what it holds |
+| --- | --- | --- |
+| Lambda instances | none running (dev, aux and main terminated through the registry reaper; each after its data was copied and hash-checked) | — |
+| Lambda filesystem `forkloop-useast1` (us-east-1, ≈ 112 GB) | **retained** | full exp1 program data (stores, attempt and branch run dirs with screenshots, logs, datasets incl. the void `datasets/budget`, void v1 adapters), the release bundle (`exp1-release`, SHA256SUMS verified), the session ledger, pilot runs, the model cache |
+| Lambda filesystem `forkloop-uswest2` (us-west-2; provider reports 6.6 GB, `du` measured 24 GB of copied data) | **retained** | aux's full data incl. its evaluation screenshots (`programs/exp1aux`), model cache |
+| Lambda filesystem `forkloop-usw3` (≈ 76 GB) | **retained; recommended for deletion** | model cache only (re-downloadable) |
+| Solari | no machines; one snapshot | the pre-existing golden `snap_dlft9omnpkyw` (2026-09-15), untouched; all 30 checkpoint snapshots of the flagship run were deleted |
+| Local (this Mac) | kept | release bundle `~/Desktop/Solari/forkloop-exp1-release/` (5.9 GB, SHA256SUMS verified), store copies `runs/exp1-stores/` (aux store, main session ledger), flagship and Kanboard runs |
+
+The filesystems bill monthly per GB until deleted. Deleting them is permanent and left to the owner. The
+release bundle and store copies on this Mac are enough to reproduce every reported number.
 
 ## 6. Actions left for the owner
 
-- Push branch `correction-engine-20260929` and merge; publish the release and the site if this
-  session could not.
-- Posting and the challenge submission (drafts in `~/Desktop/Solari/posts/2026-09-29/`).
+- **Push branch `correction-engine-20260929`** and merge it. The session's permission check blocked `git push`.
+- **Publish the site** from local branch `gh-pages-correction` in the worktree
+  `projects/forkloop/runs/pages-20260922`. It is based on `origin/gh-pages` and adds the new landing page,
+  the three evidence bundles and the video. Its links to `main` work once the branch is merged.
+- **Publish the release** from `~/Desktop/Solari/forkloop-exp1-release/` (34 files; each under 2 GB), for
+  example as a GitHub release on the merged commit.
+- **Posting and the challenge submission.** The drafts are in `~/Desktop/Solari/posts/2026-09-29/`; the
+  challenge closes 2026-09-30.
+- **Decide on the three retained Lambda filesystems.** `usw3` holds only a model cache.
