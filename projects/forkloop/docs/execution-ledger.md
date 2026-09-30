@@ -301,3 +301,8 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   parallel: 9 checkpoint + 6 full-restart repairs started; 8 checkpoint repairs still running in
   `exp1-repair4`. World budget: 28 + phase3d's later 64 ≤ 96. Dev lease renewed to 15:18 UTC.
   Revised: budget-v2 ≈ 07:00–07:30 UTC, training ≈ 09:15, phase 5 ≈ 14:15, write-up ≈ 16:00.
+- 08:28 UTC — **budget-v2 built** (B = $27.27; b100: A1 78 verified paths / 4,167 records; A2 21 / 1,014;
+  A3 24 / 1,197). 08:30 dev `train-A3-s3` (v2); 08:31 phase 4 v2 on main (8 runs → `adapters-v2`).
+  Phase-5 waiters: main + aux tmux **`exp1-phase5`** (`scripts/exp1/phase5_when_ready.sh main|aux`;
+  main also waits for no `forkloop repair` process). Controller bg job: dev exit → `train_on_dev.sh
+  fetch` → main's 8 finals → `copy_adapters_to_aux.sh` (both with `ADAPTERS_NAME=adapters-v2`).
