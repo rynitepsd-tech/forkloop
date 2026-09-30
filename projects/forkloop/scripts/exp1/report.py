@@ -60,16 +60,28 @@ def collection(stores: list[Store]) -> dict:
 def repair_modes(stores: list[Store]) -> dict:
     """Secondary, descriptive: per failure, did its counted checkpoint repair and its counted
     full-restart repair verify? Same failures, teacher and k; exact sign test on discordant failures."""
+    from forkloop.correction.budget import Unit, _task_key, interleave
     st = stores[0]
-    failed = [a for a in st.attempts(experiment_id="exp1-round1")
-              if a["info"].get("role") == "student" and a["status"] == "finished" and (a["reward"] or 0) < 1]
+    scored = [a for a in st.attempts(experiment_id="exp1-round1")
+              if a["info"].get("role") == "student" and a["status"] == "finished"]
+    order = [u.attempt_id for u in interleave([Unit("", _task_key(a["task_id"]), a["task_id"], a["attempt_id"], None, [])
+                                               for a in scored])]
+    by_id = {a["attempt_id"]: a for a in scored}
+    failed_all = [by_id[i] for i in order if (by_id[i]["reward"] or 0) < 1]
+    window = failed_all[:50]   # protocol note 2026-09-30 08:45: first 50 failures in selection order
+    out = {"window": _modes(st, window), "outside_window_settled": _modes(st, failed_all[50:], settled_only=True)}
+    return out
+
+
+def _modes(st: Store, failed: list[dict], settled_only: bool = False) -> dict:
     both = Counter()
     per_fam = defaultdict(Counter)
     for a in failed:
         ck, _ = counted_repair(st, a["attempt_id"], experiment_id="exp1-round1", mode="checkpoint")
         fr, _ = counted_repair(st, a["attempt_id"], experiment_id="exp1-restart", mode="full_restart")
         if ck is None or fr is None:
-            both["not both scored"] += 1
+            if not settled_only:
+                both["not both scored"] += 1
             continue
         key = ("ckpt+" if ck["status"] == "verified" else "ckpt-") + ("/restart+" if fr["status"] == "verified" else "/restart-")
         both[key] += 1
@@ -135,11 +147,12 @@ def main(a: argparse.Namespace) -> None:
         md.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for k, v in sorted(rep["budget"]["arms"].items()):
             md.append(f"| {k} | {v['units']} | {v['verified_paths']} | {v['records']} | {v['cost_usd']:.2f} | {v['teacher_usd']:.2f} | {v['world_hours']:.2f} | {v['student_steps']} |")
-    rm = rep["repair_modes"]
-    md.append(f"\n## Checkpoint vs full-restart repairs (secondary, per failure)\n\n"
-              f"{rm['failures']} failures; both modes scored on {sum(v for k, v in rm['paired'].items() if k != 'not both scored')}. "
-              f"Repaired only from the checkpoint: {rm['checkpoint_only']}; only from the start: {rm['restart_only']}; "
-              f"exact sign test p = {rm['sign_test_p']:.3g}. `{json.dumps(rm['paired'])}`")
+    md.append("\n## Checkpoint vs full-restart repairs (secondary, descriptive, per failure)\n")
+    for part, rm in rep["repair_modes"].items():
+        md.append(f"- **{part}**: {rm['failures']} failures; both modes scored on "
+                  f"{sum(v for k, v in rm['paired'].items() if k != 'not both scored')}. Repaired only from the "
+                  f"checkpoint: {rm['checkpoint_only']}; only from the start: {rm['restart_only']}; exact sign test "
+                  f"p = {rm['sign_test_p']:.3g}. `{json.dumps(rm['paired'])}`")
     md.append(f"\n## Checkpoints\n\n```json\n{json.dumps(rep['checkpoints'], indent=1)[:4000]}\n```")
     if rep["training"]:
         md.append("\n## Training runs\n\n| run | steps | first loss | final loss | GPU h |\n| --- | ---: | ---: | ---: | ---: |")
