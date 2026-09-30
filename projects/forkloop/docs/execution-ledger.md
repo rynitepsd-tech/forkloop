@@ -313,3 +313,6 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   aux (sha256 of `final/` verified, 09:43). **Dev terminated** via the registry reaper (lease set to 0,
   dry run showed only dev; void v1 A3-s3 logs saved to main `adapters/void-dev/`). Main/aux leases
   renewed to 2026-10-01 00:00 UTC.
+- 10:21 UTC — phase 4 v2 complete: 8 main runs 100 steps (≈ 101 min each, final loss 0.32–0.53) + dev
+  A3-s3; all 9 adapters on aux (sha256 verified 10:18). Out-of-window repairs stopped 10:17, reaped;
+  **phase 5 (main) started 10:21** (tmux `exp1-phase5` → `phase5_eval.sh`, shard 0/2, PER_MODEL 8).
