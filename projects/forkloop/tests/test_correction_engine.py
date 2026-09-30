@@ -421,3 +421,23 @@ def test_a_repair_running_in_another_live_runner_is_not_duplicated(tmp_path, wor
     go()
     reps = store.repairs(experiment_id="rep")
     assert reps[0]["status"] == "interrupted" and len(reps) == 2 and reps[1]["status"] == "verified"
+
+
+def test_operator_stopped_attempts_are_not_replacement_tries(tmp_path, world):
+    from forkloop.correction.runner import plan_cells
+    store = Store(tmp_path / "p" / "f.sqlite")
+    task = world.generate("reach_target", 3, "train")
+    store.put_task(task)
+    pid = store.put_policy("student", {"name": "s"})
+    cell = f"{task.task_id}/eval:x/r1"
+    for n in (1, 2):
+        store.start_attempt(attempt_id=f"att-{n}", task_id=task.task_id, policy_id=pid, run_dir=str(tmp_path),
+                            strategy="reset", experiment_id="ev", cell=cell)
+        store.finish_attempt(f"att-{n}", status="interrupted", reward=None, reason_code=None, n_steps=0)
+    [p] = plan_cells(store, [task], role="eval:x", experiment_id="ev", infra_retries=1)
+    assert p.skip_reason and "exhausted after 2" in p.skip_reason
+    for n in (1, 2):
+        store.annotate_attempt(f"att-{n}", void_reason="operator_stop")
+    [p] = plan_cells(store, [task], role="eval:x", experiment_id="ev", infra_retries=1)
+    assert p.skip_reason is None and p.attempt_no == 3
+    assert store.attempt("att-1")["status"] == "interrupted" and store.attempt("att-1")["info"]["void_reason"] == "operator_stop"

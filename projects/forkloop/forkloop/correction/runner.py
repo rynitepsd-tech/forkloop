@@ -27,6 +27,9 @@ from .repair import RepairConfig, counted_repair, repair_attempt
 from .store import FINISHED, Store, stable_id
 
 RETRYABLE = ("infra_error", "interrupted", "restore_failed")
+#: An unscored attempt annotated with one of these ``info.void_reason``s is not a replacement try: the
+#: operator stopped it, or the operator's overload of the host made its reset fail (protocol 2026-09-30).
+NOT_A_TRY = ("operator_stop", "operator_overload")
 
 
 async def make_policy(factory: Callable[[], Any]) -> Any:
@@ -48,15 +51,16 @@ def plan_cells(store: Store, tasks: Iterable[Any], *, role: str, experiment_id: 
     for task in tasks:
         cell = f"{task.task_id}/{role}/r{replicate}"
         prior = store.attempts(experiment_id=experiment_id, cell=cell)
+        tries = sum(1 for a in prior if (a.get("info") or {}).get("void_reason") not in NOT_A_TRY)
         if any(a["status"] == FINISHED for a in prior):
             plans.append(CellPlan(cell, task, 0, "finished"))
         elif any(a["status"] == "running" for a in prior):
             # rows of dead runners were just marked interrupted; a running row belongs to a live runner
             plans.append(CellPlan(cell, task, 0, "running in another live runner"))
-        elif len(prior) >= 1 + infra_retries:
-            plans.append(CellPlan(cell, task, 0, f"exhausted after {len(prior)} unscored attempts"))
+        elif tries >= 1 + infra_retries:
+            plans.append(CellPlan(cell, task, 0, f"exhausted after {tries} unscored attempts"))
         else:
-            plans.append(CellPlan(cell, task, len(prior) + 1))
+            plans.append(CellPlan(cell, task, len(prior) + 1))   # attempt numbers stay unique
     return plans
 
 
