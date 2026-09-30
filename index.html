@@ -77,7 +77,7 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; 
 
   <h1>Turn your agent's failures into verified training data.</h1>
   <p class="lede">When a computer-use agent fails a workflow in real software, Forkloop restores an earlier checkpoint of the world and the agent's memory, lets a teacher try again on independent copies, keeps only the paths the application's database confirms, and exports them with full lineage. Then it tests the retrained agent alone, on tasks it has never seen.</p>
-  <!-- RESULT-LINE: one sentence from docs/results-exp1.md, written after the registered evaluation -->
+  <p><strong>Measured, and registered in advance:</strong> training a 27B open-weights student on Forkloop's corrections of its own failures raised it from 3% to 26% on 150 held-out tasks. Teacher demonstrations of the same collection cost did as well (27%), so the hypothesis that corrections beat demonstrations was <em>not</em> supported. <a href="#res">The full result →</a></p>
   <div class="cta">
     <a class="btn primary" href="evidence/solari-flagship/">See a repaired failure</a>
     <a class="btn" href="https://github.com/rynitepsd-tech/forkloop/tree/main/projects/forkloop#two-minutes-no-account-no-key">Run the loop offline</a>
@@ -113,7 +113,21 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 14px; 
 
   <section aria-labelledby="res">
     <h2 id="res">Does it make the agent better?</h2>
-    <!-- RESULTS: filled only from docs/results-exp1.md after every registered cell has run -->
+    <p>We registered the experiment before collecting anything: a Qwen3.8-27B student, four families of claims work, three LoRA training runs per arm, one attempt per held-out task, and the same SQL verifier. The arms had matched collection budgets. The student was tested alone on 150 tasks it had never seen, 1,650 scored cells in all.</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Student</th><th>Success</th><th>Paired difference vs Forkloop (95% CI)</th></tr></thead>
+      <tbody>
+        <tr><td>Untrained</td><td>3.3%</td><td>+0.226 [+0.165, +0.290] for Forkloop</td></tr>
+        <tr><td>Warm start only</td><td>20.8%</td><td></td></tr>
+        <tr><td>Teacher demonstrations</td><td>26.8%</td><td>−0.008 [−0.042, +0.022]</td></tr>
+        <tr><td><strong>Forkloop corrections</strong></td><td><strong>26.0%</strong></td><td></td></tr>
+        <tr><td>Full-restart repairs</td><td>26.9%</td><td>−0.010 [−0.064, +0.054]</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p><strong>What we learned.</strong> Corrections worked as training data, but no better than demonstrations or full restarts at the same collection cost, and most of the gain came from shared warm-start data. Counting all the work, correction data cost an order of magnitude more per verified path. Restarting from an evidence-chosen checkpoint repaired no more failures than restarting from the beginning with the same number of tries. No model, and not the teacher, solved a rescheduling task.</p>
+    <p class="small">Success is family-balanced. The <a href="https://github.com/rynitepsd-tech/forkloop/blob/main/projects/forkloop/docs/final-report-20260929.md">final report</a> covers the incidents (an OpenAI credit outage, dropped connections, a key-name bug), every protocol deviation and the sensitivity analyses, and two independent reviews were acted on before any result was read. <a href="evidence/exp1/">A real correction from the experiment →</a></p>
   </section>
 
   <section aria-labelledby="try">
