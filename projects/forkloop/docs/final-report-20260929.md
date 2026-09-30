@@ -18,7 +18,7 @@ says so. <!-- PENDING sections are filled only from generated outputs. -->
 | Infrastructure: leases, reaper, accounting, cleanup | Registry with leases (`forkloop ops`), runner heartbeats and orphan-world reaping, append-only charges (lost only when a process is killed hard), cleanup verified against provider listings | `docs/operations.md` |
 | Inspection interface | `forkloop status/inspect/evidence` (static HTML bundles, no scripts) | `docs/evidence/{exp1,solari-flagship,kanboard}/` |
 | README, project site, video, release | PENDING (drafts ready) | `README.draft.md`, gh-pages branch, `scripts/make_video.py`, `scripts/exp1/package_release.py` |
-| Independent reviews | Review 1 (collection code, before round 1) and review 2 (deviations, code, numbers, claims; 2 blockers, 8 majors) — both acted on before any final-test outcome was read | `runs/review/review-1.md`, `runs/review2/review-2.md` |
+| Independent reviews | Review 1 (collection code, before round 1) and review 2 (deviations, code, numbers, claims; 2 blockers, 8 majors) — both acted on before any final-test outcome was read | `docs/reviews/review-1.md`, `docs/reviews/review-2.md` |
 | Submission copy | Drafts prepared, not sent | `~/Desktop/Solari/posts/2026-09-29/` |
 
 ## 2. The learning experiment (exp1)

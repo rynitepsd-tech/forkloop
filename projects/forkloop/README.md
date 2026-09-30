@@ -1,125 +1,120 @@
 # Forkloop
 
-**Regression testing for computer-use agents, scored by the database instead of by the agent's own account of what it did.**
+**Turn your computer-use agent's failures into verified training data, then check whether the
+retrained agent actually does better on tasks it has never seen.**
 
-Forkloop runs two versions of a GUI agent (a new model, prompt, observation or memory setting) on the *same* seeded task in **real OpenEMR 8.3 plus a synthetic payer portal**. It then checks what actually persisted. Every verdict links to the screenshots and database rows behind it. All patient and claims data is synthetic.
+Your agent attempts a workflow in real software. Forkloop records enough state to reproduce the
+attempt. When the agent fails, Forkloop restores an earlier checkpoint — world and agent memory —
+lets a teacher try alternative continuations on independent copies, verifies each one against the
+applications' databases, and exports the steps of the verified paths as a provenance-preserving
+dataset. You train on it; `forkloop evaluate` then runs your agent alone on held-out tasks.
 
-The question it answers: **did this change make the agent better at the workflow, or just more confident?**
+**What we measured** ([registered experiment](docs/protocol-learning-experiment.md),
+[results](docs/results-exp1.md)): on 150 held-out tasks in real OpenEMR and a payer portal, training a
+27B open-weights student on Forkloop's verified corrections of its own failures raised it from 3% to
+26% family-balanced success. Teacher demonstrations of the same collection cost did as well (27%), as
+did full-restart repairs (27%), and most of the gain came from shared warm-start data. The registered
+hypothesis — that corrections beat demonstrations at matched cost — was **not supported**, and
+correction data cost far more per verified path. The loop itself works; the report says exactly where it
+did not.
 
-**Measured:** swapping `gpt-5.6-luna` for `gpt-6-luna` in the same agent dropped full-task success from 23/24 to 4/24 on held-out seeds (exact p = 3.8 × 10⁻⁶), while the portal confirmed 17 of the newer model's appeals: the database showed 13 of them carried a wrong authorization number. [Report](docs/live-model-upgrade-comparison.md).
+## What you install, supply, run and receive
 
-[![The portal said "Appeal submitted". The database held AUTH-3614538, not AUTH-36G14538.](docs/worked-example/demo-poster.png)](https://rynitepsd-tech.github.io/forkloop/)
+| | |
+| --- | --- |
+| **Install** | `pip install -e '.[world]'` (Python 3.11). For live runs: Docker (the bundled OpenEMR + payer-portal world) or a Solari account (VM snapshots). |
+| **Supply** | Your agent (any object with `async act(observation) -> (action, metadata)`; built-in adapter for OpenAI-compatible endpoints such as vLLM), a teacher (e.g. an OpenAI model key), and a world (bundled, or yours through `world.yaml` + a verifier). |
+| **Run** | `forkloop record` → `forkloop failures` → `forkloop repair` → `forkloop dataset` → train → `forkloop evaluate` |
+| **Receive** | Verified correction datasets with sha256 lineage to every source trajectory, preference pairs, per-branch evidence, regression cases, and a paired evaluation of the retrained agent. |
 
-**[Open the example evidence report](https://rynitepsd-tech.github.io/forkloop/report.html)** (no install). In it, an agent filed a denial appeal and the portal confirmed it, but the authorization number it typed was missing one character. The verifier rejected the episode as `WRONG_VALUE`. A demo video would have shown a success.
-
-## Try it in two minutes (no account, no API key)
+## Two minutes, no account, no key
 
 ```bash
 git clone https://github.com/rynitepsd-tech/forkloop.git
 cd forkloop/projects/forkloop
-python3.11 -m venv .venv && . .venv/bin/activate
-pip install '.[world]'
-
-forkloop doctor --backend fake       # checks the installation
-forkloop demo --out runs/demo        # five verifier controls, each with an HTML report
+python3.11 -m venv .venv && . .venv/bin/activate && pip install -e '.[world]'
+forkloop demo-loop --out runs/demo-loop     # the whole loop on a toy world (offline simulation)
+open runs/demo-loop/evidence/index.html
 ```
 
-Open `runs/demo/wrong_authorization/report.html`. The demo runs the real portal routes and the real SQL verifier against local SQLite stand-ins:
+The toy world is a labelled simulation (synthetic screens, scripted agents): it shows the
+mechanics of recording, checkpoints, restart points, independent branches, verification and the
+immutable dataset. Recorded evidence from real runs needs no key either:
+[exp1 (Docker)](docs/evidence/exp1/index.html) · [Solari desktops](docs/evidence/solari-flagship/index.html) ·
+[Kanboard](docs/evidence/kanboard/index.html).
 
-| Scenario | What the verifier must do |
-| --- | --- |
-| Correct appeal | Accept: exactly one appeal, right authorization, right reason |
-| Wrong authorization | Reject `WRONG_VALUE`: the wrong value really persisted |
-| Wrong record | Reject: a distractor claim was changed |
-| Duplicate appeal | Reject `DUPLICATE_SIDE_EFFECT` |
-| Interrupted recording | Leave unscored: no verdict, and not counted as a model failure |
-
-These are verifier controls, not policy measurements. The screenshots are blank because nothing drives a browser offline.
-
-## Compare two versions of your agent
+## The loop on real software
 
 ```bash
-forkloop compare --config configs/offline-comparison.yaml --out runs/my-comparison
-forkloop compare-report runs/my-comparison --format html --out runs/my-comparison/comparison.html
+# a project file names the world, the backend, your agent (student) and the teacher
+forkloop record  --config configs/exp1.yaml --role student --pool train --per-family 20 --experiment round1
+forkloop failures --config configs/exp1.yaml --experiment round1     # restart points and why
+forkloop repair  --config configs/exp1.yaml --experiment round1      # k verified continuations per failure
+forkloop dataset --config configs/exp1.yaml --experiment round1 --out datasets/round1
+python -m train.train_lora --dataset datasets/round1 ...             # or your own trainer
+forkloop evaluate --config configs/exp1.yaml --pool final_test --final --set model=<adapter> --experiment eval
+forkloop evidence --config configs/exp1.yaml --out evidence/        # shareable HTML, no scripts
 ```
 
-A comparison config names the world, task family, seeds, budget and exactly two variants. [`configs/denial-memory.yaml`](configs/denial-memory.yaml) is a live example where only `history_notes` differs. For each seed, `compare`:
+- **Checkpoints bind world and agent state.** World: provider VM snapshot (Solari: memory and
+  disk of the running desktop) or replay of the recorded prefix (any backend; not guaranteed deterministic —
+  in exp1 53% of 1,608 replay restores passed the fidelity check, the rest were retried or left unscored), each
+  restore checked against a digest of persisted tables and the screen. Agent: its explicit memory,
+  history, counters and identity. A failed restore is recorded as unscored, never as a failure.
+- **Restart points come from evidence**: the first near-miss of a value the verifier requires,
+  the first damaged checkpoint, the start of a loop, the latest clean checkpoint, or step 0.
+- **Information boundary.** Teacher and student see only screenshots, the instruction, their own
+  action history and explicit memory. The teacher is never told why the attempt failed.
+- **Verified means the database agrees**: effects and invariants in SQL (right record, right value,
+  no duplicate, no collateral edit, UI path only, no forbidden screens). No LLM judges.
+- **Accounting never rewinds.** Model calls, machine-seconds, snapshots and replays are append-only
+  charges written when an episode or branch ends (a process killed hard or by SIGHUP loses its
+  in-flight charges; its rows become `interrupted`); datasets are immutable with sha256 manifests.
 
-- resets both arms to the same seeded state, and checks that the state really is equivalent: task fingerprint, hashes of 14 baseline tables, audit watermarks and reset method;
-- alternates which arm runs first, uses a fresh policy instance per cell, and makes exactly one attempt (no picking the best retry);
-- scores what persisted in both databases: effects (the right claim appealed with the right value) and invariants (no duplicates, no collateral edits, no direct DB writes, no forbidden screens);
-- keeps infrastructure failures, oracle errors and missing evidence **unscored**, never counting them as model failures.
+## Bring your own agent, teacher or world
 
-The report lists both-pass, A-only, B-only and neither outcomes, and gives an **exact McNemar test** on the seeds where the arms disagree. It names a leader only when p < 0.05; otherwise it says how many one-sided discordant seeds would be needed. Every discordant seed links to its screenshots and verifier checks.
+- Agent: `examples/loop_agents.py` documents the contract (optional `agent_state()` lets a teacher
+  adopt your agent's memory at a checkpoint).
+- World: `worlds/<name>/world.yaml` + a `World` subclass + seeded task generators + an oracle.
+  `worlds/kanboard_v1` is a second, compact world built only through that interface.
+- Backends: Docker (`forkloop/backends/docker.py`, dozens of worlds per machine), Solari desktops,
+  and an in-process fake for tests.
 
-Exit codes are designed for CI: 0 finished, 1 regression (with `--fail-on-regression`), 2 usage error, 3 incomplete evidence, 4 configuration or runtime error. `forkloop compare --check` validates a config without allocating a machine or calling a model.
+## Results
 
-### Bring your own agent
+The controlled experiment (`exp1`, protocol registered before collection, dated deviations,
+two independent reviews, 1,650 evaluation cells all scored):
 
-Built-in variants are `student` (any OpenAI-compatible image-chat endpoint), `teacher` (Claude computer use), `scripted` and `random`. For your own agent, point at a factory:
+| Student (Qwen3.8-27B, LoRA) | Family-balanced success | Difference vs A2 (95% CI) |
+| --- | ---: | --- |
+| A0 untrained | 3.3% | A2 − A0 = +0.226 [+0.165, +0.290] |
+| S_W warm start only | 20.8% | |
+| A1 teacher demonstrations (matched cost) | 26.8% | A2 − A1 = −0.008 [−0.042, +0.022] |
+| **A2 Forkloop corrections** | **26.0%** | |
+| A3 full-restart repairs (matched cost) | 26.9% | A2 − A3 = −0.010 [−0.064, +0.054] |
 
-```yaml
-variants:
-  - name: my agent v1
-    factory: my_package.agents:make_agent   # returns an object with async act(observation) -> (Action | None, metadata)
-    revision: v1.4.2
-    options: {temperature: 0}
-```
+- Corrections were not better than demonstrations or full restarts at matched collection cost; the
+  registered effect criterion is not met.
+- Counting all work, correction data cost an order of magnitude more per verified path ($374.63 and
+  $270.58 against $29.53 for demonstrations), and restarting from an evidence-chosen checkpoint repaired
+  no more failures than restarting from the beginning with the same number of tries (5 vs 3, p = 0.73).
+- No model solved any rescheduling task (the teacher could not either).
 
-[`examples/custom_agent.py`](examples/custom_agent.py) documents the whole interface in about 60 lines, and `forkloop compare --config configs/custom-agent.yaml --out runs/custom-agent` runs it offline. Factory modules are imported relative to the working directory.
+Full numbers, sensitivity analyses and every limitation: [final report](docs/final-report-20260929.md),
+[results](docs/results-exp1.md), [independent reviews](docs/reviews/). Evidence bundles:
+[exp1](docs/evidence/exp1/index.html) · [Solari VM snapshots](docs/evidence/solari-flagship/index.html) ·
+[Kanboard](docs/evidence/kanboard/index.html).
 
-The agent sees only the instruction, screenshots and its action history: never the expected values, the SQL, the seeding or the oracle. Custom factories are trusted local Python, not sandboxed plugins. Credentials come from environment variables named in the config (`api_key_env`), never from the YAML itself.
+## Documentation
 
-## Share a result
+[docs/correction.md](docs/correction.md) (the loop's contract) ·
+[docs/protocol-learning-experiment.md](docs/protocol-learning-experiment.md) ·
+[docs/verifier.md](docs/verifier.md) · [docs/tasks-and-splits.md](docs/tasks-and-splits.md) ·
+[docs/docker-world.md](docs/docker-world.md) · [docs/operations.md](docs/operations.md) ·
+[docs/student-qualification.md](docs/student-qualification.md) ·
+[docs/solari-platform-notes.md](docs/solari-platform-notes.md) · [docs/contracts.md](docs/contracts.md)
 
-```bash
-forkloop report runs/demo/wrong_authorization --all --format html --out wrong-authorization.html
-forkloop compare-report runs/my-comparison --format html --bundle runs/share --crop-top 114
-```
-
-Reports are self-contained, script-free HTML. `--bundle` exports only regenerated HTML, never the raw logs or source PNGs. `--crop-top` removes the browser chrome, where OpenEMR puts its session token. Redaction is not a secret scanner, so look at the pixels and free text before posting anything.
-
-## Running live on Solari
-
-Forkloop resets a Solari desktop from one snapshot that holds OpenEMR, the portal, both databases and the browser. Snapshot restore is only the first stage of a reset. Seeding, health checks, baseline capture and the initial screen follow, and every stage is timed.
-
-**VM lifetime is bounded by Forkloop, not by the idle timeout.** A [measured probe](docs/solari-lifetime-probe.md) found that a desktop with a 5-minute kill-on-idle timeout and no activity was never idle-killed; its deadline renewed itself every five minutes. Live runs therefore need an explicit opt-in:
-
-```bash
-export FORKLOOP_SOLARI_MAX_LIFETIME_MIN=45        # every machine is killed at 45 minutes, in-process
-export FORKLOOP_SOLARI_ACCEPT_BALANCE_BOUND=1     # last resort: the prepaid balance (keep auto top-up off)
-forkloop ledger runs/session/ledger.sqlite --create --solari-usd 15
-export FORKLOOP_SESSION_LEDGER=runs/session/ledger.sqlite
-# in a second terminal, the out-of-process safety net:
-while true; do forkloop reap --older-than-min 50; sleep 60; done
-forkloop compare --config configs/fara-notes.yaml --out runs/fara-notes
-```
-
-Use `reset_mode: fork` in the config so no machine outlives one cell. `forkloop doctor --backend solari` checks all of this without allocating anything. Without both variables, creates refuse before any provider call.
-
-[Solari platform notes](docs/solari-platform-notes.md) lists what we measured about Solari desktops while running Forkloop (restore times, lifetime, SDK quirks, capacity errors), each dated and linked to its evidence.
-
-## What has actually been measured
-
-| Evidence | Result | Caveat |
-| --- | --- | --- |
-| [Model upgrade gpt-5.6-luna → gpt-6-luna, live, Sept 24](docs/live-model-upgrade-comparison.md) | Same agent, only the model changed: **23/24 vs 4/24** full-task successes on held-out seeds; all 19 discordant pairs favour the older model, **exact p = 3.8 × 10⁻⁶**. gpt-6-luna filed 17 appeals; the portal confirmed all 17 and the database rejected 13, 12 of them missing one digit | Pre-registered; one task family and one prompt (developed on gpt-5.6-luna) |
-| [Reading study, same frozen screens, Sept 24](docs/reading-model-upgrade-results.md) | Exact authorization typed 20/20 by gpt-5.6-luna vs 10/20 by gpt-6-luna (10–0, exact p = 0.002) | Recorded states from gpt-5.6-luna's own episodes; actions not executed |
-| [Image detail high/low, live, Sept 23](docs/live-image-detail-comparison.md) | gpt-6-luna: 4/14 full-task successes at high detail vs 0/14 at low (all 4 discordant pairs favour high; exact p = 0.125). Low detail never logged in: 99% of its clicks landed in the 512 × 288 corner. High detail filed 10 appeals; the portal confirmed all 10 and the database rejected 6 for a misread authorization | Not significant at the pre-registered α = 0.05; a first run was voided by a reset defect and rerun under a new pre-registration |
-| [Notes on/off, live, Sept 23](docs/live-notes-comparison.md) | Fara-4B v3: 1/10 with notes, 1/10 without; 20/20 cells scored, 10/10 resets equivalent (exact p = 1) | Development seeds; 16/20 episodes hit the 900 s budget |
-| [Retained live episode](docs/worked-example/) | Adapter-trained Fara-4B completed the full workflow and submitted one wrong character → `WRONG_VALUE` | One episode; 6 of 148 screenshots retained |
-| [Prompt comparison, Sept 15](docs/worked-example/navigation-comparison.html) | Workflow prompt 2/2 vs compact prompt 0/2 on two matched seeds (exact p = 0.5) | Run interrupted; 2 of 4 planned pairs |
-| [Image-detail study](docs/frozen-v3-evaluation-results.md) | Exact authorization typing: 19/20 at high image detail vs 0/20 at low | Recorded states; actions not executed |
-| [Small-model SFT (Fara-4B)](docs/student-diagnosis.md) | SFT improved reading (26/38 vs 10/38). A notes memory lets the model type a number it can no longer see (37/38 vs 0/38), and training on notes added nothing over giving them at inference | Offline, on 38 held-out recorded states |
-
-Other task families (rescheduling, insurance updates) and fork-based search exist as research paths, and have not been re-verified live since the last repairs. See [limitations](docs/limitations.md) and [cost](docs/cost.md).
-
-## How it works
-
-- **Two channels.** The agent gets screenshots in and mouse and keyboard out, nothing else. The controller seeds tasks, reads databases and checks health through a separate privileged channel. Expected values never enter the VM.
-- **Deterministic verifier.** No LLM is anywhere in the reward path. Checks are SQL effects plus invariants: row checksums over 14 tables, audit-log provenance, duplicate counts and forbidden screens.
-- **Pure task generators.** A `(family, seed, split)` triple produces a byte-identical task on every machine.
-
-[system.md](system.md) is the module guide and [docs/contracts.md](docs/contracts.md) is the interface specification. [docs/](docs/README.md) indexes the current documents and separates them from the dated research diaries.
-
-Built on [Solari](https://getsolari.com) and [OpenEMR](https://www.open-emr.org/). Related work: [OSWorld](https://github.com/xlang-ai/OSWorld), [Gym-Anything / CUA-World](https://arxiv.org/abs/2604.06126), [HealthAdminBench](https://arxiv.org/abs/2604.09937), [MedCUA-Bench](https://arxiv.org/abs/2606.03203), [Fara](https://github.com/microsoft/fara). Forkloop does not claim to have invented database verification or GUI environments. Synthetic data only; this is not a HIPAA deployment. MIT.
+Earlier results (model-selection evidence, regression comparisons) are in
+[docs/README.md](docs/README.md). Forkloop does not claim to have invented snapshots, GUI
+benchmarks, deterministic verification, agent debugging or corrective training; it puts them into
+one working loop. All patient and claims data is synthetic. MIT.
