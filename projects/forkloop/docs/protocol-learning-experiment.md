@@ -226,3 +226,31 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   stopped when training ends, and that comparison is restricted to the first 50 failures in selection
   order (fixed before any outcome; all settled in both modes or exhausted), with any other settled
   failures reported separately.
+- 2026-09-30 12:30 UTC — **independent review 2** (`runs/review2/review-2.md`, collection phase, code and
+  claims; no final-test outcome read by anyone) found 2 blockers and 8 majors. Acted on before any
+  outcome is read:
+  1. **Operator stops are never replacement tries**, for evaluation cells as for repairs (review M3).
+     On main, the 120 A0/`S_W` attempts interrupted by the operator on 2026-09-29 (09:00–09:08 and
+     10:24–10:31) are annotated `operator_stop`, and the 11 whose reset failed because the operator had
+     oversubscribed the Docker world cap `operator_overload` (`scripts/exp1/mark_operator_stops.py`);
+     `plan_cells` no longer counts them (`30e97d4`, deployed before main's phase-5 pass 2). The 5
+     attempts scored in those windows stay scored (first scored attempt counts). Out-of-window repairs
+     stopped at 10:17 feed no dataset; that stop is recorded, not counted.
+  2. Corrections to earlier notes: the 08:45 note's "all settled in both modes or exhausted" is wrong —
+     9 of the 50 window failures were not scored in both modes when repairs stopped; and that 50-failure
+     window was chosen (20:25) after the first batch's clean repairs were known, so the repair-mode
+     comparison is **exploratory**, reported with the step-0 fallback separated (checkpoint mode may run
+     up to 6 teacher branches per failure against 3), per-branch rates, and the unsettled failures
+     listed. The 15:28 note's "A1 … at half that concurrency (16 + 16)" is wrong: W ran at 32 and the
+     demonstrations at 40. Two note timestamps were corrected in place (09:25→09:17 in `380b5de`,
+     15:45→15:28 in `20a1ad3`); both were entry-time slips, not changes of content.
+  3. The accounting adopted at 15:28 is **matched cost of counted (clean) work**; it was chosen after
+     the first datasets were seen and partly on a withdrawn diagnosis, and it charges failed replay
+     restores (a cost of the checkpoint method) to no arm. The report will give all-work costs per arm
+     by cause and what an all-work accounting would have selected (descriptive; no further training).
+  4. Reported with the results as registered plus: unscored cells by arm × shard × cause with
+     key-name (`ctrl+-`) failures separate (they are policy-triggered, not random infrastructure) and a
+     sensitivity scoring them as failures; attempts used per cell; A0/`S_W` per shard; S_W − A0 beside
+     A2 − A0; trained-arm intervals labelled conditional on one collected dataset per arm; the
+     half-cost criterion stated as not tested (no B/4, B/2 models were trained); checkpoint branches'
+     inherited wall-clock (review M5) and `max_seconds` endings by mode and depth.
