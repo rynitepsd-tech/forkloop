@@ -392,3 +392,32 @@ def test_repairs_voided_by_a_provider_outage_are_not_replacement_tries(tmp_path,
     counted, tried = counted_repair(store, res.attempt_id, experiment_id="rep", mode="checkpoint")
     assert counted is not None and counted["status"] == "verified" and tried == 1
     assert len(store.repairs(experiment_id="rep")) == 3 and len({r["repair_id"] for r in store.repairs(experiment_id="rep")}) == 3
+
+
+def test_a_repair_running_in_another_live_runner_is_not_duplicated(tmp_path, world, backend):
+    import sqlite3
+    import time as _t
+    from forkloop.correction.runner import run_repairs
+
+    store = Store(tmp_path / "l" / "f.sqlite")
+    task = _task(world)
+    res = _recorded_failure(world, backend, store, task)
+    pid = store.put_policy("teacher", {"name": "teacher"})
+    store.start_repair(repair_id="rep-other", attempt_id=res.attempt_id, mode="checkpoint", teacher_policy_id=pid,
+                       config={}, experiment_id="rep")
+    with sqlite3.connect(store.path) as db:
+        db.execute("UPDATE repairs SET runner='other-runner' WHERE repair_id='rep-other'")
+    (store.root / "runners").mkdir(exist_ok=True)
+    hb = store.root / "runners" / "other-runner.hb"
+    cfg = RepairConfig(k=1, max_restart_points=1, concurrency=1, history_k=100)
+    teacher = _teacher(task)
+    go = lambda: asyncio.run(run_repairs(store=store, world=world, backend=backend, attempt_ids=[res.attempt_id],  # noqa: E731
+                                         teacher_factory=teacher, cfg=cfg, experiment_id="rep", concurrency=1,
+                                         log=lambda m: None))
+    hb.write_text(str(_t.time()))                 # the other runner is alive: its repair is left alone
+    go()
+    assert [r["repair_id"] for r in store.repairs(experiment_id="rep")] == ["rep-other"]
+    hb.write_text(str(_t.time() - 3600))          # it died: its repair is interrupted and replaced
+    go()
+    reps = store.repairs(experiment_id="rep")
+    assert reps[0]["status"] == "interrupted" and len(reps) == 2 and reps[1]["status"] == "verified"

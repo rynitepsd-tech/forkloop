@@ -197,6 +197,10 @@ async def run_repairs(*, store: Store, world: Any, backend: Any, attempt_ids: It
             log(f"[runner] repair {aid} {cfg.mode}: exhausted after {tried} unscored repairs, skipped")
             return
         prior = [r for r in store.repairs(attempt_id=aid, experiment_id=experiment_id) if r["mode"] == cfg.mode]
+        alive = live_runner_ids(store.root) - {RUNNER_ID}
+        if any(r["status"] == "running" and r.get("runner") in alive for r in prior):
+            log(f"[runner] repair {aid} {cfg.mode}: running in another live runner, skipped")
+            return
         try:
             r = await repair_attempt(store, world, backend, aid, teacher_factory=sync_factory, cfg=cfg,
                                      experiment_id=experiment_id, repair_no=len(prior) + 1, sem=sem)
