@@ -33,7 +33,7 @@ verifier, family-balanced success, paired bootstrap.
 
 **Collection (training pool only; measured).**
 
-- Teacher (gpt-5.6-luna) from initial states: warm start W insurance 18/20, denial 15/20, compose 9/20,
+- Teacher (gpt-5.6-luna) from initial states: warm start W (scored cells) insurance 18/20, denial 15/20, compose 9/18,
   rescheduling 0/19 scored; demonstrations (A1 pool, 160 tasks) insurance 31/40, denial 34/40, compose
   13/40, rescheduling 0/40. **No arm, and not W, contains any verified rescheduling path.**
 - Round 1 (S_W, the warm-started student, 160 training tasks): 39 OK — denial 29/40, insurance 6/40,
