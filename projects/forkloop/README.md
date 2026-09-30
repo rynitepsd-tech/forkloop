@@ -10,10 +10,11 @@ applications' databases, and exports the steps of the verified paths as a proven
 dataset. You train on it; `forkloop evaluate` then runs your agent alone on held-out tasks.
 
 **What we measured** ([registered experiment](docs/protocol-learning-experiment.md),
-[results](docs/results-exp1.md)): on 150 held-out tasks in real OpenEMR and a payer portal, training a
-27B open-weights student on Forkloop's verified corrections of its own failures raised it from 3% to
-26% family-balanced success. Teacher demonstrations of the same collection cost did as well (27%), as
-did full-restart repairs (27%), and most of the gain came from shared warm-start data. The registered
+[results](docs/results-exp1.md)): on 150 held-out tasks in real OpenEMR and a payer portal, the
+untrained 27B student scored 3.3% family-balanced success, shared warm-start training reached 20.8%,
+and warm start plus Forkloop corrections reached 26.0%. Warm start plus teacher demonstrations
+(26.8%) or full-restart repairs (26.9%) did as well at matched counted-work budgets, which exclude
+voided work. Most of the gain came from the shared warm start. The registered
 hypothesis — that corrections beat demonstrations at matched cost — was **not supported**, and
 correction data cost far more per verified path. The loop itself works; the report says exactly where it
 did not.

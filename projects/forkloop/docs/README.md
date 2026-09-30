@@ -6,7 +6,7 @@
 | --- | --- |
 | [../README.md](../README.md) | What Forkloop is, the two-minute offline try-out, comparisons, sharing |
 | [contracts.md](contracts.md) | The interface specification: action JSON, tasks, oracle checks and reason codes, run-directory layout, `compare` protocol and exit codes |
-| [../system.md](../system.md) | Module-by-module guide to the implementation |
+| [../system.md](../system.md) | Current architecture, correction loop, exp1 results and publication/submission status |
 | [limitations.md](limitations.md) | What reward 1 does and does not mean; scope of the checks; operational limits |
 | [cost.md](cost.md) | Prices, formulas and the recorded spend of past sessions |
 | [student-diagnosis.md](student-diagnosis.md) | Why small-model SFT stayed at 0/30, and the notes (memory channel) experiment |

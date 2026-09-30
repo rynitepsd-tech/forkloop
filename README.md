@@ -1,14 +1,84 @@
 # Forkloop
 
-**Regression testing for computer-use agents, scored by the database instead of by the agent's own account of what it did.**
+**Turn your computer-use agent's failures into verified training data, then test the retrained agent on held-out tasks.**
 
-Forkloop runs two versions of a GUI agent on the same seeded denial-appeal task in **real OpenEMR 8.3 plus a synthetic payer portal** on Solari desktops. It checks what actually persisted and links every verdict to its screenshots and database rows. All patient and claims data is synthetic.
+Forkloop records an agent working in real software, restores an earlier checkpoint of the
+world and the agent's memory, and lets a teacher try alternative continuations on independent
+copies. Only paths verified against the applications' databases become training data, with
+hashes and lineage back to the recorded evidence. The retrained student is evaluated alone.
 
-**[See a real failure report](https://rynitepsd-tech.github.io/forkloop/report.html)** (no install). An agent's appeal was accepted by the portal, but the authorization number it typed was missing one character, so the verifier rejected the episode as `WRONG_VALUE`.
+The loop runs on **OpenEMR 8.3 plus a synthetic payer portal**, using Solari desktops with VM
+snapshots or Docker with fidelity-checked replay. **Kanboard** is a second world built through
+the same public interface. All patient and claims data is synthetic.
 
-**[Install and try it offline in two minutes →](projects/forkloop/README.md)** It covers five verifier controls with HTML reports, a matched A/B `compare` with an exact paired test and CI-friendly exit codes, and a template for plugging in your own agent.
+**[See a repaired failure](https://rynitepsd-tech.github.io/forkloop/)** ·
+**[Watch the 66-second walkthrough](https://rynitepsd-tech.github.io/forkloop/forkloop-exp1.mp4)** ·
+**[Get the datasets, adapters and results](https://github.com/rynitepsd-tech/forkloop/releases/tag/v0.3.0)**
 
-Live Solari runs need an explicit, controller-enforced lifetime bound, because Solari's idle timeout [renews itself on desktops](projects/forkloop/docs/solari-lifetime-probe.md).
+## What the experiment found
+
+The [registered experiment](projects/forkloop/docs/protocol-learning-experiment.md), with dated
+deviations, evaluated a Qwen3.8-27B student on **150 held-out tasks** across four task families.
+All **1,650 planned evaluation cells** were scored: one baseline and one warm-start model,
+plus three training runs for each of the three trained arms. Infrastructure replacements are
+retained in the released attempt records.
+
+| Student | Family-balanced success |
+| --- | ---: |
+| Untrained | 3.3% |
+| Shared warm start only | 20.8% |
+| Warm start + teacher demonstrations | 26.8% |
+| Warm start + Forkloop corrections | 26.0% |
+| Warm start + full-restart repairs | 26.9% |
+
+**The hypothesis that corrections beat demonstrations at matched collection cost was not
+supported.** Most of the gain came from the shared warm-start data. The trained arms used
+matched budgets for counted work; those budgets excluded voided work. Counting all recorded
+work, correction data cost roughly an order of magnitude more per verified path than
+demonstrations. Replay restores passed their fidelity checks in 53% of attempts, and no model
+solved the rescheduling family. These results establish the working loop, not a learning or
+cost advantage over the simpler alternatives.
+
+[Full results and sensitivity analyses](projects/forkloop/docs/results-exp1.md) ·
+[Final report, limitations and spend](projects/forkloop/docs/final-report-20260929.md) ·
+[Independent reviews](projects/forkloop/docs/reviews/)
+
+## Try the loop without an account
+
+```bash
+git clone https://github.com/rynitepsd-tech/forkloop.git
+cd forkloop/projects/forkloop
+python3.11 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[world]'
+forkloop demo-loop --out runs/demo-loop
+```
+
+Open `runs/demo-loop/evidence/index.html`. This is a labelled offline simulation with a toy
+world and scripted agents; it exercises recording, checkpoints, repairs, verification and
+dataset export. It makes no model calls and needs no cloud account.
+
+For real runs, supply an agent with `async act(observation) -> (action, metadata)`, a teacher,
+and a world with a verifier. The workflow is `record` → `failures` → `repair` → `dataset` →
+train → `evaluate`. See the [project README](projects/forkloop/README.md),
+[correction contract](projects/forkloop/docs/correction.md) and
+[current system overview](projects/forkloop/system.md).
+
+## Regression testing is still part of the tool
+
+Forkloop also compares policies on matched tasks. In an earlier registered comparison,
+changing only the model from `gpt-5.6-luna` to `gpt-6-luna` reduced verified success from
+**23/24 to 4/24** on that agent and workflow. The portal accepted 17 appeals from the newer
+model, but database checks rejected 13 of them for incorrect authorization numbers.
+
+[Read the comparison](projects/forkloop/docs/live-model-upgrade-comparison.md) or
+[inspect a recorded wrong-value failure](https://rynitepsd-tech.github.io/forkloop/report.html).
+The `compare` and `compare-report` commands preserve matched evidence and CI-friendly exit codes.
+
+Live Solari runs require an explicit, controller-enforced lifetime bound because desktop idle
+timeouts [renewed themselves in the recorded probe](projects/forkloop/docs/solari-lifetime-probe.md).
+Resource leases, cleanup and accounting are described in
+[operations](projects/forkloop/docs/operations.md).
 
 ## Solari Cookbook provenance
 
@@ -51,7 +121,7 @@ the upstream examples untouched.
 
 | Project | What it is |
 | --- | --- |
-| [forkloop](projects/forkloop) | Seeded `resolve_denial` policy evaluation across OpenEMR and a synthetic payer portal, with scoped SQL verification and text/HTML artifact reports. Snapshot restore is one stage of reset; training and other task families remain research paths. |
+| [forkloop](projects/forkloop) | A verified correction and evaluation loop for computer-use agents: checkpoints, teacher repairs, datasets, student training and held-out evaluation. OpenEMR + payer portal and Kanboard worlds; Solari, Docker and offline backends. |
 
 ## Running an example
 
