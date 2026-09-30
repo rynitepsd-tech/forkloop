@@ -88,8 +88,10 @@ student's checkpoint adopts only the checkpoint's declared agent state (the memo
 numbers, expected dates, member ids that are not in the instruction) are never placed in any
 prompt or memory. Dataset export audits this mechanically:
 
-- `memory_provenance_ok` — each record's input memory equals the fold of the `Memory:` facts
-  written by the policy on earlier steps of the same path;
+- `memory_provenance_ok` — counted per acted step (so it can exceed the record count: records also
+  need a valid action and a screenshot): each step's input memory equals the fold of the `Memory:`
+  facts written by the policy on earlier steps of the same path (at a branch's first step the fold is
+  seeded from that step itself, so the check is trivially true there);
 - `hidden_in_text_input` — hidden values present in the text input (allowed only when they came
   from the policy's own earlier outputs; reported);
 - `type_target_from_memory` / `type_target_needs_screen` — whether each typed hidden value was in
@@ -126,7 +128,8 @@ are in the resource registry with leases (`forkloop ops`).
   is classed as progress, so a restart point after it can waste branches (the repair still falls
   back to earlier points and step 0). Found by the independent review, 2026-09-29.
 - Charges are written when an episode or branch ends (also on errors); a process killed hard
-  (SIGKILL, power loss) loses the charges of its in-flight episodes, though their rows stay
+  (SIGKILL, SIGHUP from a closed tmux session, power loss) loses the charges of its in-flight
+  episodes, though their rows stay
   `running` → `interrupted`.
 
 - Replay restores assume the applications are deterministic for the same action sequence;

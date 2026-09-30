@@ -8,8 +8,8 @@ not yet measured says so. <!-- PENDING sections are filled only from generated o
 
 | Deliverable | State | Where |
 | --- | --- | --- |
-| Correction engine: record → failures → repair → dataset → evaluate → evidence, API and CLI | Working; offline test suite passes (`pytest`, 660 tests) | `forkloop/correction/`, `docs/correction.md` |
-| Bound checkpoints (world + agent state) | VM snapshots on Solari; deterministic replay on Docker and any backend; every restore fidelity-checked (table digests + screen distance) | `checkpoint.py`, `restore.py` |
+| Correction engine: record → failures → repair → dataset → evaluate → evidence, API and CLI | Working; offline test suite passes (`pytest`, 669 tests, 1 skipped) | `forkloop/correction/`, `docs/correction.md` |
+| Bound checkpoints (world + agent state) | VM snapshots on Solari; replay of the recorded prefix on Docker and any backend; every restore fidelity-checked (table digests + screen distance); exp1 replay restores passed 53% of 1,608 tries | `checkpoint.py`, `restore.py` |
 | Evidence-based restart points | origin (near-miss of a required value), damage, stall, latest clean, start | `diagnose.py` |
 | Qualified world: claims-ops-v1 | Four families (denial, insurance, rescheduling, compositions), SQL verifier, Docker image `forkloop/claims-ops-v1:3` with the world clock at the task anchor | `docs/docker-world.md`, `docs/verifier.md`, `docs/tasks-and-splits.md` |
 | Second world through the public interface | Kanboard v1.2.54, two families, SQL oracle | `worlds/kanboard_v1`, `docs/second-world.md` |
@@ -40,7 +40,8 @@ not yet measured says so. <!-- PENDING sections are filled only from generated o
 - Solari: "Snapshot not found" on fork for 12 flagship branches (fallback to step 0); snapshot
   deletes reported success without deleting until a second round; restores are bimodal (≈22 s or
   70–160 s).
-- Docker `commit` snapshots are filesystem-only, so Docker checkpoints use deterministic replay.
+- Docker `commit` snapshots are filesystem-only, so Docker checkpoints use replay of the recorded prefix, which is
+  not reliably deterministic: 53% of exp1's 1,608 replay restores passed the fidelity check (p90 403 s).
 - vLLM transport `ReadError`s (~3 per student episode) made round-1 episodes unscored until a
   self-hosted transport retry (`3a02943`).
 - Operator errors: killing the phase chain's tmux session interrupted 37 round-1 attempts

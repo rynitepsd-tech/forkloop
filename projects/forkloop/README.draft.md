@@ -32,7 +32,9 @@ open runs/demo-loop/evidence/index.html
 
 The toy world is a labelled simulation (synthetic screens, scripted agents): it shows the
 mechanics of recording, checkpoints, restart points, independent branches, verification and the
-immutable dataset. Recorded evidence from real runs is linked below and needs no key either.
+immutable dataset. Recorded evidence from real runs needs no key either:
+[exp1 (Docker)](docs/evidence/exp1/index.html) · [Solari desktops](docs/evidence/solari-flagship/index.html) ·
+[Kanboard](docs/evidence/kanboard/index.html).
 
 ## The loop on real software
 
@@ -48,7 +50,8 @@ forkloop evidence --config configs/exp1.yaml --out evidence/        # shareable 
 ```
 
 - **Checkpoints bind world and agent state.** World: provider VM snapshot (Solari: memory and
-  disk of the running desktop) or deterministic replay of the recorded prefix (any backend), each
+  disk of the running desktop) or replay of the recorded prefix (any backend; not guaranteed deterministic —
+  in exp1 53% of 1,608 replay restores passed the fidelity check, the rest were retried or left unscored), each
   restore checked against a digest of persisted tables and the screen. Agent: its explicit memory,
   history, counters and identity. A failed restore is recorded as unscored, never as a failure.
 - **Restart points come from evidence**: the first near-miss of a value the verifier requires,
@@ -57,8 +60,9 @@ forkloop evidence --config configs/exp1.yaml --out evidence/        # shareable 
   action history and explicit memory. The teacher is never told why the attempt failed.
 - **Verified means the database agrees**: effects and invariants in SQL (right record, right value,
   no duplicate, no collateral edit, UI path only, no forbidden screens). No LLM judges.
-- **Accounting never rewinds.** Every model call, machine-second, snapshot and replay is an
-  append-only charge; datasets are immutable with sha256 manifests.
+- **Accounting never rewinds.** Model calls, machine-seconds, snapshots and replays are append-only
+  charges written when an episode or branch ends (a process killed hard or by SIGHUP loses its
+  in-flight charges; its rows become `interrupted`); datasets are immutable with sha256 manifests.
 
 ## Bring your own agent, teacher or world
 

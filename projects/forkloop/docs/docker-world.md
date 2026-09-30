@@ -280,7 +280,8 @@ history navigation, unsaved form input, focus — and the OpenEMR PHP session (i
 cookie). **The world clock restarts** at `FORKLOOP_WORLD_CLOCK` (09:00) on every boot, so rows written
 before a checkpoint can carry later timestamps than the restored clock. A Solari snapshot restores the
 running desktop; the correction engine's `snapshot` strategy should not be used with Docker for
-mid-episode checkpoints — use `replay` (measured deterministic above) or `reset`.
+mid-episode checkpoints — use `replay` (deterministic in the two ~30-action replays above; in exp1,
+53% of 1,608 replay restores passed the fidelity check and failed ones were retried or left unscored) or `reset`.
 
 Database consistency (`FORKLOOP_DOCKER_SNAPSHOT_DB`): `flush` (default: `FLUSH TABLES` + `sync`, then a
 *paused* commit — every process is frozen while the layer is copied, so the image is crash-consistent;

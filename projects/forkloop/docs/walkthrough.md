@@ -96,5 +96,6 @@ family-balanced success and paired comparisons.
 
 - Checkpoint restores are verified: persisted tables must match the checkpoint and the screen must
   match within a small tolerance, or the branch is recorded as a failed restore.
-- Teachers are not told why the attempt failed. Hidden task values never enter any prompt.
+- Teachers are not told why the attempt failed. The harness never inserts hidden task values into any prompt
+  (a policy may carry a value it read on screen in its own memory; the dataset audit reports those).
 - Costs: see [operations.md](operations.md) and the experiment report for measured numbers.

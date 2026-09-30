@@ -14,8 +14,8 @@ feedback.
 
 | | Result |
 | --- | --- |
-| Student attempts | 6/6 failed (3 NOT_DONE on denial, stuck at the OpenEMR login; 3 insurance tasks with nothing done, labelled `WRONG_VALUE` by the legacy oracle) |
-| Restart points (evidence: the start of the login loop) | step 8 (×4), 2, 16 |
+| Student attempts | 6/6 failed (3 NOT_DONE on denial: 900012 and 900014 stuck at the OpenEMR login; 900011 logged in and stalled on the calendar; 3 insurance tasks with nothing done, labelled `WRONG_VALUE` by the legacy oracle) |
+| Restart points (evidence: the start of a stall — the login loop, or the calendar for 900011) | step 8 (×4), 2, 16 |
 | Restores from mid-episode VM snapshots | 4 branches from two step-8 snapshots: 79 s each, every checksummed table equal, screen distance 0.0 |
 | Solari "Snapshot not found" on fork | 12 branches (four other snapshots, 4 tries each); those repairs fell back to step-0 restarts |
 | Verified repairs | 4 of 6 (2 from step-8 snapshots, 2 from step 0); both denial restarts failed because the teacher typed a decoy authorization (fixed in `agent_memory_v3`) |
