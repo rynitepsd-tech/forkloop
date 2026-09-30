@@ -55,7 +55,9 @@ def card(lines: list[tuple[str, int, tuple, bool]], sub: str = "") -> Image.Imag
             d.text((96, y), row, font=f, fill=color)
             y += int(size * 1.35)
     if sub:
-        d.text((96, H - 90), sub, font=_font(20), fill=MUTED)
+        rows = _wrap(d, sub, _font(20), W - 192)
+        for k, row in enumerate(rows):
+            d.text((96, H - 60 - 26 * (len(rows) - k)), row, font=_font(20), fill=MUTED)
     return im
 
 
@@ -120,11 +122,18 @@ def main(a: argparse.Namespace) -> None:
     same_ck = [b for b in branches if b["ckpt_id"] == ck["ckpt_id"]]
     last = [((b.get("restore") or {}).get("attempts") or [{}])[-1] for b in same_ck]
     equal = sum(1 for r in last if r.get("ok") and (r.get("fidelity") or {}).get("tables_equal"))
+    overall = []
+    if a.results:
+        rr = (json.loads(Path(a.results).read_text()).get("checkpoints") or {}).get("exp1-round1", {}).get("restore", {})
+        rp = rr.get(ck["strategy"])
+        if rp:
+            overall = [(f"across exp1: {rp['ok_rate']:.0%} of {rp['n']:,} {ck['strategy']} restores passed the fidelity "
+                        f"check (failed ones retried, then unscored)", 22, MUTED, False)]
     frames.append((card([("Restore a checkpoint", 48, INK, True),
                          (f"step {ck['step']} · {ck['strategy']} · chosen by evidence: {why.get('reason')}", 28, ACCENT, False),
                          (f"{len(same_ck)} independent copies: world and agent memory restored", 26, INK, False),
-                         (f"restore fidelity: checksummed tables identical to the checkpoint in {equal} of {len(same_ck)}",
-                          24, MUTED, False)]), 4.0))
+                         (f"restore fidelity here: checksummed tables identical to the checkpoint in {equal} of {len(same_ck)}",
+                          24, MUTED, False), *overall]), 5.0))
     for b in wins[:2]:
         bep = load_episode(Path(b["run_dir"]))
         acted = [s for s in bep["steps"] if not (s.get("search") or {}).get("replayed")]
@@ -145,8 +154,10 @@ def main(a: argparse.Namespace) -> None:
     if a.results:
         r = json.loads(Path(a.results).read_text())
         lines = [("Did the student improve on unseen tasks?", 40, INK, True)]
-        lines += [(ln, 28, INK, False) for ln in r.get("video_lines", [])]
-        frames.append((card(lines, r.get("video_footer", "")), 7.0))
+        lines += [(ln, 26, INK, False) for ln in r.get("video_lines", [])]
+        if r.get("video_conclusion"):
+            lines.append((r["video_conclusion"], 26, ACCENT, True))
+        frames.append((card(lines, r.get("video_footer", "")), 9.0))
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:

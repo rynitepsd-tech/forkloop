@@ -139,10 +139,15 @@ def main(a: argparse.Namespace) -> None:
                  "A3": "full-restart repairs"}
         ev = rep["evaluation"]
         rep["video_lines"] = [f"{names.get(arm, arm)} ({arm}): {v['success_balanced']:.0%} (family-balanced)"
-                              for arm, v in ev["arms"].items() if arm in ("A0", "A1", "A2", "A3")]
+                              for arm, v in ev["arms"].items() if arm in ("A0", "S_W", "A1", "A2", "A3")]
         rep["video_lines"] += [f"{p['a']} − {p['b']}: {p['difference_balanced']:+.2f} "
                                f"(95% CI {p['ci95'][0]:+.2f} to {p['ci95'][1]:+.2f})"
                                for p in ev["paired"] if p["a"] == "A2" and p["b"] in ("A0", "A1", "A3")]
+        a2a1 = next((p for p in ev["paired"] if p["a"] == "A2" and p["b"] == "A1"), None)
+        if a2a1:
+            rep["video_conclusion"] = ("Corrections beat demonstrations at matched cost." if a2a1["ci95"][0] > 0 else
+                                       "Corrections did not beat demonstrations at matched cost (registered criterion not met)."
+                                       if a2a1["ci95"][1] >= 0 else "Demonstrations beat corrections at matched cost.")
         rep["video_footer"] = ("150 registered final-test tasks, student alone, family-balanced success; "
                                "3 training runs per arm, one collected dataset per arm; scripts/exp1/report.py")
     Path(a.out_json).parent.mkdir(parents=True, exist_ok=True)

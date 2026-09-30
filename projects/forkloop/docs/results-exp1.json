@@ -2077,9 +2077,11 @@
     "demonstrations (A1): 27% (family-balanced)",
     "Forkloop corrections (A2): 26% (family-balanced)",
     "full-restart repairs (A3): 27% (family-balanced)",
+    "warm start (S_W): 21% (family-balanced)",
     "A2 \u2212 A0: +0.23 (95% CI +0.17 to +0.29)",
     "A2 \u2212 A1: -0.01 (95% CI -0.04 to +0.02)",
     "A2 \u2212 A3: -0.01 (95% CI -0.06 to +0.05)"
   ],
+  "video_conclusion": "Corrections did not beat demonstrations at matched cost (registered criterion not met).",
   "video_footer": "150 registered final-test tasks, student alone, family-balanced success; 3 training runs per arm, one collected dataset per arm; scripts/exp1/report.py"
 }
