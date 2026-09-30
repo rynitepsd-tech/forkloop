@@ -316,3 +316,10 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
 - 10:21 UTC — phase 4 v2 complete: 8 main runs 100 steps (≈ 101 min each, final loss 0.32–0.53) + dev
   A3-s3; all 9 adapters on aux (sha256 verified 10:18). Out-of-window repairs stopped 10:17, reaped;
   **phase 5 (main) started 10:21** (tmux `exp1-phase5` → `phase5_eval.sh`, shard 0/2, PER_MODEL 8).
+- 12:50 UTC — review 2 (`runs/review2/review-2.md`): 2 blockers, 8 majors. Before any outcome is read:
+  operator-stopped A0/sw attempts annotated not-a-try (`30e97d4`, applied on main: 120 stop + 11
+  overload); report additions deployed (`report_extra.py`). Collection findings now in the report:
+  all-work cost A1 $29.53, A2 $374.63, A3 $270.58 (at the all-work B: A2 11 paths / 5 tasks, A3 15 / 6);
+  repair modes like-for-like (evidence point, k = 3 vs 3) 5 vs 3, p = 0.73 (the 7 vs 1 came from the
+  step-0 fallback's extra tries); checkpoint branches end on max_seconds far more at depth (inherited
+  elapsed time, review M5). A3-s3: identical versions/data/config to A3-s1/s2 (seed and host differ).
