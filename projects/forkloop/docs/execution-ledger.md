@@ -329,3 +329,12 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   full aux data (24 GB incl. screenshots) on NFS `forkloop-uswest2/programs/exp1aux`. **Aux terminated**
   via the reaper (dry run showed only aux); dev's termination confirmed. Final report runs on main with
   `--store ~/programs/exp1/forkloop.sqlite --store ~/programs/exp1/aux-copy/forkloop.sqlite`.
+- 16:15–16:45 UTC — **main phase 5 done**; all 1,650 cells scored; results generated (`docs/results-exp1.*`):
+  A0 0.033, S_W 0.208, A1 0.268, A2 0.260, A3 0.269 — registered criterion not met. Release bundle built
+  on main (`~/programs/exp1/release`, 34 files, 5.7 GB, SHA256SUMS verified), copied to NFS
+  `forkloop-useast1/exp1-release` (verified) and to the Mac `~/Desktop/Solari/forkloop-exp1-release`.
+  Final program sync to NFS `forkloop-useast1/programs/exp1`. Filesystems marked retained with reasons
+  (useast1, uswest2: data; usw3: HF cache only — recommended for owner deletion). Provider listing:
+  only main active; Solari: no machines, only the pre-existing golden `snap_dlft9omnpkyw`. Lambda so far
+  $1,518.89 at list price (dev $105.89, aux $567.93, main $845.07 and counting). Main terminates after
+  the Mac copy is verified.
