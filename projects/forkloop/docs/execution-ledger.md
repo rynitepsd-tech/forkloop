@@ -284,3 +284,9 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   **Blocked on the owner**: add OpenAI credit (billing is the owner's action) or wind down. If
   continuing: exclude outage-era repairs from the replacement count (repairs with no successful
   teacher call), then re-run `phase3d_replace_repairs.sh`.
+- 00:08 UTC (Sep 30) — hosted `ReadError`s voided ~⅓ of the 20:18 batch's branches (credit fine). Fix
+  `229eaf9` (hosted transport retry with per-send reservations) deployed; batch stopped; main tmux
+  **`exp1-repair4`** (`/tmp/redeploy.sh`: reap after 200 s → `mark_transport_voids.py --apply` →
+  `phase3d_replace_repairs.sh`). Dev waiter (controller bg) still armed for budget-v2. Expected:
+  window ≈ 02:00–02:30 UTC, budget-v2 + training ≈ 04:30, phase 5 ≈ 09:30–10:00, write-up ≈ 12:00 UTC.
+  **Leases must be extended again** (main/aux end 12:21 UTC).

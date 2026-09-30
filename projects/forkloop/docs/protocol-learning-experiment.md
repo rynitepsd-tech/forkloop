@@ -204,3 +204,13 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   resume at 32 concurrent branches per mode (the level that ran without refusals 10:24–14:00), first
   for the first 50 failures in selection order (the budget window is at most 49 / 44 failures), then
   the rest; `repair --order budget` now follows the full selection order over all scored attempts.
+- 2026-09-30 00:25 UTC — the resumed repairs (20:18) were voided mostly by **dropped OpenAI
+  connections** (hosted `ReadError`s: ~80 of ~250 branches, vs ~3% earlier in the day; 11 more on
+  `ctrl+-`); teacher calls otherwise succeeded (≈ 3,000 per half hour, 5 isolated 429s, credit and
+  rate limits fine). Hosted sends were never retried (a dropped send may have been billed), so one
+  drop voided a whole 120-step branch and its repair. Fix (`229eaf9`): a hosted send that fails in
+  transport keeps its full reservation as uncertain and is re-sent under a new reservation, up to 3
+  times. The 20:18 batch was stopped at 00:08 to deploy it; its void repairs whose unscored branches
+  were all transport drops or interrupted by the stop are annotated `void_reason=provider_transport`
+  (`scripts/exp1/mark_transport_voids.py`) and are not replacement tries; other voids still count.
+  The window-first replacement repairs were relaunched (tmux `exp1-repair4`).
