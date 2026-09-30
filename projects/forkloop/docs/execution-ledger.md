@@ -294,3 +294,10 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   xdotool key names incl. 4 `ctrl+-`, 1 infra, 1 restore). Checkpoint window is the long pole (≈ 1 in
   8 branches hits `ctrl+-`, voiding the whole repair → replacement). Revised: window ≈ 04:00 UTC,
   training ≈ 06:00, phase 5 ≈ 11:00, write-up ≈ 13:00.
+- 05:25 UTC — window still unsettled (checkpoint stragglers; phase3d waits for both window batches, so
+  full-restart slots idled since ≈ 02:30). `run_repairs` now skips failures whose repair is running in
+  another live runner (`test_a_repair_running_in_another_live_runner_is_not_duplicated`); main tmux
+  **`exp1-repair5`** (`/tmp/window-replace.sh`, 14 + 14, `--limit 50`) replaces void window repairs in
+  parallel: 9 checkpoint + 6 full-restart repairs started; 8 checkpoint repairs still running in
+  `exp1-repair4`. World budget: 28 + phase3d's later 64 ≤ 96. Dev lease renewed to 15:18 UTC.
+  Revised: budget-v2 ≈ 07:00–07:30 UTC, training ≈ 09:15, phase 5 ≈ 14:15, write-up ≈ 16:00.
