@@ -254,11 +254,15 @@ def counted_repair(store: Store, attempt_id: str, *, experiment_id: Optional[str
 #: A void repair annotated with this reason was run while the provider refused every request (e.g. the
 #: account's credit was exhausted): it says nothing about the teacher and is not a replacement try.
 PROVIDER_OUTAGE = "provider_outage"
+#: A void repair annotated with this reason lost its branches only to dropped provider connections
+#: before hosted sends were retried (or was interrupted to deploy that fix): not a replacement try.
+PROVIDER_TRANSPORT = "provider_transport"
+NOT_A_TRY = (PROVIDER_OUTAGE, PROVIDER_TRANSPORT)
 
 
 def _tries(repairs: list[dict]) -> int:
-    return sum(1 for r in repairs if (r.get("result") or {}).get("void_reason") != PROVIDER_OUTAGE)
+    return sum(1 for r in repairs if (r.get("result") or {}).get("void_reason") not in NOT_A_TRY)
 
 
 __all__ = ["repair_attempt", "RepairConfig", "RepairResult", "task_for", "repair_is_clean", "counted_repair",
-           "UNSCORED_BRANCH", "PROVIDER_OUTAGE"]
+           "UNSCORED_BRANCH", "PROVIDER_OUTAGE", "PROVIDER_TRANSPORT"]

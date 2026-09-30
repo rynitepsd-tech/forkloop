@@ -853,12 +853,30 @@ class StudentPolicy(BranchablePolicy):
             # context per choice; do not assume automatic caching is a discount.
             upper = n * (1_050_000 * long_in * 1.25 + output_limit * long_out) / 1e6
             ledger = SessionLedger(self.session_ledger)
-            operation = ledger.reserve("openai", upper, label=f"chat/completions:{body['model']}",
-                                       evidence={"max_output_tokens": output_limit, "n": n, "input_bound": 1050000,
-                                                 "cache_write_multiplier": 1.25})
-        self.n_requests += 1
+        tries = self.HOSTED_TRANSPORT_RETRIES + 1 if ledger is not None else 1
+        for k in range(tries):
+            if ledger is not None:
+                # every hosted send gets its own worst-case reservation
+                operation = ledger.reserve("openai", upper, label=f"chat/completions:{body['model']}",
+                                           evidence={"max_output_tokens": output_limit, "n": n, "input_bound": 1050000,
+                                                     "cache_write_multiplier": 1.25, "send": k + 1})
+            self.n_requests += 1
+            try:
+                resp = await self._post_with_transport_retry(body, retry=ledger is None)
+                break
+            except httpx.TransportError as exc:
+                if ledger is not None:
+                    # the request may have been billed: keep this send's full reservation
+                    ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
+                if k + 1 >= tries:
+                    raise
+                self.transport_retries = getattr(self, "transport_retries", 0) + 1
+                await asyncio.sleep(1.0 * (k + 1))
+            except BaseException as exc:
+                if ledger is not None and type(exc).__name__ != "BudgetExceeded":
+                    ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
+                raise
         try:
-            resp = await self._post_with_transport_retry(body, retry=ledger is None)
             resp.raise_for_status()
             data = resp.json()
             self._tokens(data)  # count even a response with no usable choices
@@ -881,15 +899,18 @@ class StudentPolicy(BranchablePolicy):
             return data
         except BaseException as exc:
             if ledger is not None and type(exc).__name__ != "BudgetExceeded":
-                # A network failure may happen AFTER a billable completion. Keep
-                # the full reservation; automatic retries are intentionally off.
+                # A failure may happen AFTER a billable completion. Keep the full reservation.
                 ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
             raise
 
-    #: Self-hosted endpoints only: a request that failed in transport (no response received: connection
+    #: Self-hosted endpoints: a request that failed in transport (no response received: connection
     #: reset, ReadError, RemoteProtocolError) is sent again, so a flaky serving connection never becomes a
-    #: policy step. Hosted (billed) endpoints never retry: a failed request may still have been charged.
+    #: policy step.
     TRANSPORT_RETRIES = 3
+    #: Hosted (billed) endpoints: a send that failed in transport may still have been charged, so its
+    #: reservation is kept in full ("uncertain") and the request is re-sent under a NEW reservation, at
+    #: most this many times (2026-09-30: dropped connections voided about a third of 120-step episodes).
+    HOSTED_TRANSPORT_RETRIES = 3
     #: Any endpoint: an HTTP 429 is a received refusal, never billed, so it is re-sent after an
     #: exponential backoff (at least the server's Retry-After; capped at 60 s), at most this many times
     #: (~4 minutes in all). A sustained token-rate limit needs the growing wait, not Retry-After alone.
