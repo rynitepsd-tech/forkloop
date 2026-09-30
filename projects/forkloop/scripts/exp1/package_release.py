@@ -1,9 +1,13 @@
 """Assemble the exp1 release bundle (run on forkloop-main after ``report.py --final``).
 
     python scripts/exp1/package_release.py --out ~/programs/exp1/release \
-        --store ~/programs/exp1/forkloop.sqlite --store ~/programs/exp1/aux-store/forkloop.sqlite \
-        --datasets ~/programs/exp1/datasets --adapters ~/programs/exp1/adapters \
+        --store ~/programs/exp1/forkloop.sqlite --store <copy of aux's ~/programs/exp1aux/forkloop.sqlite> \
+        --datasets ~/programs/exp1/datasets/W --datasets ~/programs/exp1/datasets/budget-v2 \
+        --adapters ~/programs/exp1/adapters-v2 --adapters ~/programs/exp1/adapters/sw-seed0 \
         --results docs/results-exp1.json --results docs/results-exp1.md
+
+Void material is never packaged: ``datasets/budget`` and the v1 runs in ``adapters/`` (protocol 2026-09-29
+15:28) are listed in ``release.json`` under ``void_not_included``.
 
 Layout of ``--out``:
 
@@ -80,12 +84,12 @@ def cells_csv(stores: list[Store], out: Path, experiment_id: str = "exp1-eval") 
     with out.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["model", "task_id", "family", "cell", "attempt_no", "status", "reward", "reason_code",
-                    "steps", "wall_s", "end_reason", "counted", "attempt_id"])
+                    "steps", "wall_s", "end_reason", "void_reason", "counted", "attempt_id"])
         for a in sorted(rows, key=lambda a: (a["info"]["role"], a["task_id"], a["started_at"])):
             w.writerow([a["info"]["role"][len("eval:"):], a["task_id"], a["task_id"].rsplit("-", 2)[0], a["cell"],
-                        a["attempt_no"], a["status"], a["reward"], a["reason_code"], a["n_steps"],
-                        a["info"].get("wall_s"), a["info"].get("end_reason"), int(a["attempt_id"] in counted),
-                        a["attempt_id"]])
+                        a["info"].get("attempt_no"), a["status"], a["reward"], a["reason_code"], a["n_steps"],
+                        a["info"].get("wall_s"), a["info"].get("end_reason"), a["info"].get("void_reason"),
+                        int(a["attempt_id"] in counted), a["attempt_id"]])
     return len(rows)
 
 
@@ -94,16 +98,28 @@ def main(a: argparse.Namespace) -> None:
     out.mkdir(parents=True, exist_ok=True)
     info: dict = {"created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "world_image": IMAGE,
                   "student_base": MODEL, "protocol": PROTOCOL, "datasets": {}, "adapters": {}, "stores": []}
-    for d in sorted(Path(a.datasets).expanduser().rglob("manifest.json")):
-        ds = d.parent
-        name = str(ds.relative_to(Path(a.datasets).expanduser())).replace("/", "__")
-        tar_dir(ds, out / "datasets" / f"{name}.tar", name)
-        m = json.loads(d.read_text())
-        info["datasets"][name] = {"dataset_id": m.get("dataset_id"), "records": m.get("counts", {}).get("records"),
-                                  "manifest_sha256": sha256(d)}
-    for run in sorted(p for p in Path(a.adapters).expanduser().iterdir() if (p / "final").is_dir()):
-        tar_dir(run, out / "adapters" / f"{run.name}.tar", run.name)
-        info["adapters"][run.name] = {"files": sorted(str(p.relative_to(run)) for p in run.rglob("*") if p.is_file())}
+    info["void_not_included"] = ["datasets/budget (first matched-cost datasets)", "adapters/A?-s? v1 training runs",
+                                 "experiment exp1-final (pre-review A0 run)"]
+    for root in (Path(x).expanduser() for x in a.datasets):
+        for d in sorted(root.rglob("manifest.json")):
+            _dataset(d, root, out, info)
+    for root in (Path(x).expanduser() for x in a.adapters):
+        for run in ([root] if (root / "final").is_dir() else sorted(p for p in root.iterdir() if (p / "final").is_dir())):
+            tar_dir(run, out / "adapters" / f"{run.name}.tar", run.name)
+            info["adapters"][run.name] = {"files": sorted(str(p.relative_to(run)) for p in run.rglob("*") if p.is_file())}
+    _finish(a, out, info)
+
+
+def _dataset(d: Path, root: Path, out: Path, info: dict) -> None:
+    ds = d.parent
+    name = "__".join([root.name, *ds.relative_to(root).parts]) if ds != root else root.name
+    tar_dir(ds, out / "datasets" / f"{name}.tar", name)
+    m = json.loads(d.read_text())
+    info["datasets"][name] = {"dataset_id": m.get("dataset_id"), "records": m.get("counts", {}).get("records"),
+                              "manifest_sha256": sha256(d)}
+
+
+def _finish(a: argparse.Namespace, out: Path, info: dict) -> None:
     stores = [Store(p) for p in a.store]
     for i, p in enumerate(a.store):
         copy_store(p, out / "stores" / f"store{i}.sqlite")
@@ -122,7 +138,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--store", action="append", required=True)
-    ap.add_argument("--datasets", required=True)
-    ap.add_argument("--adapters", required=True)
+    ap.add_argument("--datasets", action="append", required=True, help="dataset dir or dir of datasets (repeatable)")
+    ap.add_argument("--adapters", action="append", required=True, help="run dir or dir of runs (repeatable)")
     ap.add_argument("--results", action="append")
     main(ap.parse_args())

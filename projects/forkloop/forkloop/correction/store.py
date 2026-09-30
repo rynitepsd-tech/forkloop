@@ -278,8 +278,10 @@ class Store:
 
     def finish_repair(self, repair_id: str, *, status: str, result: dict) -> None:
         with self._db() as db:
+            row = db.execute("SELECT result_json FROM repairs WHERE repair_id=?", (repair_id,)).fetchone()
+            merged = {**(json.loads(row[0]) if row and row[0] else {}), **result}   # keep annotations
             db.execute("UPDATE repairs SET status=?, result_json=?, finished_at=? WHERE repair_id=?",
-                       (status, _j(result), time.time(), repair_id))
+                       (status, _j(merged), time.time(), repair_id))
             self._event(db, "repair_finished", repair_id, {"status": status})
 
     def annotate_attempt(self, attempt_id: str, **fields: Any) -> None:

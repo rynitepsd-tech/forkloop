@@ -462,6 +462,20 @@ GUARDED_OPENAI_PRICES: dict[str, tuple[float, float, float, float]] = {
 }
 
 
+def _error_code(resp: "httpx.Response") -> str:
+    """The provider's machine-readable error (e.g. ``insufficient_quota`` vs ``rate_limit_exceeded``); both
+    arrive as HTTP 429 and only the body tells them apart (2026-09-29: a credit outage was misread)."""
+    try:
+        err = (resp.json() or {}).get("error") or {}
+        return str(err.get("code") or err.get("type") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _quota_exhausted(resp: "httpx.Response") -> bool:
+    return resp.status_code == 429 and _error_code(resp) in ("insufficient_quota", "credit_balance_exhausted")
+
+
 class StudentPolicy(BranchablePolicy):
     branch_state_fields = ("_queue", "_notes", "_previous_png", "_current_png", "_observed_step", "_memory")
 
@@ -876,6 +890,10 @@ class StudentPolicy(BranchablePolicy):
                 if ledger is not None and type(exc).__name__ != "BudgetExceeded":
                     ledger.reconcile(operation, None, status="uncertain", evidence={"error_type": type(exc).__name__})
                 raise
+        if resp.status_code == 429 and ledger is not None:
+            # a received refusal is never billed: release this send's reservation, keep the provider's code
+            ledger.reconcile(operation, 0.0, status="refused_http_429", evidence={"error": _error_code(resp)})
+            raise httpx.HTTPStatusError(f"429 refused by provider ({_error_code(resp)})", request=resp.request, response=resp)
         try:
             resp.raise_for_status()
             data = resp.json()
@@ -929,8 +947,8 @@ class StudentPolicy(BranchablePolicy):
                 self.transport_retries = getattr(self, "transport_retries", 0) + 1
                 await asyncio.sleep(0.5 * i)
                 continue
-            if resp.status_code != 429 or limited >= self.RATE_LIMIT_RETRIES:
-                return resp
+            if resp.status_code != 429 or limited >= self.RATE_LIMIT_RETRIES or _quota_exhausted(resp):
+                return resp   # an exhausted credit balance does not recover by waiting: fail fast
             limited += 1
             self.rate_limit_retries = getattr(self, "rate_limit_retries", 0) + 1
             try:

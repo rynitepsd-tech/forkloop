@@ -226,8 +226,10 @@ def _example_section(store: Any, rep: dict, thumbs: _Thumbs, records: list[dict]
         r0 = min(mine, key=lambda r: r["input"]["step"])
         from .dataset import render_target
         tgt = render_target(r0["target"], screen=tuple(r0["input"]["screen"]), coords=tuple(r0["input"]["screen"]))
-        out.append(f"<h3>What the dataset received</h3><p>{len(mine)} action-demonstration records from the verified "
-                   f"branch (steps {min(r['input']['step'] for r in mine)}–{max(r['input']['step'] for r in mine)}); "
+        nb = len({r["source"].get("branch_id") for r in mine})
+        out.append(f"<h3>What the dataset received</h3><p>{len(mine)} action-demonstration records from the "
+                   f"{nb} verified branch{'es' if nb != 1 else ''} (steps {min(r['input']['step'] for r in mine)}–"
+                   f"{max(r['input']['step'] for r in mine)}); "
                    f"each carries the exact input the teacher saw on that path. The first one:</p>"
                    f"<pre>INPUT memory: {_e(json.dumps(r0['input']['memory']))}\nINPUT last actions: "
                    f"{_e(json.dumps(r0['input']['history'][-4:]))}\nTARGET (screen pixels):\n{_e(tgt)}</pre>"
