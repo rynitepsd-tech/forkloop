@@ -290,3 +290,7 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   `phase3d_replace_repairs.sh`). Dev waiter (controller bg) still armed for budget-v2. Expected:
   window ≈ 02:00–02:30 UTC, budget-v2 + training ≈ 04:30, phase 5 ≈ 09:30–10:00, write-up ≈ 12:00 UTC.
   **Leases must be extended again** (main/aux end 12:21 UTC).
+- 01:24 UTC — relaunch healthy: 62 scored branches in 72 min, no dropped connections; unscored 7 (5
+  xdotool key names incl. 4 `ctrl+-`, 1 infra, 1 restore). Checkpoint window is the long pole (≈ 1 in
+  8 branches hits `ctrl+-`, voiding the whole repair → replacement). Revised: window ≈ 04:00 UTC,
+  training ≈ 06:00, phase 5 ≈ 11:00, write-up ≈ 13:00.
