@@ -309,3 +309,7 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
 - 08:50 UTC — main waiter restarted with `STOP_REPAIRS=1` (kills `exp1-repair4/5` once the 9 v2 adapters
   are on main, reaps, waits for ≤ 4 containers, then phase 5 shard 0/2 PER_MODEL 8). Aux waiter starts
   shard 1/2 PER_MODEL 7 when the 9 adapters arrive. Expected: training ≈ 10:20 UTC, phase 5 ≈ 10:30–15:30.
+- 10:00 UTC — main training at step 80–85/100; dev A3-s3 v2 finished (loss 0.443), fetched to main and
+  aux (sha256 of `final/` verified, 09:43). **Dev terminated** via the registry reaper (lease set to 0,
+  dry run showed only dev; void v1 A3-s3 logs saved to main `adapters/void-dev/`). Main/aux leases
+  renewed to 2026-10-01 00:00 UTC.
