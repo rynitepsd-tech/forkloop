@@ -323,3 +323,9 @@ Second: no student with a nonzero baseline. Third: the correction engine does no
   repair modes like-for-like (evidence point, k = 3 vs 3) 5 vs 3, p = 0.73 (the 7 vs 1 came from the
   step-0 fallback's extra tries); checkpoint branches end on max_seconds far more at depth (inherited
   elapsed time, review M5). A3-s3: identical versions/data/config to A3-s1/s2 (seed and host differ).
+- 15:21 UTC — **aux phase 5 done** (675/675 cells scored in pass 1). Aux store snapshot sha256
+  `7f7f608d…f536d8` copied to main `~/programs/exp1/aux-copy/` (store + logs + attempt dirs without
+  screenshots; 906 eval attempts resolve) and to the Mac `runs/exp1-stores/exp1aux-forkloop.sqlite`;
+  full aux data (24 GB incl. screenshots) on NFS `forkloop-uswest2/programs/exp1aux`. **Aux terminated**
+  via the reaper (dry run showed only aux); dev's termination confirmed. Final report runs on main with
+  `--store ~/programs/exp1/forkloop.sqlite --store ~/programs/exp1/aux-copy/forkloop.sqlite`.
