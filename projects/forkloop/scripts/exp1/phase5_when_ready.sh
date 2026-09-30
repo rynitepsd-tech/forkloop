@@ -9,8 +9,15 @@ BOX=${1:?main|aux}
 AN=${ADAPTERS_NAME:-adapters-v2}
 if [ "$BOX" = main ]; then source "$HERE/env.sh"; AD=/home/ubuntu/programs/exp1/$AN; L=~/programs/exp1/logs; PM=${PER_MODEL:-8}; S=phase5_eval.sh
 else source "$HERE/env-aux.sh"; AD=/home/ubuntu/programs/exp1aux/$AN; L=~/programs/exp1aux/logs; PM=${PER_MODEL:-7}; S=phase5_eval_aux.sh; fi
-until [ "$(ls $AD/A?-s?/final/adapter_model.safetensors 2>/dev/null | wc -l)" -eq 9 ] && \
-      { [ "$BOX" = aux ] || ! pgrep -f "[f]orkloop repair" >/dev/null; }; do sleep 60; done
+until [ "$(ls $AD/A?-s?/final/adapter_model.safetensors 2>/dev/null | wc -l)" -eq 9 ]; do sleep 60; done
+if [ "$BOX" = main ] && [ "${STOP_REPAIRS:-0}" = 1 ]; then
+  # protocol note 2026-09-30 08:45: repairs outside the budget window stop when training ends
+  for s in exp1-repair4 exp1-repair5; do tmux kill-session -t $s 2>/dev/null; done
+  echo "$(date -u +%FT%TZ) repairs outside the window stopped (training done)" >> $L/resume.log
+  sleep 200
+  forkloop reap-machines --config configs/exp1.yaml >> $L/reap-phase5.log 2>&1
+fi
+until { [ "$BOX" = aux ] || ! pgrep -f "[f]orkloop repair" >/dev/null; } && [ "$(docker ps -q | wc -l)" -le 4 ]; do sleep 60; done
 echo "$(date -u +%FT%TZ) phase 5 ($BOX) starting" >> $L/resume.log
 ADAPTERS_NAME=$AN PER_MODEL=$PM "$HERE/$S"
 echo "$(date -u +%FT%TZ) phase 5 ($BOX) done" >> $L/resume.log

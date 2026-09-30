@@ -219,3 +219,10 @@ reasons, it is re-run with the same seed and data before any evaluation of that 
   exact sign test on discordant failures. It was defined after partial first-round counts had been
   seen (40 vs 19 verified repairs, largely voided later), so it is not a registered test and is
   reported as descriptive only.
+- 2026-09-30 08:45 UTC — budget-v2 was built at 08:28 (B = $27.27; b100 datasets: A1 78 verified paths
+  / 4,167 records, A2 21 / 1,014, A3 24 / 1,197) and retraining started 08:30–08:31. Repairs outside
+  the budget window only feed the secondary, descriptive repair-mode comparison; at the current pace
+  they would delay main's evaluation by ~3 h (the Docker world cap cannot hold both), so they are
+  stopped when training ends, and that comparison is restricted to the first 50 failures in selection
+  order (fixed before any outcome; all settled in both modes or exhausted), with any other settled
+  failures reported separately.
